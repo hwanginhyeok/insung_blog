@@ -1,0 +1,178 @@
+{
+  "name": "댓글 봇 제어 플로우",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 20 * * *"
+            }
+          ]
+        }
+      },
+      "id": "node-schedule",
+      "name": "매일 20:30 실행",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "id": "node-telegram-cmd",
+      "name": "텔레그램 명령어 수신",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 250],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-cred",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.message.text }}",
+              "operation": "equals",
+              "value2": "/start_comment"
+            }
+          ]
+        }
+      },
+      "id": "node-check-start",
+      "name": "시작 명령 확인",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [220, 250]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.message.text }}",
+              "operation": "equals",
+              "value2": "/status"
+            }
+          ]
+        }
+      },
+      "id": "node-check-status",
+      "name": "상태 명령 확인",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 350]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8001/comment/run",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "node-run-bot",
+      "name": "댓글 봇 실행",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:8001/status",
+        "options": {}
+      },
+      "id": "node-get-status",
+      "name": "현황 조회",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 350]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID || '' }}",
+        "text": "=🤖 댓글 봇 실행 {{ $json.success ? '시작됨' : '실패' }}\n\n{{ $json.message }}",
+        "additionalFields": {}
+      },
+      "id": "node-notify-run",
+      "name": "실행 알림",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [880, 0],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-cred",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.message.chat.id || $env.TELEGRAM_CHAT_ID || '' }}",
+        "text": "=📊 오늘의 댓글 봇 현황\n\n댓글: {{ $('현황 조회').item.json.today_comments }}개\n방문 블로거: {{ $('현황 조회').item.json.today_bloggers }}명\n실행 중: {{ $('현황 조회').item.json.comment_bot_running ? '예' : '아니오' }}",
+        "additionalFields": {}
+      },
+      "id": "node-notify-status",
+      "name": "현황 알림",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [880, 350],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-cred",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "매일 20:30 실행": {
+      "main": [
+        [{ "node": "댓글 봇 실행", "type": "main", "index": 0 }]
+      ]
+    },
+    "텔레그램 명령어 수신": {
+      "main": [
+        [{ "node": "시작 명령 확인", "type": "main", "index": 0 }]
+      ]
+    },
+    "시작 명령 확인": {
+      "main": [
+        [{ "node": "댓글 봇 실행", "type": "main", "index": 0 }],
+        [{ "node": "상태 명령 확인", "type": "main", "index": 0 }]
+      ]
+    },
+    "상태 명령 확인": {
+      "main": [
+        [{ "node": "현황 조회", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "댓글 봇 실행": {
+      "main": [
+        [{ "node": "실행 알림", "type": "main", "index": 0 }]
+      ]
+    },
+    "현황 조회": {
+      "main": [
+        [{ "node": "현황 알림", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    { "name": "댓글봇" },
+    { "name": "자동화" }
+  ]
+}

@@ -1,0 +1,289 @@
+{
+  "name": "블로그 글 작성 플로우",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "id": "node-telegram-trigger",
+      "name": "텔레그램 메시지 수신",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-cred",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [],
+          "string": [
+            {
+              "value1": "={{ $json.message.photo }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "node-check-photo",
+      "name": "사진 있는지 확인",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://api.telegram.org/bot{{ $credentials.telegramApi.accessToken }}/getFile",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "file_id",
+              "value": "={{ $json.message.photo.slice(-1)[0].file_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-get-file",
+      "name": "사진 파일 정보 조회",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, -100]
+    },
+    {
+      "parameters": {
+        "url": "https://api.telegram.org/file/bot{{ $credentials.telegramApi.accessToken }}/{{ $json.result.file_path }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "node-download-photo",
+      "name": "사진 다운로드",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, -100]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/tmp/blog_photo_{{ $now.toMillis() }}.jpg",
+        "options": {}
+      },
+      "id": "node-save-photo",
+      "name": "사진 저장",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [880, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8001/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"image_paths\": [\"{{ $json.fileName }}\"], \"memo\": \"{{ $('텔레그램 메시지 수신').item.json.message.caption || '' }}\" }",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "node-generate",
+      "name": "AI 초안 생성",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, -100]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('텔레그램 메시지 수신').item.json.message.chat.id }}",
+        "text": "=📝 **초안 생성 완료**\n\n**제목:** {{ $json.title }}\n\n{{ $json.body }}\n\n**해시태그:** {{ $json.hashtags.map(t => '#' + t).join(' ') }}\n\n─────────────\n✅ 발행하려면 \"발행\" 입력\n✏️ 수정하려면 수정할 내용 입력\n❌ 취소하려면 \"취소\" 입력",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "node-send-preview",
+      "name": "초안 프리뷰 전송",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1320, -100],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-cred",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {
+          "webhookSuffix": "approval"
+        }
+      },
+      "id": "node-wait-approval",
+      "name": "사용자 승인 대기",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1540, -100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.text || $json.body.message || '' }}",
+              "operation": "equals",
+              "value2": "발행"
+            }
+          ]
+        }
+      },
+      "id": "node-check-approval",
+      "name": "발행 승인 확인",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1760, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8001/publish",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"title\": \"{{ $('AI 초안 생성').item.json.title }}\", \"body\": \"{{ $('AI 초안 생성').item.json.body }}\", \"hashtags\": {{ JSON.stringify($('AI 초안 생성').item.json.hashtags) }}, \"image_paths\": {{ JSON.stringify($('AI 초안 생성').first().json.image_paths || []) }}, \"dry_run\": false }",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "node-publish",
+      "name": "네이버 발행",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1980, -200]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('텔레그램 메시지 수신').item.json.message.chat.id }}",
+        "text": "=✅ 발행 완료!\n\n{{ $json.post_url || '(URL 확인 중...)' }}",
+        "additionalFields": {}
+      },
+      "id": "node-notify-success",
+      "name": "발행 완료 알림",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2200, -200],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-cred",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('텔레그램 메시지 수신').item.json.message.chat.id }}",
+        "text": "❌ 발행이 취소되었습니다.",
+        "additionalFields": {}
+      },
+      "id": "node-notify-cancel",
+      "name": "취소 알림",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1980, 0],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-cred",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.message.chat.id }}",
+        "text": "📸 사진을 함께 보내주세요!\n\n사진 + 메모(선택)를 보내면 AI가 블로그 초안을 만들어드립니다.",
+        "additionalFields": {}
+      },
+      "id": "node-no-photo",
+      "name": "사진 없음 안내",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [440, 100],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-cred",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "텔레그램 메시지 수신": {
+      "main": [
+        [{ "node": "사진 있는지 확인", "type": "main", "index": 0 }]
+      ]
+    },
+    "사진 있는지 확인": {
+      "main": [
+        [{ "node": "사진 파일 정보 조회", "type": "main", "index": 0 }],
+        [{ "node": "사진 없음 안내", "type": "main", "index": 0 }]
+      ]
+    },
+    "사진 파일 정보 조회": {
+      "main": [
+        [{ "node": "사진 다운로드", "type": "main", "index": 0 }]
+      ]
+    },
+    "사진 다운로드": {
+      "main": [
+        [{ "node": "사진 저장", "type": "main", "index": 0 }]
+      ]
+    },
+    "사진 저장": {
+      "main": [
+        [{ "node": "AI 초안 생성", "type": "main", "index": 0 }]
+      ]
+    },
+    "AI 초안 생성": {
+      "main": [
+        [{ "node": "초안 프리뷰 전송", "type": "main", "index": 0 }]
+      ]
+    },
+    "초안 프리뷰 전송": {
+      "main": [
+        [{ "node": "사용자 승인 대기", "type": "main", "index": 0 }]
+      ]
+    },
+    "사용자 승인 대기": {
+      "main": [
+        [{ "node": "발행 승인 확인", "type": "main", "index": 0 }]
+      ]
+    },
+    "발행 승인 확인": {
+      "main": [
+        [{ "node": "네이버 발행", "type": "main", "index": 0 }],
+        [{ "node": "취소 알림", "type": "main", "index": 0 }]
+      ]
+    },
+    "네이버 발행": {
+      "main": [
+        [{ "node": "발행 완료 알림", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    { "name": "블로그" },
+    { "name": "자동화" }
+  ]
+}
