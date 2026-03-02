@@ -8,10 +8,12 @@
   4. 피드백 5건마다 AI가 패턴 분석 → 스타일 규칙 제안
 """
 import os
+import re
 from datetime import datetime
 
 from anthropic import Anthropic
 
+# 피드백 분석에도 Haiku 사용 (HASHTAG_AI_MODEL 재사용 — 동일 경량 모델)
 from config.settings import HASHTAG_AI_MODEL, WRITING_STYLE_PATH
 from src.utils.logger import logger
 
@@ -89,7 +91,8 @@ def record_feedback(post_title: str, feedback_text: str) -> bool:
 
 
 def _count_feedback_rows(content: str) -> int:
-    """피드백 이력 테이블의 데이터 행 수"""
+    """피드백 이력 테이블의 데이터 행 수 (날짜 패턴으로 실제 데이터 행만 카운트)"""
+    date_pattern = re.compile(r"^\|\s*\d{4}-\d{2}-\d{2}\s*\|")
     count = 0
     in_table = False
     for line in content.split("\n"):
@@ -97,7 +100,7 @@ def _count_feedback_rows(content: str) -> int:
             in_table = True
             continue
         if in_table:
-            if line.startswith("|") and "첫 게시물" not in line:
+            if date_pattern.match(line):
                 count += 1
             elif not line.strip():
                 break

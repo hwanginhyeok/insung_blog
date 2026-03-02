@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-03-02 — Phase 3/4 코드리뷰 (api_server + skill_manager)
+
+- **TASK**: INF-1
+- **변경 파일**: api_server.py, src/ai/skill_manager.py, .env.example
+- **이슈 요약**: Critical 0 / Major 4 / Minor 5
+- **조치**:
+  - Major #1: `/publish` 브라우저 설정 인라인 → `create_browser()` 호출로 교체
+  - Major #2: 미사용 import `PAGE_LOAD_TIMEOUT` 제거
+  - Major #3: HTTPException에 예외 원문 노출 → 사용자 친화 메시지로 교체 (상세는 logger에만)
+  - Major #4: `_count_feedback_rows()`의 `"첫 게시물"` 하드코딩 → 날짜 패턴(`YYYY-MM-DD`) 매칭으로 변경
+  - Minor #6: `HASHTAG_AI_MODEL` 재사용 의도 주석 추가
+  - Minor #9: .env.example 텔레그램 토큰 주석 해제
+  - Minor #5(인증), #7(임시파일), #8(에러 노드): 별도 Task로 분리 (P3-7 등)
+- **판정**: 전건 수정 완료, 머지 가능
+
+---
+
 ## 2026-03-02 — Phase 2 코드리뷰 + 리팩토링
 
 - **TASK**: P2 리뷰

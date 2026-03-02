@@ -1,7 +1,7 @@
 # CODE_MAP — 코드베이스 지도
 
 > 파일 추가/삭제/이동/역할 변경 시 반드시 갱신.
-> 최종 갱신: 2026-03-02
+> 최종 갱신: 2026-03-02 (Phase 3/4 반영)
 
 ---
 
@@ -11,6 +11,7 @@
 |------|------|-------|
 | `main.py` | 댓글 봇 스케줄러 진입점 (argparse + schedule) | 1 |
 | `publisher_main.py` | 게시물 발행 CLI 진입점 (--photos, --memo, --dry-run, --no-ai) | 2 |
+| `api_server.py` | FastAPI 웹훅 서버 — n8n 연동 6개 엔드포인트 (generate, publish, status, comment/run, feedback, health) | 3 |
 | `debug_publisher.py` | 스마트에디터 DOM 분석 도구 (headless=False, 셀렉터 탐색) | 2 |
 
 ---
@@ -36,11 +37,7 @@
 | 파일 | 역할 | Phase |
 |------|------|-------|
 | `content_generator.py` | AI 콘텐츠 생성 — Vision 분석 → 초안 생성 → 해시태그. `generate_post()` 메인 함수 | 2 |
-
-### 예정 (미구현)
-| 파일 | 역할 | Phase |
-|------|------|-------|
-| `skill_manager.py` | 피드백 → writing_style.md 자동 갱신 | 4 |
+| `skill_manager.py` | 피드백 → writing_style.md 자동 갱신. `record_feedback()` 메인 함수. 5건마다 AI 패턴 분석 | 4 |
 
 ---
 
@@ -115,7 +112,16 @@
 
 | 파일 | 역할 |
 |------|------|
-| `writing_style.md` | AI 글쓰기 스타일 가이드 (content_generator가 참조). Phase 4에서 자동 갱신 예정 |
+| `writing_style.md` | AI 글쓰기 스타일 가이드 (content_generator 참조). skill_manager가 피드백 이력 기록 + AI 제안 |
+
+---
+
+## n8n/
+
+| 파일 | 역할 | Phase |
+|------|------|-------|
+| `workflows/blog_post_flow.json` | 텔레그램 사진 수신 → AI 초안 → 승인 → 네이버 발행 워크플로 | 3 |
+| `workflows/comment_bot_flow.json` | 댓글 봇 스케줄(매일 20:30) + 텔레그램 명령어(/start_comment, /status) 제어 | 3 |
 
 ---
 
@@ -143,7 +149,7 @@
 | `CLAUDE.md` | 프로젝트 컨텍스트 (매 세션 자동 로드) |
 | `REQUIREMENTS.md` | 전체 요구사항 명세 |
 | `requirements.txt` | Python 패키지 의존성 |
-| `.env` | 환경변수 (NAVER_ID, NAVER_PW, MY_BLOG_ID, ANTHROPIC_API_KEY) |
+| `.env` | 환경변수 (NAVER_ID, NAVER_PW, MY_BLOG_ID, ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID) |
 | `.env.example` | 환경변수 템플릿 |
 | `.gitignore` | git 제외 목록 |
 

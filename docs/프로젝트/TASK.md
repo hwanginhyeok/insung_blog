@@ -8,7 +8,7 @@
 
 | # | 작업 | 중요도 | 상태 | 비고 |
 |---|------|--------|------|------|
-| — | (없음) | — | — | — |
+| P3-5 | 워크플로 Active 전환 + 통합 테스트 | P1 | 진행 | FastAPI 서버 실행 → 텔레그램 /status 테스트 |
 
 ---
 
@@ -17,14 +17,9 @@
 | # | 작업 | 중요도 | 상태 | 비고 |
 |---|------|--------|------|------|
 | P2-1 | debug_publisher.py로 에디터 셀렉터 확인 | P1 | 예정 | Phase 2 첫 테스트 |
-| P2-2 | content_generator 단독 테스트 (API 키 필요) | P1 | 예정 | Task #1 (API 키 등록) 선행 |
+| P2-2 | content_generator 단독 테스트 (API 키 필요) | P1 | 예정 | API 키 등록 완료, 테스트 미실시 |
 | P2-3 | publisher dry-run 전체 파이프라인 | P1 | 예정 | P2-1, P2-2 완료 후 |
 | P2-4 | 실제 발행 테스트 → 게시물 URL 확인 | P2 | 예정 | P2-3 완료 후 |
-| P1-1 | console.anthropic.com 카드 등록 → API 키 발급 | P1 | 예정 | 사용자 수동 작업 |
-| P1-2 | config/settings.py 시간대 20~24시 변경 | P2 | 완료 | 이미 반영됨 |
-| P1-3 | letter_hih 블로그에 직접 글 작성 | P2 | 예정 | Phase 2로 해결 |
-| P3-1 | n8n + 텔레그램 연동 설계 | P3 | 예정 | Phase 3 |
-| P4-1 | 피드백 루프 (writing_style.md 자동 갱신) | P3 | 예정 | Phase 4 |
 
 ---
 
@@ -34,9 +29,19 @@
 |---|------|--------|------|
 | Phase1 | 댓글 봇 기본 기능 (수집/작성/DB/스케줄) | 2026-03-01 | main.py + orchestrator |
 | Phase1 | AI 댓글 생성 (Haiku + phrases 폴백) | 2026-03-01 | ai_comment.py |
-| Phase2 | 게시물 발행 시스템 코드 구현 | 2026-03-02 | 8개 파일 신규/수정 |
+| Phase1 | API 키 발급 + .env 등록 | 2026-03-02 | ANTHROPIC_API_KEY 연결 성공 |
+| Phase1 | settings.py 시간대 20~24시 + 스케줄 20:30 | 2026-03-02 | |
+| Phase1 | comment_writer.py AI 통합 + 본문 추출 | 2026-03-02 | pick_phrase → generate_comment |
+| Phase2 | 게시물 발행 시스템 코드 구현 | 2026-03-02 | content_generator + blog_publisher + DB 확장 |
+| Phase3 | api_server.py FastAPI 웹훅 서버 | 2026-03-02 | 6개 엔드포인트 |
+| Phase3 | 텔레그램 봇 생성 + .env 등록 | 2026-03-02 | @HIH_Blog_bot, Chat ID 8338946226 |
+| Phase3 | n8n 설치 (v2.9.4) + 실행 | 2026-03-02 | localhost:5678 |
+| Phase3 | n8n 워크플로 import + credential 설정 | 2026-03-02 | blog_post_flow + comment_bot_flow |
+| Phase4 | skill_manager.py 피드백 루프 | 2026-03-02 | /feedback 엔드포인트 포함 |
 | Infra | CLAUDE.md + TASK.md + coding-rules.md | 2026-03-02 | 코드 관리 체계 구축 |
 | Infra | workflow-rules.md + REVIEW_LOG + CODE_MAP | 2026-03-02 | 코드리뷰 + 코드 지도 |
+| INF-1 | Phase 3/4 코드리뷰 | 2026-03-02 | Major 4건 수정 (브라우저 중복, 미사용 import, 에러 노출, 하드코딩 필터) |
+| INF-2 | CODE_MAP 갱신 (Phase 3/4 반영) | 2026-03-02 | api_server, skill_manager, n8n/ 추가 |
 
 ---
 

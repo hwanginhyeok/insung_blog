@@ -27,7 +27,6 @@ load_dotenv()
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from config.settings import PAGE_LOAD_TIMEOUT
 from src.storage.database import (
     count_today_bloggers,
     count_today_comments,
@@ -104,7 +103,7 @@ async def generate_content(req: GenerateRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"AI 콘텐츠 생성 실패: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"AI 생성 오류: {e}")
+        raise HTTPException(status_code=500, detail="AI 콘텐츠 생성 중 오류가 발생했습니다")
 
     return GenerateResponse(
         title=result["title"],
@@ -120,6 +119,7 @@ async def publish_post_endpoint(req: PublishRequest):
 
     from src.auth.naver_login import ensure_login
     from src.publisher.blog_publisher import publish_post
+    from src.utils.browser import create_browser
 
     naver_id = os.environ.get("NAVER_ID", "")
     naver_pw = os.environ.get("NAVER_PW", "")
@@ -135,20 +135,7 @@ async def publish_post_endpoint(req: PublishRequest):
 
     try:
         async with async_playwright() as pw:
-            browser = await pw.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
-            )
-            context = await browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                ),
-                viewport={"width": 1280, "height": 800},
-                locale="ko-KR",
-            )
-            page = await context.new_page()
+            browser, context, page = await create_browser(pw, headless=True)
 
             logged_in = await ensure_login(context, page, naver_id, naver_pw)
             if not logged_in:
@@ -184,7 +171,7 @@ async def publish_post_endpoint(req: PublishRequest):
     except Exception as e:
         update_post_status(post_id, "failed")
         logger.error(f"발행 오류: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"발행 오류: {e}")
+        raise HTTPException(status_code=500, detail="블로그 발행 중 오류가 발생했습니다")
 
 
 @app.get("/status", response_model=StatusResponse)
