@@ -1,7 +1,7 @@
 # CODE_MAP — 코드베이스 지도
 
 > 파일 추가/삭제/이동/역할 변경 시 반드시 갱신.
-> 최종 갱신: 2026-03-08 (쿠키 업로드 기능 + bot_cookies 테이블)
+> 최종 갱신: 2026-03-08 (관리자 페이지 + 사용자 티어 관리)
 
 ---
 
@@ -21,8 +21,10 @@
 | `app/(dashboard)/persona/page.tsx` | 페르소나 관리 UI — 블로그 분석 + 7카테고리 아코디언 + 항목 토글/삭제/추가 + **피드백 규칙 승인/히스토리** | ✅ |
 | `app/(dashboard)/guide/page.tsx` | 사용법 가이드 — 3-Step 흐름 + 기능별 상세 + FAQ (서버 컴포넌트) | ✅ **신규** |
 | `app/globals.css` | 글로벌 스타일 + 테마 변수 (light/dark) | ✅ |
-| `middleware.ts` | 세션 갱신 + 보호 경로 리다이렉트 | ✅ |
-| `components/nav/header.tsx` | 대시보드 헤더 (네비+로그아웃) | ✅ |
+| `app/(dashboard)/admin/page.tsx` | 관리자 페이지 — 사용자 목록, 티어/상태 변경, 통계 카드 | ✅ **신규** |
+| `app/api/admin/users/route.ts` | 관리자 API — GET 사용자 목록, PATCH 티어/상태 수정 (admin 검증) | ✅ **신규** |
+| `middleware.ts` | 세션 갱신 + 보호 경로 리다이렉트 (/admin 포함) | ✅ |
+| `components/nav/header.tsx` | 대시보드 헤더 (네비+로그아웃, admin일 때 "관리" 링크 표시) | ✅ |
 | `components/ui/` | shadcn/ui 컴포넌트 (button, card, input, textarea) | ✅ |
 | `lib/supabase.ts` | 브라우저용 Supabase 클라이언트 | ✅ |
 | `lib/supabase-server.ts` | 서버 컴포넌트용 Supabase 클라이언트 (쿠키 인증) | ✅ |

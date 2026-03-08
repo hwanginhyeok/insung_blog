@@ -212,4 +212,13 @@ Supabase (공유 제어 평면)
 | UX-04 | HTML 렌더러 SmartEditor 내부 구조 복제 | ✅ 완료 | se-component/se-text-paragraph 래퍼 + inline CSS 병행 |
 | UX-05 | formatting 항목 DB 누락 수정 — 크롤링 데이터 기반 수동 INSERT | ✅ 완료 | nanumbareunhipi + fs16 (블로그 실제 스타일 반영) |
 
-*마지막 업데이트: 2026-03-08 (글쓰기 UX 개선 — 이탈 경고, 저장글 복원, HTML 복사 수정)*
+### 관리자 페이지 (2026-03-08)
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| ADM-01 | 관리자 API Route (`/api/admin/users`) — GET 목록 + PATCH 수정 | ✅ 완료 | admin role 검증 + createAdminClient |
+| ADM-02 | 관리자 페이지 UI (`/admin`) — 통계 카드 + 사용자 테이블 | ✅ 완료 | tier 드롭다운 + status 토글 |
+| ADM-03 | Header 관리 링크 조건부 표시 | ✅ 완료 | isAdmin 상태 + users 테이블 조회 |
+| ADM-04 | Middleware `/admin` 보호 경로 추가 | ✅ 완료 | protectedPaths + matcher |
+
+*마지막 업데이트: 2026-03-08 (관리자 페이지 + 사용자 티어 관리)*

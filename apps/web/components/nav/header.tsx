@@ -16,16 +16,28 @@ const navItems = [
   { href: "/guide", label: "사용법" },
 ];
 
+const adminItems = [{ href: "/admin", label: "관리" }];
+
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     async function loadUser() {
       const supabase = createClient();
       const { data } = await supabase.auth.getUser();
       setUser(data.user);
+
+      if (data.user) {
+        const { data: profile } = await supabase
+          .from("users")
+          .select("role")
+          .eq("id", data.user.id)
+          .single();
+        setIsAdmin(profile?.role === "admin");
+      }
     }
     loadUser();
   }, []);
@@ -59,6 +71,21 @@ export function Header() {
                 {item.label}
               </Link>
             ))}
+            {isAdmin &&
+              adminItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    pathname === item.href
+                      ? "bg-secondary text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {item.label}
+                </Link>
+              ))}
           </nav>
         </div>
         <div className="flex items-center gap-2">
