@@ -61,6 +61,27 @@ _CAPTCHA_INDICATORS = [
 ]
 
 
+async def visit_and_extract(page: Page, post_url: str) -> str:
+    """
+    게시물 방문 → 읽기 시뮬레이션 → 본문 텍스트 추출.
+    배치 댓글 생성을 위해 본문만 가져오고 댓글은 작성하지 않음.
+    """
+    try:
+        await page.goto(post_url, timeout=PAGE_LOAD_TIMEOUT)
+        await page.wait_for_load_state("domcontentloaded", timeout=PAGE_LOAD_TIMEOUT)
+        await asyncio.sleep(3)
+
+        await _simulate_reading(page)
+
+        target_frame = page.frame("mainFrame") or page.main_frame
+        body = await _extract_post_body(target_frame)
+        logger.debug(f"본문 추출 완료 ({len(body)}자): {post_url[:60]}")
+        return body
+    except Exception as e:
+        logger.warning(f"본문 추출 실패: {post_url[:60]} — {e}")
+        return ""
+
+
 async def write_comment(
     page: Page,
     post_url: str,
@@ -99,13 +120,13 @@ async def write_comment(
             await page.wait_for_load_state("domcontentloaded", timeout=PAGE_LOAD_TIMEOUT)
             await asyncio.sleep(3)  # 추가 대기 (lazy load 대응)
 
-            # 페이지 읽기 시간 시뮬레이션 (자연스러운 체류 흉내)
-            await _simulate_reading(page)
+            # 페이지 읽기 시뮬레이션 (재방문 시 짧은 체류)
+            await _simulate_reading(page, brief=bool(comment_text))
 
             # mainFrame 확인
             target_frame = page.frame("mainFrame") or page.main_frame
 
-            # 본문 추출 → AI 댓글 생성 (첫 시도에서만)
+            # 본문 추출 → AI 댓글 생성 (배치 미사용 시 단건 폴백)
             if not comment_text:
                 post_body = await _extract_post_body(target_frame)
                 comment_text = generate_comment(post_body, post_title, recent_comments)
@@ -137,23 +158,33 @@ async def write_comment(
     return False, comment_text
 
 
-async def _simulate_reading(page: Page) -> None:
+async def _simulate_reading(page: Page, brief: bool = False) -> None:
     """페이지 체류 시간 시뮬레이션.
-    글을 실제로 읽는 것처럼 점진적 스크롤 + 중간 체류 수행.
-    총 체류 시간: 약 15~45초 (사람의 블로그 글 읽기 패턴 모사)."""
-    # 초기 체류 — 제목/도입부 읽기
+    brief=False: 본문 읽기 (15~45초) — 첫 방문용.
+    brief=True:  재방문 체류 (3~8초) — 댓글 작성 재방문용."""
+    if brief:
+        # 재방문: 짧은 스크롤 1~2회 + 체류
+        await asyncio.sleep(random.uniform(2.0, 4.0))
+        try:
+            target = page.frame("mainFrame") or page.main_frame
+            scroll_count = random.randint(1, 2)
+            for _ in range(scroll_count):
+                await target.evaluate(f"window.scrollBy(0, {random.randint(100, 300)})")
+                await asyncio.sleep(random.uniform(1.0, 3.0))
+        except Exception:
+            await asyncio.sleep(random.uniform(2.0, 4.0))
+        return
+
+    # 첫 방문: 본문 읽기 (15~45초)
     await asyncio.sleep(random.uniform(3.0, 6.0))
     try:
         target = page.frame("mainFrame") or page.main_frame
-        # 3~5회 점진적 스크롤 + 중간 읽기 시간
         scroll_count = random.randint(3, 5)
         for _ in range(scroll_count):
             scroll_amount = random.randint(200, 500)
             await target.evaluate(f"window.scrollBy(0, {scroll_amount})")
-            # 각 스크롤 후 읽기 체류 (3~8초)
             await asyncio.sleep(random.uniform(3.0, 8.0))
     except Exception:
-        # 스크롤 실패해도 최소 체류 시간 확보
         await asyncio.sleep(random.uniform(5.0, 10.0))
 
 

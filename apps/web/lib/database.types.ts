@@ -52,38 +52,6 @@ export interface Database {
           updated_at?: string;
         };
       };
-      user_credentials: {
-        Row: {
-          id: string;
-          user_id: string;
-          naver_id_encrypted: string | null;
-          naver_pw_encrypted: string | null;
-          blog_id: string;
-          assigned_worker: string;
-          cookies: Json;
-          cookies_updated_at: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          user_id: string;
-          naver_id_encrypted?: string | null;
-          naver_pw_encrypted?: string | null;
-          blog_id: string;
-          assigned_worker?: string;
-          cookies?: Json;
-          cookies_updated_at?: string | null;
-        };
-        Update: {
-          naver_id_encrypted?: string | null;
-          naver_pw_encrypted?: string | null;
-          blog_id?: string;
-          assigned_worker?: string;
-          cookies?: Json;
-          cookies_updated_at?: string | null;
-        };
-      };
       user_personas: {
         Row: {
           id: string;

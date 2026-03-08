@@ -3,7 +3,10 @@
 1. Supabase에서 봇 설정 로드 (한도, 모드)
 2. 로그인 확인
 3. 내 블로그 댓글 작성자 수집
-4. 각 블로거 방문 → 최근 게시물 3~5개에 댓글
+4. 각 블로거 방문 → 게시물 3개씩 배치로 댓글 생성
+   - 1단계: 게시물 방문 + 본문 추출 (읽기 시뮬레이션)
+   - 2단계: 배치 AI 댓글 생성 (API 1회)
+   - 3단계: 재방문 + 댓글 작성 (짧은 체류)
 5. DB 이력 저장 + 일일 한도 체크
 6. 실행 통계 SQLite + Supabase 이중 기록
 """
@@ -23,7 +26,8 @@ from src.auth.session_manager import check_and_refresh_session, get_session_stat
 from src.utils.telegram_notifier import notify_login_failure
 from src.collectors.comment_collector import collect_commenters
 from src.collectors.post_collector import collect_posts
-from src.commenter.comment_writer import write_comment
+from src.commenter.ai_comment import generate_comments_batch
+from src.commenter.comment_writer import visit_and_extract, write_comment
 from src.detectors.auto_blogger_detector import is_auto_blogger
 from src.storage.database import (
     count_today_bloggers,
@@ -167,50 +171,90 @@ async def run(dry_run: bool = False, test_visit: str | None = None, mode: str | 
                     logger.info(f"{blog_id}: 게시물 없음 — 스킵")
                     continue
 
+                # 댓글 대상 필터링
+                eligible = [
+                    (url, title) for url, title in posts
+                    if not is_post_commented(url)
+                ]
+                if not eligible:
+                    logger.info(f"{blog_id}: 댓글 가능한 게시물 없음 — 스킵")
+                    continue
+
+                # 일일 한도까지만
+                comment_room = max_comments - count_today_comments()
+                if comment_room <= 0:
+                    logger.info(f"오늘 댓글 한도({max_comments}개) 달성 — 중단")
+                    break
+                eligible = eligible[:comment_room]
+
                 blogger_had_comment = False
-                for post_url, post_title in posts:
-                    # 하루 총 댓글 한도 체크
-                    if count_today_comments() >= max_comments:
-                        logger.info(f"오늘 댓글 한도({max_comments}개) 달성 — 중단")
-                        break
+                BATCH_SIZE = 3
 
-                    if is_post_commented(post_url):
-                        logger.debug(f"이미 댓글 달린 게시물 스킵: {post_url[:60]}")
-                        continue
+                for batch_start in range(0, len(eligible), BATCH_SIZE):
+                    batch = eligible[batch_start:batch_start + BATCH_SIZE]
 
-                    # 주기적 세션 체크 (5개마다)
-                    if comments_written > 0 and comments_written % 5 == 0:
-                        session_ok = await check_and_refresh_session(
-                            context, page, naver_id, naver_pw
-                        )
-                        if not session_ok:
-                            await notify_login_failure("세션 만료 — 댓글 작성 중단")
-                            raise RuntimeError("세션 만료 — 실행 중단")
+                    # ── 1단계: 게시물 방문 + 본문 추출 ──
+                    batch_data: list[dict] = []
+                    for post_url, post_title in batch:
+                        # 주기적 세션 체크 (5개마다)
+                        total_processed = comments_written + comments_failed
+                        if total_processed > 0 and total_processed % 5 == 0:
+                            session_ok = await check_and_refresh_session(
+                                context, page, naver_id, naver_pw
+                            )
+                            if not session_ok:
+                                await notify_login_failure("세션 만료 — 댓글 작성 중단")
+                                raise RuntimeError("세션 만료 — 실행 중단")
 
-                    success, comment_text = await write_comment(
-                        page, post_url, post_title, dry_run=dry_run,
-                        context=context, naver_id=naver_id, naver_pw=naver_pw
+                        body = await visit_and_extract(page, post_url)
+                        batch_data.append({
+                            "url": post_url,
+                            "title": post_title,
+                            "body": body,
+                        })
+                        await delay_between_comments()
+
+                    # ── 2단계: 배치 AI 댓글 생성 (API 1회) ──
+                    ai_comments = generate_comments_batch(
+                        [{"body": d["body"], "title": d["title"]} for d in batch_data],
+                    )
+                    logger.info(
+                        f"배치 처리: {len(batch_data)}개 게시물 → "
+                        f"API 1회 호출 → {len(ai_comments)}개 댓글"
                     )
 
-                    # SQLite 이력 기록 (로컬 운영 데이터)
-                    record_comment(post_url, blog_id, post_title, comment_text, success)
+                    # ── 3단계: 재방문 + 댓글 작성 ──
+                    for i, data in enumerate(batch_data):
+                        if count_today_comments() >= max_comments:
+                            logger.info(f"오늘 댓글 한도({max_comments}개) 달성 — 중단")
+                            break
 
-                    # Supabase 대기 댓글 기록 (제어 평면)
-                    if success and comment_text:
-                        add_pending_comment_sb(
-                            blog_id=blog_id,
-                            post_url=post_url,
-                            post_title=post_title,
-                            comment_text=comment_text,
+                        success, comment_text = await write_comment(
+                            page, data["url"], data["title"],
+                            dry_run=dry_run,
+                            context=context, naver_id=naver_id, naver_pw=naver_pw,
+                            comment_text=ai_comments[i],
                         )
 
-                    if success:
-                        comments_written += 1
-                        blogger_had_comment = True
-                    else:
-                        comments_failed += 1
+                        # SQLite 이력 기록
+                        record_comment(data["url"], blog_id, data["title"], comment_text, success)
 
-                    await delay_between_comments()
+                        # Supabase 대기 댓글 기록
+                        if success and comment_text:
+                            add_pending_comment_sb(
+                                blog_id=blog_id,
+                                post_url=data["url"],
+                                post_title=data["title"],
+                                comment_text=comment_text,
+                            )
+
+                        if success:
+                            comments_written += 1
+                            blogger_had_comment = True
+                        else:
+                            comments_failed += 1
+
+                        await delay_between_comments()
 
                 if blogger_had_comment:
                     mark_blogger_visited(blog_id)
