@@ -31,7 +31,7 @@ const TIER_OPTIONS: { value: Tier; label: string }[] = [
 ];
 
 export default function AdminPage() {
-  const { user: currentUser, loading: authLoading, isAdmin } = useUser();
+  const { loading: authLoading, isAdmin } = useUser();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
