@@ -154,15 +154,12 @@ async def run(dry_run: bool = False, test_visit: str | None = None, mode: str | 
                     logger.debug(f"{blog_id}: 오늘 이미 방문 — 스킵")
                     continue
 
-                # 오토 블로거 체크
+                # 오토 블로거 체크 (스킵하지 않고 로그만 — 데이터 수집용)
                 is_auto, score, reason = is_auto_blogger(blog_id)
                 if is_auto:
-                    logger.warning(f"⚠ {blog_id} 스킵: {reason}")
-                    mark_blogger_visited(blog_id)
-                    bloggers_visited += 1
-                    continue
+                    logger.info(f"[데이터] {blog_id} 오토 의심(스킵 안 함): {reason} (점수={score})")
                 elif score >= AUTO_BLOGGER_SCORE_LOW:
-                    logger.info(f"ℹ {blog_id} 주의: 오토 의심 점수 {score}")
+                    logger.info(f"[데이터] {blog_id} 오토 주의: 점수={score}")
 
                 logger.info(f"▶ 방문: {blog_id}")
                 posts = await collect_posts(page, blog_id)
@@ -171,13 +168,17 @@ async def run(dry_run: bool = False, test_visit: str | None = None, mode: str | 
                     logger.info(f"{blog_id}: 게시물 없음 — 스킵")
                     continue
 
-                # 댓글 대상 필터링
-                eligible = [
-                    (url, title) for url, title in posts
-                    if not is_post_commented(url)
-                ]
+                # 댓글 대상 필터링 (DB 기준)
+                eligible = []
+                for url, title in posts:
+                    db_commented = is_post_commented(url)
+                    if not db_commented:
+                        eligible.append((url, title))
+                    else:
+                        logger.debug(f"[DB 체크] 이미 댓글 있음: {url[:60]}")
+
                 if not eligible:
-                    logger.info(f"{blog_id}: 댓글 가능한 게시물 없음 — 스킵")
+                    logger.info(f"{blog_id}: 댓글 가능한 게시물 없음 (DB 기준) — 스킵")
                     continue
 
                 # 일일 한도까지만
@@ -193,7 +194,7 @@ async def run(dry_run: bool = False, test_visit: str | None = None, mode: str | 
                 for batch_start in range(0, len(eligible), BATCH_SIZE):
                     batch = eligible[batch_start:batch_start + BATCH_SIZE]
 
-                    # ── 1단계: 게시물 방문 + 본문 추출 ──
+                    # ── 1단계: 게시물 방문 + 본문 추출 + 페이지 댓글 존재 확인 ──
                     batch_data: list[dict] = []
                     for post_url, post_title in batch:
                         # 주기적 세션 체크 (5개마다)
@@ -206,13 +207,37 @@ async def run(dry_run: bool = False, test_visit: str | None = None, mode: str | 
                                 await notify_login_failure("세션 만료 — 댓글 작성 중단")
                                 raise RuntimeError("세션 만료 — 실행 중단")
 
-                        body = await visit_and_extract(page, post_url)
+                        body, page_has_my_comment = await visit_and_extract(
+                            page, post_url, my_blog_id
+                        )
+
+                        # DB vs 페이지 비교 로그
+                        db_says = is_post_commented(post_url)
+                        if db_says and not page_has_my_comment:
+                            logger.info(
+                                f"[비교] DB=댓글있음, 페이지=없음 → 삭제됨? {post_url[:60]}"
+                            )
+                        elif not db_says and page_has_my_comment:
+                            logger.info(
+                                f"[비교] DB=없음, 페이지=댓글있음 → DB 누락 {post_url[:60]}"
+                            )
+
+                        # 페이지에서 내 댓글이 이미 있으면 스킵
+                        if page_has_my_comment:
+                            logger.info(
+                                f"[페이지 체크] 내 댓글 이미 존재 — 스킵: {post_url[:60]}"
+                            )
+                            continue
+
                         batch_data.append({
                             "url": post_url,
                             "title": post_title,
                             "body": body,
                         })
                         await delay_between_comments()
+
+                    if not batch_data:
+                        continue
 
                     # ── 2단계: 배치 AI 댓글 생성 (API 1회) ──
                     ai_comments = generate_comments_batch(

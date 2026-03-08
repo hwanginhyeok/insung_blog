@@ -61,10 +61,16 @@ _CAPTCHA_INDICATORS = [
 ]
 
 
-async def visit_and_extract(page: Page, post_url: str) -> str:
+async def visit_and_extract(
+    page: Page, post_url: str, my_blog_id: str | None = None
+) -> tuple[str, bool | None]:
     """
-    게시물 방문 → 읽기 시뮬레이션 → 본문 텍스트 추출.
+    게시물 방문 → 읽기 시뮬레이션 → 본문 텍스트 추출 + 내 댓글 존재 확인.
     배치 댓글 생성을 위해 본문만 가져오고 댓글은 작성하지 않음.
+
+    Returns:
+        (본문 텍스트, 내 댓글 존재 여부)
+        my_blog_id 미제공 시 존재 여부는 None.
     """
     try:
         await page.goto(post_url, timeout=PAGE_LOAD_TIMEOUT)
@@ -76,10 +82,53 @@ async def visit_and_extract(page: Page, post_url: str) -> str:
         target_frame = page.frame("mainFrame") or page.main_frame
         body = await _extract_post_body(target_frame)
         logger.debug(f"본문 추출 완료 ({len(body)}자): {post_url[:60]}")
-        return body
+
+        # 내 댓글 존재 확인 (my_blog_id 제공 시)
+        my_comment_exists = None
+        if my_blog_id:
+            my_comment_exists = await _check_my_comment(target_frame, my_blog_id)
+
+        return body, my_comment_exists
     except Exception as e:
         logger.warning(f"본문 추출 실패: {post_url[:60]} — {e}")
-        return ""
+        return "", None
+
+
+async def _check_my_comment(frame: Frame, my_blog_id: str) -> bool:
+    """
+    댓글 영역에서 내 blog_id로 작성된 댓글이 있는지 확인.
+    댓글 작성자 프로필 링크에 blog.naver.com/{my_blog_id}가 포함되면 True.
+    """
+    try:
+        found = await frame.evaluate(f'''() => {{
+            // 댓글 영역의 모든 프로필 링크 검색
+            const links = document.querySelectorAll(
+                '.u_cbox_info a[href], .u_cbox_nick a[href], ' +
+                '.u_cbox_comment_box a[href*="blog.naver.com"]'
+            );
+            for (const link of links) {{
+                const href = link.getAttribute('href') || '';
+                if (href.includes('blog.naver.com/{my_blog_id}') ||
+                    href.includes('/{my_blog_id}')) {{
+                    return true;
+                }}
+            }}
+            // 닉네임 텍스트에서도 검색 (프로필 링크 없는 경우)
+            const nicks = document.querySelectorAll(
+                '.u_cbox_nick, .u_cbox_name'
+            );
+            for (const nick of nicks) {{
+                const onclick = nick.getAttribute('onclick') || '';
+                if (onclick.includes('{my_blog_id}')) {{
+                    return true;
+                }}
+            }}
+            return false;
+        }}''')
+        return bool(found)
+    except Exception as e:
+        logger.debug(f"내 댓글 확인 실패 (무시): {e}")
+        return False
 
 
 async def write_comment(
