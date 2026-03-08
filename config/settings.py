@@ -12,8 +12,14 @@ LOGS_DIR = PROJECT_ROOT / "logs"
 COOKIES_DIR = PROJECT_ROOT / "cookies"
 
 DB_PATH = DATA_DIR / "comments.db"
-LOG_PATH = LOGS_DIR / "commenter.log"
 COOKIES_PATH = COOKIES_DIR / "naver_cookies.json"
+
+# 모듈별 로그 경로
+LOG_PATH = LOGS_DIR / "commenter.log"
+LOG_PATH_COMMENTER = LOGS_DIR / "commenter.log"
+LOG_PATH_TELEGRAM = LOGS_DIR / "telegram_bot.log"
+LOG_PATH_API = LOGS_DIR / "api_server.log"
+LOG_PATH_PUBLISHER = LOGS_DIR / "publisher.log"
 
 # 네이버 URL
 NAVER_LOGIN_URL = "https://nid.naver.com/nidlogin.login"
@@ -55,7 +61,7 @@ MAX_POST_RETRIES = 2
 TITLE_MAX_LEN = 20
 
 # Playwright 타임아웃 (ms)
-PAGE_LOAD_TIMEOUT = 30_000
+PAGE_LOAD_TIMEOUT = 60_000  # 네이버 블로그 페이지 로드 느림 대응
 ELEMENT_TIMEOUT = 10_000
 
 # ── 발행 (Phase 2) ──────────────────────────────
@@ -64,7 +70,7 @@ ELEMENT_TIMEOUT = 10_000
 BLOG_WRITE_URL = "https://blog.naver.com/{blog_id}/postwrite"
 
 # AI 모델
-CONTENT_AI_MODEL = "claude-sonnet-4-6-20250514"   # Vision + 초안 생성
+CONTENT_AI_MODEL = "claude-haiku-4-5-20251001"    # Vision + 초안 생성 (Sonnet 접근 불가하여 Haiku 사용)
 HASHTAG_AI_MODEL = "claude-haiku-4-5-20251001"    # 해시태그 생성
 
 # 이미지 제약
@@ -83,8 +89,69 @@ HASHTAG_MAX_COUNT = 25
 
 # 글쓰기 스타일 가이드 경로
 WRITING_STYLE_PATH = PROJECT_ROOT / "skills" / "writing_style.md"
+PRODUCTION_SPEC_PATH = PROJECT_ROOT / "skills" / "PRODUCTION_SPEC.md"
+
+# ── 카테고리별 스타일 시스템 ──────────────────────────
+STYLE_GUIDES_DIR = PROJECT_ROOT / "skills" / "styles"
+CATEGORIES = ("맛집", "체험/일상", "재테크", "리뷰", "개인이벤트")
+DEFAULT_CATEGORY = "체험/일상"
+FONT_CONFIG_PATH = STYLE_GUIDES_DIR / "_font_config.json"
+EXAMPLE_POSTS_PATH = PROJECT_ROOT / "skills" / "blog_analysis" / "raw_posts.json"
+EXAMPLE_POSTS_COUNT = 2  # few-shot에 포함할 예시 포스트 수
+
+# raw_posts.json 카테고리 → 5대 카테고리 매핑
+RAW_CATEGORY_MAP: dict[str, str] = {
+    "음식점": "맛집",
+    "술집": "맛집",
+    "카페": "맛집",
+    "인천": "맛집",
+    "체험": "체험/일상",
+    "기타": "체험/일상",
+    "재테크": "재테크",
+    "제품리뷰": "리뷰",
+    "임신준비": "개인이벤트",
+    "신혼여행": "개인이벤트",
+    "결혼준비": "개인이벤트",
+}
 
 # 발행 Playwright 타임아웃 (ms)
 EDITOR_LOAD_TIMEOUT = 60_000
 IMAGE_UPLOAD_TIMEOUT = 30_000
 PUBLISH_CONFIRM_TIMEOUT = 15_000
+
+# ── 오토 블로거 감지 설정 ──────────────────────────
+# 1분 내 답글을 "빠른 답글"로 간주 (초)
+AUTO_BLOGGER_FAST_REPLY_THRESHOLD = 60
+
+# 의심 점수 기준
+AUTO_BLOGGER_SCORE_HIGH = 70   # 이 점수 이상: 항상 스킵
+AUTO_BLOGGER_SCORE_LOW = 40    # 이 점수 이상: 30% 확률 스킵
+
+# 패턴 분석에 필요한 최소 댓글 수
+AUTO_BLOGGER_MIN_COMMENTS_FOR_ANALYSIS = 3
+
+# 답글 패턴 감지용 정규식
+AUTO_BLOGGER_PATTERNS = [
+    r"^안녕하세요[.!]?\\s*\\w*님",
+    r"^반갑습니다[.!]?",
+    r"좋은\\s*(글|포스팅|내용)",
+    r"잘\\s*보고\\s*갑니다",
+    r"소통\\s*하고\\s*갑니다",
+    r"서로\\s*(소통|공감|방문)",
+    r"댓글\\s*남기고\\s*갑니다",
+    r"인사\\s*드리고\\s*갑니다",
+    r"방문\\s*하고\\s*갑니다",
+    r"구독하고\\s*갑니다",
+]
+
+# 스팸 지표
+AUTO_BLOGGER_SPAM_INDICATORS = [
+    "http://",
+    "https://",
+    "상위노출",
+    "검색순위",
+    "블로그체험단",
+    "체험단모집",
+    "원고료",
+    "협찬문의",
+]

@@ -1,0 +1,22 @@
+{
+  "primary_font": {
+    "class_name": "nanumbareunhipi",
+    "display_name": "나눔바른히피"
+  },
+  "primary_size": "fs16",
+  "all_fonts": {
+    "nanumbareunhipi": "나눔바른히피",
+    "": "",
+    "system": "시스템 기본"
+  },
+  "all_sizes": {
+    "fs16": 1587,
+    "": 185,
+    "fs11": 11,
+    "fs15": 9,
+    "fs13": 6,
+    "fs24": 1
+  },
+  "apply_font": true,
+  "apply_size": true
+}

@@ -10,11 +10,12 @@
 import os
 import re
 from datetime import datetime
+from pathlib import Path
 
 from anthropic import Anthropic
 
 # 피드백 분석에도 Haiku 사용 (HASHTAG_AI_MODEL 재사용 — 동일 경량 모델)
-from config.settings import HASHTAG_AI_MODEL, WRITING_STYLE_PATH
+from config.settings import HASHTAG_AI_MODEL, STYLE_GUIDES_DIR, WRITING_STYLE_PATH
 from src.utils.logger import logger
 
 _client: Anthropic | None = None
@@ -34,22 +35,39 @@ def _get_client() -> Anthropic | None:
     return _client
 
 
-def record_feedback(post_title: str, feedback_text: str) -> bool:
+def _resolve_style_path(category: str | None = None) -> Path:
+    """카테고리에 따라 피드백을 기록할 스타일 파일 경로 결정"""
+    if category:
+        cat_path = STYLE_GUIDES_DIR / f"{category}.md"
+        if cat_path.exists():
+            return cat_path
+    return WRITING_STYLE_PATH
+
+
+def record_feedback(
+    post_title: str,
+    feedback_text: str,
+    category: str | None = None,
+) -> bool:
     """
-    피드백을 writing_style.md에 기록.
+    피드백을 스타일 가이드에 기록. 카테고리가 있으면 해당 카테고리 파일에 기록.
 
     Args:
         post_title: 피드백 대상 게시물 제목
         feedback_text: 사용자 피드백 원문
+        category: 게시물 카테고리 (맛집/카페/여행/일상)
 
     Returns:
         성공 여부
     """
-    if not WRITING_STYLE_PATH.exists():
-        logger.warning(f"스타일 파일 없음: {WRITING_STYLE_PATH}")
+    style_path = _resolve_style_path(category)
+    if not style_path.exists():
+        logger.warning(f"스타일 파일 없음: {style_path}")
         return False
 
-    content = WRITING_STYLE_PATH.read_text(encoding="utf-8")
+    content = style_path.read_text(encoding="utf-8")
+    target_name = f"{category} 스타일" if category else "기본 스타일"
+    logger.info(f"피드백 대상 스타일: {target_name} ({style_path.name})")
     today = datetime.now().strftime("%Y-%m-%d")
 
     # 피드백 핵심 요약 (긴 피드백은 50자로 자름)
@@ -79,7 +97,7 @@ def record_feedback(post_title: str, feedback_text: str) -> bool:
         # 테이블이 없으면 파일 끝에 추가
         content += f"\n\n## 피드백 이력\n\n{_FEEDBACK_TABLE_HEADER}\n{_FEEDBACK_TABLE_SEP}\n{new_row}\n"
 
-    WRITING_STYLE_PATH.write_text(content, encoding="utf-8")
+    style_path.write_text(content, encoding="utf-8")
     logger.info(f"피드백 기록 완료: {post_title[:20]} — {summary[:30]}")
 
     # 피드백 개수 체크 → 5건마다 스타일 규칙 제안

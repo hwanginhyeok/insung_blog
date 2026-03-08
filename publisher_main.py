@@ -26,13 +26,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from src.storage.database import init_db, record_post, update_post_status
-from src.utils.logger import logger
+from src.utils.logger import get_publisher_logger
+
+logger = get_publisher_logger()
 
 
-def _preview_post(title: str, body: str, hashtags: list[str]) -> None:
+def _preview_post(
+    title: str, body: str, hashtags: list[str], category: str | None = None
+) -> None:
     """터미널에 게시물 프리뷰 출력"""
     print("\n" + "=" * 60)
     print("게시물 프리뷰")
+    if category:
+        print(f"카테고리: [{category}]")
     print("=" * 60)
     print(f"\n제목: {title}")
     print(f"\n{'─' * 60}")
@@ -56,6 +62,7 @@ async def _run_publish(
     hashtags: list[str],
     image_paths: list[str],
     dry_run: bool,
+    category: str | None = None,
 ) -> None:
     """Playwright로 실제 발행 수행"""
     from playwright.async_api import async_playwright
@@ -73,7 +80,9 @@ async def _run_publish(
         return
 
     # DB에 초안 저장
-    post_id = record_post(title, body, hashtags, image_paths, status="draft")
+    post_id = record_post(
+        title, body, hashtags, image_paths, status="draft", category=category,
+    )
     logger.info(f"초안 저장 (ID: {post_id})")
 
     async with async_playwright() as pw:
@@ -166,6 +175,8 @@ def main() -> None:
         print("오류: 유효한 사진 파일이 없습니다.")
         sys.exit(1)
 
+    category = None
+
     if args.no_ai:
         # 수동 모드
         if not args.title or not args.body:
@@ -195,16 +206,17 @@ def main() -> None:
         title = result["title"]
         body = result["body"]
         hashtags = result["hashtags"]
+        category = result.get("category")
 
     # 프리뷰 + 확인
-    _preview_post(title, body, hashtags)
+    _preview_post(title, body, hashtags, category)
 
     if not _confirm():
         print("발행 취소됨.")
         return
 
     # 발행 실행
-    asyncio.run(_run_publish(title, body, hashtags, valid_photos, args.dry_run))
+    asyncio.run(_run_publish(title, body, hashtags, valid_photos, args.dry_run, category))
 
 
 if __name__ == "__main__":

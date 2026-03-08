@@ -1,16 +1,19 @@
 """
-댓글 작성 모듈 — iframe 중첩 구조 처리 + 인간적 타이핑 시뮬레이션
+댓글 작성 모듈 — mainFrame 내 댓글 영역 처리 + 인간적 타이핑 시뮬레이션
 
-네이버 블로그 댓글 iframe 구조:
-  패턴 A: 페이지 → iframe#mainFrame → iframe#commentIframe
-  패턴 B: 페이지 → iframe#commentIframe (직접)
-  패턴 C: 페이지 직접 (모바일형 또는 일부 스킨)
+네이버 블로그 댓글 구조 (2026년 기준):
+  1. 페이지 → iframe#mainFrame 안에 댓글 영역이 직접 렌더링됨 (별도 commentIframe 없음)
+  2. 댓글 입력란: div.u_cbox_text[contenteditable="true"] (textarea 아님)
+  3. 댓글 영역은 .btn_comment 클릭 후 lazy-load됨
+  4. .btn_comment는 플로팅 바텀 버튼 — Playwright click 불가, JS click 필요
 """
 import asyncio
+import random
 
 from playwright.async_api import Frame, Page
 
 from config.settings import ELEMENT_TIMEOUT, MAX_POST_RETRIES, PAGE_LOAD_TIMEOUT
+from src.auth.session_manager import is_session_valid, refresh_session
 from src.commenter.ai_comment import generate_comment
 from src.utils.delay import delay_short, delay_typing
 from src.utils.logger import logger
@@ -23,22 +26,28 @@ _BODY_SELECTORS = [
     "#content-area",            # 모바일형
 ]
 
-# 댓글 입력창 셀렉터 (신형 → 구형 순서로 시도)
-_TEXTAREA_SELECTORS = [
-    ".u_cbox_write_wrap textarea",
-    ".u_cbox_write textarea",
-    ".comment_write_box textarea",
-    "#cbox_module textarea",
-    "textarea[placeholder*='댓글']",
-    "textarea",
+# 댓글 입력창 셀렉터 (contenteditable div 우선 → textarea 폴백)
+_INPUT_SELECTORS = [
+    ".u_cbox_text",                        # contenteditable div (현재 주력)
+    "div.u_cbox_text_mention",             # 멘션 지원 div
+    ".u_cbox_write_wrap textarea",         # 구형 textarea (폴백)
+    ".u_cbox_write textarea",              # 구형 textarea (폴백)
+    "textarea[placeholder*='댓글']",       # 범용 textarea 폴백
+    "textarea",                            # 최후 폴백
+]
+
+# 댓글 열기 버튼 셀렉터
+_COMMENT_OPEN_SELECTORS = [
+    ".btn_comment",                        # 플로팅 바텀 버튼 (현재 주력)
+    "a.btn_comment",                       # a 태그 형식
+    "#btn_comment_2",                      # ID 기반
 ]
 
 # 등록 버튼 셀렉터
 _SUBMIT_SELECTORS = [
     ".u_cbox_btn_upload",
-    ".btn_type2.off",
-    ".u_cbox_write_wrap button[type='submit']",
     "button.u_cbox_btn_upload",
+    ".u_cbox_write_wrap button[type='submit']",
     ".btn_comment_write",
     "button[class*='upload']",
 ]
@@ -57,40 +66,63 @@ async def write_comment(
     post_url: str,
     post_title: str,
     dry_run: bool = False,
+    recent_comments: list[str] | None = None,
+    context=None,  # 세션 갱신용
+    naver_id: str | None = None,
+    naver_pw: str | None = None,
 ) -> tuple[bool, str]:
     """
     게시물 URL에 댓글 작성.
     Returns (success, comment_text)
     dry_run=True 이면 실제 제출 없이 시뮬레이션.
+    recent_comments: 최근 해당 블로거에게 단 댓글 목록 (중복 방지용)
+    context/naver_id/naver_pw: 세션 만료 시 자동 갱신용 (선택)
     """
     comment_text = ""
+    recent_comments = recent_comments or []
 
     for attempt in range(1, MAX_POST_RETRIES + 1):
         try:
+            # 세션 유효성 확인 (옵션 제공된 경우)
+            if context and naver_id and naver_pw:
+                is_valid = await is_session_valid(page)
+                if not is_valid:
+                    logger.warning("댓글 작성 중 세션 만료 감지 — 재로그인 시도")
+                    refreshed = await refresh_session(context, page, naver_id, naver_pw)
+                    if not refreshed:
+                        logger.error("세션 갱신 실패 — 댓글 작성 중단")
+                        return False, comment_text
+            
             await page.goto(post_url, timeout=PAGE_LOAD_TIMEOUT)
-            await page.wait_for_load_state("networkidle", timeout=PAGE_LOAD_TIMEOUT)
-            await delay_short()
+            await page.wait_for_load_state("domcontentloaded", timeout=PAGE_LOAD_TIMEOUT)
+            await asyncio.sleep(3)  # 추가 대기 (lazy load 대응)
 
             # 페이지 읽기 시간 시뮬레이션 (자연스러운 체류 흉내)
             await _simulate_reading(page)
 
+            # mainFrame 확인
+            target_frame = page.frame("mainFrame") or page.main_frame
+
             # 본문 추출 → AI 댓글 생성 (첫 시도에서만)
             if not comment_text:
-                post_body = await _extract_post_body(page)
-                comment_text = generate_comment(post_body, post_title)
+                post_body = await _extract_post_body(target_frame)
+                comment_text = generate_comment(post_body, post_title, recent_comments)
 
             # 캡차 감지
             if await _is_captcha_present(page):
                 logger.warning(f"캡차 감지 — 게시물 스킵: {post_url}")
                 return False, comment_text
 
-            # iframe 탐색
-            comment_frame = await _find_comment_frame(page)
-            if comment_frame is None:
-                logger.warning(f"댓글 iframe 없음 — 게시물 스킵: {post_url}")
+            # 댓글 영역 열기 (lazy-load)
+            await _open_comment_area(target_frame)
+
+            # 댓글 입력창 찾기
+            input_el = await _find_comment_input(target_frame)
+            if input_el is None:
+                logger.warning(f"댓글 입력창 없음 — 게시물 스킵: {post_url}")
                 return False, comment_text
 
-            success = await _fill_and_submit(comment_frame, comment_text, dry_run)
+            success = await _fill_and_submit(target_frame, input_el, comment_text, dry_run)
             if success:
                 logger.info(f"댓글 작성 {'(dry-run)' if dry_run else '완료'}: {post_url[:60]}")
                 return True, comment_text
@@ -105,30 +137,29 @@ async def write_comment(
 
 async def _simulate_reading(page: Page) -> None:
     """페이지 체류 시간 시뮬레이션.
-    글을 실제로 읽는 것처럼 2~5초 대기 후 자연스러운 스크롤 수행."""
-    import random
-    read_secs = random.uniform(2.0, 5.0)
-    await asyncio.sleep(read_secs)
+    글을 실제로 읽는 것처럼 점진적 스크롤 + 중간 체류 수행.
+    총 체류 시간: 약 15~45초 (사람의 블로그 글 읽기 패턴 모사)."""
+    # 초기 체류 — 제목/도입부 읽기
+    await asyncio.sleep(random.uniform(3.0, 6.0))
     try:
-        # 두 단계 스크롤: 중간까지 내린 후 댓글창 방향으로 추가 스크롤
-        scroll_mid = random.randint(300, 700)
-        scroll_bottom = random.randint(400, 900)
-        await page.evaluate(f"window.scrollBy(0, {scroll_mid})")
-        await asyncio.sleep(random.uniform(0.5, 1.5))
-        await page.evaluate(f"window.scrollBy(0, {scroll_bottom})")
-        await asyncio.sleep(random.uniform(0.3, 0.8))
+        target = page.frame("mainFrame") or page.main_frame
+        # 3~5회 점진적 스크롤 + 중간 읽기 시간
+        scroll_count = random.randint(3, 5)
+        for _ in range(scroll_count):
+            scroll_amount = random.randint(200, 500)
+            await target.evaluate(f"window.scrollBy(0, {scroll_amount})")
+            # 각 스크롤 후 읽기 체류 (3~8초)
+            await asyncio.sleep(random.uniform(3.0, 8.0))
     except Exception:
-        pass
+        # 스크롤 실패해도 최소 체류 시간 확보
+        await asyncio.sleep(random.uniform(5.0, 10.0))
 
 
-async def _extract_post_body(page: Page) -> str:
-    """게시물 본문 텍스트 추출.
-    mainFrame이 있으면 그 안에서, 없으면 페이지에서 직접 추출."""
-    target_frame = page.frame("mainFrame") or page.main_frame
-
+async def _extract_post_body(frame: Frame) -> str:
+    """게시물 본문 텍스트 추출."""
     for selector in _BODY_SELECTORS:
         try:
-            el = await target_frame.query_selector(selector)
+            el = await frame.query_selector(selector)
             if el:
                 text = await el.inner_text()
                 text = text.strip()
@@ -140,7 +171,7 @@ async def _extract_post_body(page: Page) -> str:
 
     # 최후 수단: 전체 body 텍스트 (노이즈 포함 가능)
     try:
-        body = await target_frame.query_selector("body")
+        body = await frame.query_selector("body")
         if body:
             text = await body.inner_text()
             logger.debug(f"본문 폴백 추출 (body 전체, {len(text)}자)")
@@ -152,127 +183,155 @@ async def _extract_post_body(page: Page) -> str:
     return ""
 
 
-async def _find_comment_frame(page: Page) -> Frame | None:
-    """
-    댓글 입력창이 있는 Frame 반환.
-    패턴 A/B/C 순서로 시도. iframe lazy-load 대비 최대 3회 재시도.
-    """
-    for attempt in range(3):
-        frame = await _try_find_comment_frame(page)
-        if frame:
-            return frame
-        if attempt < 2:
-            await asyncio.sleep(2)
-    return None
-
-
-async def _try_find_comment_frame(page: Page) -> Frame | None:
-    """단일 탐색 시도 — 이름·URL 양쪽으로 comment/cbox 포함 여부 확인"""
-    def _is_comment_frame(f: Frame) -> bool:
-        name = (f.name or "").lower()
-        url = (f.url or "").lower()
-        return "comment" in name or "comment" in url or "cbox" in url
-
-    # 패턴 A: mainFrame → 자식 iframe
-    main_frame = page.frame("mainFrame")
-    if main_frame:
-        for cf in main_frame.child_frames:
-            if _is_comment_frame(cf) or await _has_textarea(cf):
-                return cf
-        # mainFrame 자체에 댓글창이 있는 경우
-        if await _has_textarea(main_frame):
-            return main_frame
-
-    # 패턴 B: 페이지 직접 하위 comment/cbox iframe
-    for frame in page.frames:
-        if _is_comment_frame(frame) and await _has_textarea(frame):
-            return frame
-
-    # 패턴 C: 페이지 직접
-    if await _has_textarea(page.main_frame):
-        return page.main_frame
-
-    # 최후 수단: 모든 iframe 순회
-    for frame in page.frames:
-        if await _has_textarea(frame):
-            return frame
-
-    return None
-
-
-async def _has_textarea(frame: Frame) -> bool:
-    """해당 Frame에 댓글 textarea가 존재하는지 확인"""
-    for selector in _TEXTAREA_SELECTORS:
+async def _open_comment_area(frame: Frame) -> None:
+    """댓글 영역 열기 (lazy-load 대응).
+    .btn_comment를 JS로 클릭해서 댓글 입력 UI를 활성화."""
+    for selector in _COMMENT_OPEN_SELECTORS:
         try:
-            el = await frame.query_selector(selector)
-            if el:
-                return True
+            clicked = await frame.evaluate(f'''() => {{
+                const btn = document.querySelector("{selector}");
+                if (btn) {{
+                    btn.scrollIntoView({{behavior: "instant", block: "center"}});
+                    btn.click();
+                    return true;
+                }}
+                return false;
+            }}''')
+            if clicked:
+                logger.debug(f"댓글 영역 열기 성공: {selector}")
+                await asyncio.sleep(2)  # 댓글 UI 로드 대기
+                return
         except Exception:
             continue
-    return False
+
+    logger.debug("댓글 열기 버튼 없음 — 이미 열려있거나 댓글 비허용")
 
 
-async def _fill_and_submit(frame: Frame, text: str, dry_run: bool) -> bool:
+async def _find_comment_input(frame: Frame) -> object | None:
+    """댓글 입력창(contenteditable div 또는 textarea) 탐색."""
+    for selector in _INPUT_SELECTORS:
+        try:
+            el = await frame.wait_for_selector(selector, timeout=ELEMENT_TIMEOUT)
+            if el:
+                logger.debug(f"댓글 입력창 발견: {selector}")
+                return el
+        except Exception:
+            continue
+    return None
+
+
+async def _fill_and_submit(
+    frame: Frame, input_el: object, text: str, dry_run: bool
+) -> bool:
     """
     댓글 입력창에 텍스트 입력 후 제출.
-    글자 단위 타이핑으로 인간적 패턴 시뮬레이션.
+    contenteditable div와 textarea 양쪽을 지원.
     """
-    textarea = None
-    for selector in _TEXTAREA_SELECTORS:
+    # 클릭 후 포커스 (JS 클릭 — viewport 문제 우회)
+    try:
+        await input_el.evaluate("e => { e.scrollIntoView({block: 'center'}); e.click(); e.focus(); }")
+    except Exception:
         try:
-            textarea = await frame.wait_for_selector(selector, timeout=ELEMENT_TIMEOUT)
-            if textarea:
-                break
+            await input_el.click()
         except Exception:
-            continue
-
-    if not textarea:
-        logger.debug("textarea를 찾지 못했습니다")
-        return False
-
-    # 클릭 후 포커스
-    await textarea.click()
+            logger.debug("입력창 포커스 실패")
+            return False
     await delay_short()
 
-    # 글자 단위 타이핑 (봇 감지 회피)
-    for char in text:
-        await textarea.type(char, delay=0)
-        await delay_typing()
+    # contenteditable인지 확인
+    is_contenteditable = await input_el.evaluate(
+        "e => e.getAttribute('contenteditable') === 'true'"
+    )
+
+    if is_contenteditable:
+        # contenteditable div: keyboard.type()으로 입력
+        # 가우시안 분포 — 평균 55ms, σ=15ms, 사람 타이핑 리듬 모사
+        typing_delay = int(max(20, min(120, random.gauss(55, 15))))
+        await frame.page.keyboard.type(text, delay=typing_delay)
+    else:
+        # textarea: 글자 단위 타이핑 (가우시안 딜레이)
+        for char in text:
+            char_delay = int(max(15, min(100, random.gauss(50, 12))))
+            await input_el.type(char, delay=char_delay)
 
     await delay_short()
 
     if dry_run:
         logger.info(f"[dry-run] 입력 완료 (제출 생략): {text[:40]}...")
         # 입력 내용 지우기
-        await textarea.fill("")
+        try:
+            if is_contenteditable:
+                await input_el.evaluate("e => e.textContent = ''")
+            else:
+                await input_el.fill("")
+        except Exception:
+            pass
         return True
 
-    # 등록 버튼 클릭
+    # 공지사항 팝업 닫기
+    try:
+        close_notice = await frame.query_selector('.u_cbox_notice_close, [class*="notice_close"], button[onclick*="close"]')
+        if close_notice:
+            await close_notice.click()
+            await asyncio.sleep(0.5)
+            logger.debug("공지사항 팝업 닫기")
+    except Exception:
+        pass
+    
+    # 등록 버튼 클릭 - 보이는 버튼만 선택
     submit_btn = None
     for selector in _SUBMIT_SELECTORS:
         try:
-            submit_btn = await frame.query_selector(selector)
-            if submit_btn:
-                break
+            btn = await frame.query_selector(selector)
+            if btn:
+                is_visible = await btn.is_visible()
+                is_enabled = await btn.is_enabled()
+                if is_visible and is_enabled:
+                    submit_btn = btn
+                    logger.debug(f"등록 버튼 선택: {selector}")
+                    break
         except Exception:
             continue
 
     if not submit_btn:
-        logger.debug("제출 버튼을 찾지 못했습니다")
+        logger.warning("제출 버튼을 찾지 못했습니다")
         return False
 
-    await submit_btn.click()
-    await asyncio.sleep(2)  # 제출 후 반응 대기
+    # JS 클릭 (viewport 문제 우회)
+    try:
+        await submit_btn.evaluate("e => { e.scrollIntoView({block: 'center'}); e.click(); }")
+    except Exception:
+        await submit_btn.click()
+    await asyncio.sleep(3)  # 제출 후 반응 대기
 
     # 제출 후 캡차 재확인
     try:
-        page = frame.page
-        if await _is_captcha_present(page):
+        if await _is_captcha_present(frame.page):
             logger.warning("댓글 제출 후 캡차 발생")
             return False
     except Exception:
         pass
 
+    # 실제 제출 성공 여부 확인
+    # 방법 1: 입력창이 비워졌는지 확인 (제출 성공 시 초기화됨)
+    try:
+        current_text = await input_el.evaluate("e => e.textContent || e.value || ''")
+        if current_text and len(current_text.strip()) > 0:
+            logger.warning(f"댓글 제출 후 입력창이 비워지지 않음: '{current_text[:30]}...'")
+            return False
+    except Exception as e:
+        logger.debug(f"입력창 확인 중 오류 (무시): {e}")
+    
+    # 방법 2: 성공 메시지 확인
+    try:
+        success_notice = await frame.query_selector('.u_cbox_notice, .u_cbox_write_success')
+        if success_notice:
+            notice_text = await success_notice.inner_text()
+            logger.info(f"댓글 작성 성공 확인: {notice_text[:50]}")
+    except Exception:
+        pass
+
+    logger.info("댓글 작성 완료")
     return True
 
 

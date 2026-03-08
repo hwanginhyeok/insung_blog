@@ -1,13 +1,22 @@
 """
 AI 댓글 생성 모듈 — Claude Haiku로 게시물 본문을 읽고 맞춤 댓글 생성
 
+원칙:
+  - 내용을 바탕으로 공감하되, 확실한 것만 언급
+  - 애매한 구체적 정보(특정 메뉴, 가격, 위치)는 언급하지 않음
+  - 질문 금지 (답변 유도 리스크)
+  - AI 티 안 나게 자연스럽게
+
 사용 흐름:
   1. comment_writer.py에서 게시물 본문 텍스트를 추출
-  2. generate_comment(post_text, post_title) 호출
+  2. generate_comment(post_text, post_title, recent_comments) 호출
   3. Claude가 본문 맥락에 맞는 자연스러운 댓글 반환
-  4. API 장애 시 기존 phrases.py 폴백
+  4. 중복 체크 후 유니크한 댓글 반환
+  5. API 장애 시 기존 phrases.py 폰백
 """
 import os
+import random
+from difflib import SequenceMatcher
 
 from anthropic import Anthropic
 
@@ -17,22 +26,45 @@ from src.utils.logger import logger
 _client: Anthropic | None = None
 
 # 본문이 너무 길면 앞부분만 사용 (토큰 절약)
-_MAX_BODY_CHARS = 1500
+_MAX_BODY_CHARS = 1000
 
-_SYSTEM_PROMPT = """\
-너는 네이버 블로그 댓글을 작성하는 한국인 블로거야.
-다음 규칙을 반드시 따라:
-- 해요체 사용 (~했어요, ~이에요, ~네요)
-- 1~2문장, 30~80자 이내
-- 게시물 본문의 핵심 내용을 구체적으로 언급해서 진짜 읽은 것처럼
-- 호의적이고 따뜻한 톤
-- 이모티콘은 최대 1개만 (😊 🤗 ☺️ 👍 중 택1, 안 써도 됨)
-- "좋은 글 감사합니다" 같은 뻔한 표현 금지
-- 첫 방문인지 재방문인지 언급 금지 (알 수 없으므로)
-- 날씨/시간대 언급 금지
-- 질문형으로 끝내도 좋음 (재방문 유도)
-- 광고성 느낌 절대 금지
-댓글 텍스트만 출력해. 따옴표, 설명, 부가 텍스트 없이 댓글 내용만."""
+# 비정상 응답 패턴 (AI가 본문을 이해 못 했다는 식의 응답)
+_INVALID_RESPONSE_PATTERNS = [
+    "죄송",
+    "블로그 본문",
+    "로드되지 않",
+    "댓글을 작성할 수 없",
+    "AI 어시스턴트",
+    "assistant",
+    "invalid",
+    "unable to",
+    "cannot",
+]  
+
+# 게시물 작성 스타일과 통일된 규칙
+_BASE_RULES = """\
+말투와 스타일 (게시물과 동일한 결이):
+- 친근한 해요체 (~했어요, ~이에요, ~예요, ~네요)
+- 가볍고 일상적인 톤, 지나치게 격식체 금지
+- 뻔한 인사("안녕하세요")나 광고성 표현 금지
+
+내용:
+- 확실하게 아는 것만 언급 (본문/사진에서 명확히 보이는 것)
+- 모륨면 언급하지 말 것 (추측, 추론 금지)
+
+형식: 1문장, 짧게 (20~45자)
+출력: 댓글 텍스트만"""
+
+# 게시물 작성 스타일과 통일된 톤
+_SYSTEM_TONE = (
+    "너는 네이버 블로그를 자주 보는 30대 직장인이야. "
+    "친근하고 가벼운 톤으로 글과 사진을 보고 느낀 점을 자연스럽게 남겨."
+)
+
+
+def _build_system_prompt() -> str:
+    """시스템 프롬프트 조합 (일관된 톤)."""
+    return f"{_SYSTEM_TONE}\n{_BASE_RULES}"
 
 
 def _get_client() -> Anthropic | None:
@@ -43,61 +75,112 @@ def _get_client() -> Anthropic | None:
 
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
-        logger.warning("ANTHROPIC_API_KEY 미설정 — AI 댓글 비활성, phrases 폴백 사용")
+        logger.warning("ANTHROPIC_API_KEY 미설정 — AI 댓글 비활성, phrases 폰백 사용")
         return None
 
     _client = Anthropic(api_key=api_key)
     return _client
 
 
-def generate_comment(post_text: str, post_title: str) -> str:
+def _is_similar(text1: str, text2: str, threshold: float = 0.7) -> bool:
+    """두 텍스트의 유사도가 threshold 이상이면 True"""
+    if not text1 or not text2:
+        return False
+    return SequenceMatcher(None, text1, text2).ratio() >= threshold
+
+
+def _is_valid_comment(comment: str) -> bool:
+    """AI 응답이 정상적인 댓글인지 검사"""
+    if not comment or len(comment) < 5:
+        return False
+    
+    comment_lower = comment.lower()
+    for pattern in _INVALID_RESPONSE_PATTERNS:
+        if pattern.lower() in comment_lower:
+            logger.warning(f"비정상 AI 응답 감지 ('{pattern}' 포함): {comment[:50]}...")
+            return False
+    
+    return True
+
+
+def generate_comment(
+    post_text: str,
+    post_title: str,
+    recent_comments: list[str] | None = None,
+) -> str:
     """
     게시물 본문+제목을 바탕으로 AI 댓글 생성.
+    중복 방지를 위해 최근 댓글 목록을 받아 유사도 체크 수행.
 
     Args:
         post_text: 게시물 본문 텍스트 (빈 문자열 가능)
         post_title: 게시물 제목
+        recent_comments: 최근 해당 블로거에게 단 댓글 목록 (중복 체크용)
 
     Returns:
-        생성된 댓글 문자열. API 실패 시 phrases 폴백.
+        생성된 댓글 문자열. API 실패 시 phrases 폰백.
     """
     client = _get_client()
     if client is None:
         return pick_phrase(post_title)
 
-    # 본문이 비거나 너무 짧으면 폴백
+    # 본문이 비거나 너무 짧으면 폰백
     body = post_text.strip()
     if len(body) < 20:
-        logger.debug("본문 너무 짧음 — phrases 폴백")
+        logger.debug("본문 너무 짧음 — phrases 폰백")
         return pick_phrase(post_title)
 
     # 본문 길이 제한 (토큰 절약)
     if len(body) > _MAX_BODY_CHARS:
         body = body[:_MAX_BODY_CHARS] + "…"
 
-    user_message = f"[제목] {post_title}\n\n[본문]\n{body}"
+    recent_comments = recent_comments or []
 
-    try:
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=150,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_message}],
-        )
-        comment = response.content[0].text.strip()
+    # 최대 3번 시도 (중복 시 재생성)
+    for attempt in range(3):
+        try:
+            system_prompt = _build_system_prompt()
+            user_message = f"[제목] {post_title}\n\n[본문]\n{body}"
 
-        # 빈 응답이거나 너무 짧은 경우 폴백
-        if len(comment) < 5:
-            logger.warning("AI 응답 너무 짧음 — phrases 폴백")
-            return pick_phrase(post_title)
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=100,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_message}],
+            )
+            comment = response.content[0].text.strip()
 
-        # 따옴표 래핑 제거 (모델이 가끔 감쌈)
-        if comment.startswith('"') and comment.endswith('"'):
-            comment = comment[1:-1]
+            # 빈 응답이거나 너무 짧은 경우
+            if len(comment) < 5:
+                logger.warning(f"AI 응답 너무 짧음 (시도 {attempt + 1}/3)")
+                continue
 
-        logger.info(f"AI 댓글 생성 완료 ({len(comment)}자): {comment[:50]}...")
-        return comment
+            # 따옴표 래핑 제거
+            if comment.startswith('"') and comment.endswith('"'):
+                comment = comment[1:-1]
 
-    except Exception as e:
-        logger.warning(f"AI 댓글 생성 실패 — phrases 폴백: {e}")
-        return pick_phrase(post_title)
+            # 최대 길이 제한
+            if len(comment) > 50:
+                comment = comment[:47] + "..."
+
+            # 비정상 응답 체크
+            if not _is_valid_comment(comment):
+                logger.warning(f"비정상 응답, 재시도 (시도 {attempt + 1}/3)")
+                continue
+            
+            # 중복 체크
+            is_duplicate = any(_is_similar(comment, rc) for rc in recent_comments)
+            if is_duplicate:
+                logger.debug(f"중복 댓글 감지, 재생성 (시도 {attempt + 1}/3)")
+                continue
+
+            logger.info(f"AI 댓글 생성 완료 ({len(comment)}자): {comment[:40]}...")
+            return comment
+
+        except Exception as e:
+            logger.warning(f"AI 댓글 생성 오류 (시도 {attempt + 1}/3): {e}")
+            continue
+
+    # 3번 모두 실패하면 phrases 폰백
+    logger.warning("AI 댓글 3회 실패 — phrases 폰백")
+    return pick_phrase(post_title)

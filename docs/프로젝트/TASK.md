@@ -1,57 +1,197 @@
 # TASK — 작업 현황
 
 > 실시간 갱신. 작업 착수/완료/발견 시 즉시 반영.
+> 상세 작업 문서: `docs/프로젝트/tasks/` 디렉토리
+
+---
+
+## 프로젝트 방향 전환 (2026-03-06)
+
+**기존**: 로컬 Python 스크립트 + 텔레그램 봇 (개인 도구)
+**새 방향**: **웹 플랫폼(홈페이지)** — AI 블로그 글쓰기 파트너
+
+- 인성이 전용 MVP → 사용자 확장
+- 자동 발행 ❌ → AI와 함께 글쓰기 ✅ (사용자가 직접 게시)
+- 댓글 봇은 별도 로컬 운영 유지
+
+### 아키텍처
+
+```
+웹 플랫폼 (Next.js 14 + Vercel)
+├── 프론트: 로그인, 대시보드, AI 글쓰기 에디터, 댓글 봇 관리(/bot)
+├── 백엔드: Next.js API Routes (Claude API + Bot 제어)
+├── DB/Auth/Storage: Supabase
+└── AI: Anthropic TS SDK (Vision + Sonnet + Haiku)
+
+Supabase (공유 제어 평면)
+├── pending_comments  ← 웹·텔레그램 양쪽에서 승인/거부
+├── bot_settings      ← 봇 설정 (시간대, 한도, 모드)
+└── bot_run_log       ← 실행 이력 (상태 대시보드)
+
+로컬 (봇 운영)
+├── 댓글 봇 (Python + Cron) → Supabase 제어 평면 읽기/쓰기
+├── SQLite (운영 데이터: comment_history, visit_log, behavior)
+└── 텔레그램 봇 → Supabase 제어 평면 읽기/쓰기
+```
 
 ---
 
 ## 현재 진행 중
 
-| # | 작업 | 중요도 | 상태 | 비고 |
+| # | 작업 | 중요도 | 상태 | 문서 |
 |---|------|--------|------|------|
-| P3-5 | 워크플로 Active 전환 + 통합 테스트 | P1 | 진행 | FastAPI 서버 실행 → 텔레그램 /status 테스트 |
+| W6 | 댓글 봇 웹 통합 — 텔레그램+웹 이중 제어 (Supabase 제어 평면 이관) | P1 | ✅ 완료 | `tasks/W6-댓글봇-웹통합.md` |
+| W5 | 페르소나 학습 파이프라인 — 전체 완료 (01~07) | P1 | ✅ 완료 | `tasks/W5-페르소나.md` |
+| W4-05 | 3티어 사용량 제한 시스템 (무료 10/월, 베이직 50/월, 프로 200/월) | P1 | ✅ 완료 | — |
+| W4-03 | 인성이 실사용 테스트 + 버그 수정 (코드리뷰 7건 수정 완료) | P2 | ✅ 완료 | — |
 
 ---
 
-## 작업 현황
+## 웹 플랫폼 로드맵
 
-| # | 작업 | 중요도 | 상태 | 비고 |
-|---|------|--------|------|------|
-| P2-1 | debug_publisher.py로 에디터 셀렉터 확인 | P1 | 예정 | Phase 2 첫 테스트 |
-| P2-2 | content_generator 단독 테스트 (API 키 필요) | P1 | 예정 | API 키 등록 완료, 테스트 미실시 |
-| P2-3 | publisher dry-run 전체 파이프라인 | P1 | 예정 | P2-1, P2-2 완료 후 |
-| P2-4 | 실제 발행 테스트 → 게시물 URL 확인 | P2 | 예정 | P2-3 완료 후 |
+### W1: 인프라 세팅 — ✅ 완료
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| W1-01 | Supabase 프로젝트 생성 + .env.local 설정 | ✅ 완료 | 03-06 |
+| W1-02 | DB 마이그레이션 실행 (users, credentials, queue) | ✅ 완료 | SQL Editor 수동 실행 |
+| W1-03 | Supabase Storage 버킷 생성 (photos) | ✅ 완료 | REST API 생성 + RLS/정책 SQL 실행 완료 |
+| W1-04 | lib/supabase.ts 클라이언트 설정 | ✅ 완료 | browser + server + admin + types |
+| W1-05 | 레이아웃 + 메타데이터 한국어화 | ✅ 완료 | lang="ko" |
+
+### W2: 인증 + 대시보드
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| W2-01 | Supabase Auth 로그인/회원가입 페이지 | ✅ 완료 | 로그인+회원가입 토글, 에러 표시 |
+| W2-02 | 미들웨어 — 비로그인 시 리다이렉트 | ✅ 완료 | /dashboard, /write 보호 |
+| W2-03 | 대시보드 레이아웃 (헤더/내비) + UI 셸 | ✅ 완료 | 로그아웃 실제 동작 연결 |
+| W2-04 | 내 글 목록 페이지 (generation_queue 조회) | ✅ 완료 | mock → Supabase 전환 완료 (03-06) |
+| W2-05 | Role 기반 접근제어 유틸리티 | ✅ 완료 | useUser 훅 + isAdmin (03-06) |
+
+### W3: AI 글쓰기 (핵심)
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| W3-01 | 사진 업로드 UI + Supabase Storage 연동 | ✅ 완료 | write/page.tsx (03-06) |
+| W3-02 | 메모 입력 + 카테고리 선택 UI | ✅ 완료 | write/page.tsx (03-06) |
+| W3-03 | AI 초안 생성 API Route (/api/generate) | ✅ 완료 | content_generator.py TS 포팅 (03-06) |
+| W3-04 | 초안 렌더링 + 편집기 UI | ✅ 완료 | [PHOTO_N] 플레이스홀더 → 이미지 미리보기 (03-06) |
+| W3-05 | 저장 + 복사하기 기능 | ✅ 완료 | generation_queue INSERT + clipboard (03-06) |
+| W3-06 | 텔레그램→Supabase 통합 | ✅ 완료 | source 컬럼 + supabase_client.py + telegram_bot.py 연동 (03-06) |
+
+### W4: 마무리 + 보안 강화 — ✅ 핵심 완료
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| W4-01 | 재생성 기능 (피드백 → 수정된 초안) | ✅ 완료 | `regeneratePost()` + `/api/regenerate` + UI 연동 (03-06) |
+| W4-02 | 코드 리뷰 + 보안 수정 (7건) | ✅ 완료 | Open redirect 수정, getSession→getUser, 타입 안전성 (03-06) |
+| W4-03 | 인성이 실사용 테스트 + 버그 수정 | ✅ 완료 | 코드리뷰 7건 수정 + reserve_generation RPC 추가 (03-08) |
+| W4-04 | 사용자 확장 준비 (회원가입 오픈 + OAuth) | 대기 | OAuth는 나중에 (provider 콘솔 필요) |
+| W4-05 | 3티어 사용량 제한 시스템 | ✅ 완료 | `lib/tier.ts` + generate/regenerate 적용 + UI 사용량 표시 (03-07) |
+
+#### W4-02 보안 수정 상세 (03-06)
+
+| 심각도 | 이슈 | 수정 |
+|--------|------|------|
+| CRITICAL | Open redirect — login redirect 파라미터 검증 없음 | `startsWith("/") && !startsWith("//")` 검증 추가 |
+| HIGH | `getSession()` → `getUser()` | generate, regenerate API Route에서 서버사이드 JWT 검증으로 전환 |
+| MEDIUM | database.types.ts Insert 타입 제한적 | 모든 status 값 + generated_* 필드 허용 |
+| MEDIUM | 불필요한 타입 캐스트 (dashboard) | 직접 `post.source` 접근으로 변경 |
+| LOW | 변수 쉐도잉 (write/page.tsx) | `uploadedPaths` → `paths` 로컬 변수명 변경 |
+| LOW | 복사 피드백 없음 | `copyLabel` state로 "복사됨!" 2초 표시 |
+
+### W5: 페르소나 학습 파이프라인 — ✅ 완료
+
+> 블로그 URL → 크롤링(HTML 메타데이터 포함) → AI 분석 → DB 페르소나 → HTML 렌더러 → 피드백 루프
+> 상세 설계: `docs/프로젝트/tasks/W5-페르소나.md`
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| W5-01 | DB 마이그레이션 (user_personas, persona_items, persona_feedback) | ✅ 완료 | 03-07 SQL Editor 실행 완료 |
+| W5-02 | 크롤링 API Route (`/api/persona/crawl`) | ✅ 완료 | `lib/crawl/naver-blog.ts` + `api/persona/crawl/route.ts` (03-07) |
+| W5-03 | AI 분석 (`lib/ai/analyze-persona.ts`) — 2-pass | ✅ 완료 | `analyze-persona.ts` + `api/persona/analyze/route.ts` (03-07) |
+| W5-04 | 페르소나 관리 UI (`/persona`) | ✅ 완료 | 아코디언 7카테고리, 토글/삭제/직접추가, 크롤링+분석 트리거 (03-07) |
+| W5-05A | generate-post.ts DB 연동 | ✅ 완료 | `loadUserPersona()` + `renderPersonaToPrompt()` + API Route userId 전달 (03-07) |
+| W5-05B | **HTML 렌더러** (`lib/render/naver-html.ts`) | ✅ 완료 | 인라인 CSS HTML, **볼드 마커, 빈 줄 간격, 폰트 매핑 (03-07) |
+| W5-05C | UI "HTML 복사" 버튼 | ✅ 완료 | `ClipboardItem` + formatting 항목 로드 + `renderPostHtml()` (03-07) |
+| W5-06 | 피드백→DB 저장 + 패턴 분석 + 승인 UI | ✅ 완료 | `analyze-feedback.ts` + regenerate 연동 + feedback API + persona UI 피드백 섹션 (03-08) |
+| W5-07 | 문서화 | ✅ 완료 | CODE_MAP.md 반영 (03-08) |
+
+#### 설계 결정 사항 (03-06 논의 + 03-07 확정)
+
+- **크롤링 방식**: 모바일 URL(`m.blog.naver.com`) + cheerio (서버리스 호환)
+- **페르소나 관계**: 1 user : 1 persona (UNIQUE 제약)
+- **항목 카테고리 7개**: voice, emoji, structure, ending, forbidden, custom, **formatting**
+- **항목 출처 추적**: ai (크롤링), user (직접 추가), feedback (피드백 도출)
+- **피드백 규칙 적용**: 자동 아닌 사용자 승인 후 적용
+- **AI 분석 모델**: Sonnet (1회성 분석, 정확도 우선)
+- **HTML 렌더러**: formatting 항목 기반 SmartEditor HTML 생성 → 유사도 80~90% 목표
+- **구현 순서**: W5-01 → 02 → 03 → 05B → 05A → 04 → 05C → 06 → 07
 
 ---
 
-## 완료
+## 제거/보류 항목
 
-| # | 작업 | 완료일 | 비고 |
-|---|------|--------|------|
-| Phase1 | 댓글 봇 기본 기능 (수집/작성/DB/스케줄) | 2026-03-01 | main.py + orchestrator |
-| Phase1 | AI 댓글 생성 (Haiku + phrases 폴백) | 2026-03-01 | ai_comment.py |
-| Phase1 | API 키 발급 + .env 등록 | 2026-03-02 | ANTHROPIC_API_KEY 연결 성공 |
-| Phase1 | settings.py 시간대 20~24시 + 스케줄 20:30 | 2026-03-02 | |
-| Phase1 | comment_writer.py AI 통합 + 본문 추출 | 2026-03-02 | pick_phrase → generate_comment |
-| Phase2 | 게시물 발행 시스템 코드 구현 | 2026-03-02 | content_generator + blog_publisher + DB 확장 |
-| Phase3 | api_server.py FastAPI 웹훅 서버 | 2026-03-02 | 6개 엔드포인트 |
-| Phase3 | 텔레그램 봇 생성 + .env 등록 | 2026-03-02 | @HIH_Blog_bot, Chat ID 8338946226 |
-| Phase3 | n8n 설치 (v2.9.4) + 실행 | 2026-03-02 | localhost:5678 |
-| Phase3 | n8n 워크플로 import + credential 설정 | 2026-03-02 | blog_post_flow + comment_bot_flow |
-| Phase4 | skill_manager.py 피드백 루프 | 2026-03-02 | /feedback 엔드포인트 포함 |
-| Infra | CLAUDE.md + TASK.md + coding-rules.md | 2026-03-02 | 코드 관리 체계 구축 |
-| Infra | workflow-rules.md + REVIEW_LOG + CODE_MAP | 2026-03-02 | 코드리뷰 + 코드 지도 |
-| INF-1 | Phase 3/4 코드리뷰 | 2026-03-02 | Major 4건 수정 (브라우저 중복, 미사용 import, 에러 노출, 하드코딩 필터) |
-| INF-2 | CODE_MAP 갱신 (Phase 3/4 반영) | 2026-03-02 | api_server, skill_manager, n8n/ 추가 |
+| 기존 작업 | 판단 | 사유 |
+|----------|------|------|
+| Phase 2 스마트에디터 셀렉터 | 🗑️ 제거 | 자동 발행 안 함 |
+| publisher_main.py | 🗑️ 제거 | 위와 동일 |
+| validate_selectors.py | 🗑️ 제거 | 위와 동일 |
+| QUALITY-REPORT | 📦 보류 | 댓글 봇 P3, 웹 플랫폼 완성 후 |
+| HTML-LAYOUT | 📦 보류 | 웹 에디터로 대체 |
+| AUTO-REPLY-COLLECT | 📦 보류 | 댓글 봇 P3 |
 
 ---
 
-## TODO (향후 검토)
+## 댓글 봇 (로컬 운영 + 웹 통합 예정)
 
-- [ ] 네이버 2FA/캡차 대응 전략
-- [ ] 이미지 리사이즈/최적화 (업로드 전)
-- [ ] 게시물 카테고리 자동 선택
-- [ ] 발행 후 댓글 봇과 연동 (자기 글에 온 댓글 답변)
-- [ ] Phase 5: 협찬/광고 관리 시스템
-- [ ] Phase 5: 블로그 성과 분석 (조회수, 유입 키워드)
-- [ ] Phase 5: 다계정 운영 지원
-- [ ] Phase 5: 콘텐츠 캘린더 (주제 추천 + 발행 스케줄)
+> W6에서 제어 평면을 Supabase로 이관 → 웹+텔레그램 이중 제어 가능하게 전환.
+
+| 서비스 | 상태 | 비고 |
+|--------|------|------|
+| 댓글 봇 (Cron) | ✅ 등록됨 | 평일 20:30, 주말 13:30 |
+| 텔레그램 봇 | ⛔ 재시작 필요 | W6-04에서 Supabase 전환 후 재시작 |
+| API 서버 | ⛔ 재시작 필요 | 포트 8001 |
+| 웹 대시보드 (/bot) | 🔵 W6-06 | 상태·승인·설정 통합 UI |
+
+### W6: 댓글 봇 웹 통합 — 🟡 구현 중
+
+> 제어 평면(승인, 설정, 상태)을 Supabase로 이관 → 텔레그램+웹 이중 제어
+> 상세 설계: `docs/프로젝트/tasks/W6-댓글봇-웹통합.md`
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| W6-01 | DB 마이그레이션 (pending_comments, bot_settings, bot_run_log) | ✅ 완료 | SQL Editor 실행 완료 (03-07) |
+| W6-02 | supabase_client.py 확장 (제어 함수 추가) | ✅ 완료 | 9개 함수 추가 (03-07) |
+| W6-03 | orchestrator.py Supabase 연동 | ✅ 완료 | 설정 로드 + 이중 기록 (03-07) |
+| W6-04 | 텔레그램 봇 Supabase 전환 | ✅ 완료 | telegram_bot.py + _simple.py 전환 (03-07) |
+| W6-05 | 웹 API Routes (/api/bot/*) | ✅ 완료 | pending·status·settings 3개 Route (03-07) |
+| W6-06 | 웹 UI — `/bot` 페이지 | ✅ 완료 | 상태 카드 + 승인 대기 + 설정 + 이력 (03-07) |
+| W6-07 | SQLite pending/settings 제거 + 정리 | ✅ 완료 | database.py, time_guard.py, api_server.py 전환 (03-08) |
+
+---
+
+## ✅ 완료 작업 아카이브
+
+<details>
+<summary>2026-03-05 이전 완료 (클릭해서 펼치기)</summary>
+
+| 작업 | 내용 | 날짜 |
+|------|------|------|
+| TG-EXEC | 승인 댓글 일괄 실행 | 03-05 |
+| TG-BUTTON | Inline Keyboard 콜백 수정 | 03-05 |
+| LOGIN-KEEP | 로그인 세션 유지 | 03-05 |
+| REJECTED-FIX | 거부 댓글 처리 수정 | 03-05 |
+| CRON-SET | Cron 스케줄 설정 | 03-05 |
+| RETRY-QUEUE | 재시도 큐 처리 | 03-05 |
+| PROMPT-V2 | 댓글 AI 프롬프트 v2 | 03-05 |
+| HTML-AUTO | HTML 초안 자동 전송 | 03-05 |
+| AUTO-BLOGGER | 오토 블로거 추적 기능 | 03-05 |
+| LOGIN-RETRY | 로그인 자동 복구 | 03-05 |
+
+</details>
+
+---
+
+*마지막 업데이트: 2026-03-08 (W4-03 실사용 테스트 7건 수정 완료, reserve_generation RPC 추가)*

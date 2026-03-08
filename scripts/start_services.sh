@@ -1,0 +1,25 @@
+#!/bin/bash
+# 블로그 자동화 서비스 시작 (tmux 백그라운드)
+# 사용법: bash scripts/start_services.sh
+
+SESSION="blog"
+
+# 이미 실행 중이면 알림
+if tmux has-session -t $SESSION 2>/dev/null; then
+    echo "이미 실행 중: tmux attach -t $SESSION 으로 확인"
+    exit 0
+fi
+
+PROJECT_DIR="/home/gint_pcd/projects/인성이프로젝트"
+
+# 세션 생성 + api_server (창 0)
+tmux new-session -d -s $SESSION -n "api" -c "$PROJECT_DIR"
+tmux send-keys -t $SESSION:api "source .venv/bin/activate && uvicorn api_server:app --port 8001" Enter
+
+# n8n (창 1)
+tmux new-window -t $SESSION -n "n8n"
+tmux send-keys -t $SESSION:n8n "n8n start" Enter
+
+echo "서비스 시작 완료!"
+echo "  확인: tmux attach -t $SESSION"
+echo "  종료: tmux kill-session -t $SESSION"

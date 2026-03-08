@@ -29,13 +29,17 @@ async def main():
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(
             headless=False,   # 브라우저 창 표시
-            args=["--no-sandbox", "--disable-dev-shm-usage"],
+            args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-blink-features=AutomationControlled",
+            ],
         )
         context = await browser.new_context(
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
+                "Chrome/133.0.0.0 Safari/537.36"
             ),
             viewport={"width": 1280, "height": 800},
             locale="ko-KR",
@@ -58,7 +62,7 @@ async def main():
             current_url = page.url
             cookies = await context.cookies()
             naver_auth = [c for c in cookies if c.get("name") == "NID_AUT"]
-            if naver_auth or "www.naver.com" in current_url:
+            if naver_auth or current_url.startswith("https://www.naver.com"):
                 logged_in = True
                 break
             # 진행상황 표시 (10초마다)

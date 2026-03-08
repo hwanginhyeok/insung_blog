@@ -136,7 +136,7 @@ async def _save_html_dump(page: Page) -> str:
     return path
 
 
-async def run_debug(screenshot_only: bool = False) -> None:
+async def run_debug(screenshot_only: bool = False, no_wait: bool = False) -> None:
     """글쓰기 페이지를 열고 DOM 구조를 분석"""
     naver_id = os.getenv("NAVER_ID", "")
     naver_pw = os.getenv("NAVER_PW", "")
@@ -198,10 +198,13 @@ async def run_debug(screenshot_only: bool = False) -> None:
         print(f"\n스크린샷: {screenshot_path}")
         print(f"HTML 덤프: {html_path}")
 
-        # 브라우저 열린 상태로 유지 (수동 확인용)
-        print("\n브라우저를 닫으려면 Enter를 누르세요...")
-        await asyncio.get_event_loop().run_in_executor(None, input)
-        await browser.close()
+        if no_wait:
+            await browser.close()
+        else:
+            # 브라우저 열린 상태로 유지 (수동 확인용)
+            print("\n브라우저를 닫으려면 Enter를 누르세요...")
+            await asyncio.get_event_loop().run_in_executor(None, input)
+            await browser.close()
 
 
 def main() -> None:
@@ -210,9 +213,10 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="스마트에디터 DOM 구조 분석")
     parser.add_argument("--screenshot", action="store_true", help="스크린샷만 저장")
+    parser.add_argument("--no-wait", action="store_true", help="분석 후 자동 종료 (Enter 대기 없음)")
     args = parser.parse_args()
 
-    asyncio.run(run_debug(screenshot_only=args.screenshot))
+    asyncio.run(run_debug(screenshot_only=args.screenshot, no_wait=args.no_wait))
 
 
 if __name__ == "__main__":

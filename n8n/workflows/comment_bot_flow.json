@@ -75,6 +75,15 @@
       "parameters": {
         "method": "POST",
         "url": "http://localhost:8001/comment/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.API_SECRET_TOKEN }}"
+            }
+          ]
+        },
         "options": {
           "timeout": 300000
         }
@@ -89,6 +98,15 @@
       "parameters": {
         "method": "GET",
         "url": "http://localhost:8001/status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.API_SECRET_TOKEN }}"
+            }
+          ]
+        },
         "options": {}
       },
       "id": "node-get-status",

@@ -38,7 +38,7 @@
     },
     {
       "parameters": {
-        "url": "https://api.telegram.org/bot{{ $credentials.telegramApi.accessToken }}/getFile",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/getFile",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -58,7 +58,7 @@
     },
     {
       "parameters": {
-        "url": "https://api.telegram.org/file/bot{{ $credentials.telegramApi.accessToken }}/{{ $json.result.file_path }}",
+        "url": "=https://api.telegram.org/file/bot{{ $env.TELEGRAM_BOT_TOKEN }}/{{ $json.result.file_path }}",
         "options": {
           "response": {
             "response": {
@@ -89,6 +89,15 @@
       "parameters": {
         "method": "POST",
         "url": "http://localhost:8001/generate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.API_SECRET_TOKEN }}"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={ \"image_paths\": [\"{{ $json.fileName }}\"], \"memo\": \"{{ $('텔레그램 메시지 수신').item.json.message.caption || '' }}\" }",
@@ -157,6 +166,15 @@
       "parameters": {
         "method": "POST",
         "url": "http://localhost:8001/publish",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.API_SECRET_TOKEN }}"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={ \"title\": \"{{ $('AI 초안 생성').item.json.title }}\", \"body\": \"{{ $('AI 초안 생성').item.json.body }}\", \"hashtags\": {{ JSON.stringify($('AI 초안 생성').item.json.hashtags) }}, \"image_paths\": {{ JSON.stringify($('AI 초안 생성').first().json.image_paths || []) }}, \"dry_run\": false }",

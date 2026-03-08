@@ -8,16 +8,20 @@ Playwright 브라우저 공통 설정 — 봇 감지 회피용 user-agent, viewp
 from playwright.async_api import Browser, BrowserContext, Page, Playwright
 
 
-# 봇 감지 회피용 User-Agent (Windows Chrome 최신)
+# 봇 감지 회피용 User-Agent (2026년 기준 Chrome 최신)
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/120.0.0.0 Safari/537.36"
+    "Chrome/133.0.0.0 Safari/537.36"
 )
 
 _VIEWPORT = {"width": 1280, "height": 800}
 
-_BROWSER_ARGS = ["--no-sandbox", "--disable-dev-shm-usage"]
+_BROWSER_ARGS = [
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-blink-features=AutomationControlled",
+]
 
 
 async def create_browser(

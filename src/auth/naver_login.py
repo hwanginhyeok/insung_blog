@@ -2,9 +2,16 @@
 네이버 로그인 모듈
 1. 쿠키 파일 존재 → 쿠키 복원 → 로그인 상태 검증
 2. 쿠키 없거나 만료 → ID/PW 직접 로그인 → 쿠키 저장
+
+네이버 로그인 페이지 구조 (2026년 기준):
+  - 기본 탭이 QR코드 → "ID/전화번호" 탭(a.menu_id) 클릭 필요
+  - ID 입력: input#id, PW 입력: input#pw
+  - 로그인 버튼: button#log.login (텍스트: "다음")
 """
+import asyncio
 import json
-import time
+import os
+import random
 
 from playwright.async_api import BrowserContext, Page, async_playwright
 
@@ -16,6 +23,51 @@ from config.settings import (
     PAGE_LOAD_TIMEOUT,
 )
 from src.utils.logger import logger
+
+
+class _LoginBlockedError(Exception):
+    """2FA/캡차/디바이스 인증 등으로 자동 로그인 불가 시 발생"""
+
+
+async def _detect_login_block(page: Page, current_url: str) -> str | None:
+    """로그인 후 페이지가 2FA/캡차/디바이스 인증인지 감지. 감지 시 사유 문자열 반환."""
+    url_lower = current_url.lower()
+
+    # URL 패턴으로 감지
+    url_keywords = {
+        "2fa": "2단계 인증",
+        "two_step": "2단계 인증",
+        "otp": "OTP 인증",
+        "captcha": "캡차",
+        "recaptcha": "캡차",
+        "device": "기기 인증",
+        "protect": "보호 조치",
+        "security": "보안 확인",
+        "new_device": "새 기기 인증",
+    }
+    for keyword, reason in url_keywords.items():
+        if keyword in url_lower:
+            return reason
+
+    # 페이지 내용으로 감지
+    try:
+        content = await page.content()
+        content_keywords = [
+            ("인증번호", "인증번호 입력 요구"),
+            ("본인확인", "본인확인 요구"),
+            ("새로운 환경", "새 환경 로그인 차단"),
+            ("보호조치", "계정 보호조치"),
+            ("캡차", "캡차"),
+            ("자동입력 방지", "캡차"),
+            ("기기 등록", "기기 등록 요구"),
+        ]
+        for keyword, reason in content_keywords:
+            if keyword in content:
+                return reason
+    except Exception:
+        pass
+
+    return None
 
 
 async def _is_logged_in(page: Page) -> bool:
@@ -40,11 +92,12 @@ async def _is_logged_in(page: Page) -> bool:
 
 
 async def _save_cookies(context: BrowserContext) -> None:
-    """현재 세션 쿠키를 파일로 저장"""
+    """현재 세션 쿠키를 파일로 저장 (소유자만 읽기/쓰기)"""
     COOKIES_PATH.parent.mkdir(parents=True, exist_ok=True)
     cookies = await context.cookies()
     with open(COOKIES_PATH, "w", encoding="utf-8") as f:
         json.dump(cookies, f, ensure_ascii=False, indent=2)
+    os.chmod(COOKIES_PATH, 0o600)
     logger.info(f"쿠키 저장 완료: {COOKIES_PATH}")
 
 
@@ -61,37 +114,52 @@ async def _load_cookies(context: BrowserContext) -> bool:
 
 async def _do_login(page: Page, naver_id: str, naver_pw: str) -> bool:
     """ID/PW로 직접 로그인 시도. 성공 여부 반환"""
-    import asyncio
     await page.goto(NAVER_LOGIN_URL, timeout=PAGE_LOAD_TIMEOUT)
+    await asyncio.sleep(random.uniform(1.0, 2.0))
+
+    # 2026년 기준: 기본 탭이 QR코드 → ID/PW 탭으로 전환
+    try:
+        id_tab = page.locator("a.menu_id")
+        if await id_tab.count() > 0:
+            await id_tab.click()
+            await asyncio.sleep(random.uniform(0.8, 1.5))
+            logger.info("ID/PW 탭으로 전환 완료")
+    except Exception:
+        logger.debug("ID/PW 탭 전환 스킵 (이미 ID 탭이거나 구조 변경)")
+
     await page.wait_for_selector("#id", timeout=ELEMENT_TIMEOUT)
-    await asyncio.sleep(1)
 
     # fill() 대신 press_sequentially()로 실제 키 이벤트 발생
     id_field = page.locator("#id")
     await id_field.click()
-    await asyncio.sleep(0.3)
-    await id_field.press_sequentially(naver_id, delay=80)
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(random.uniform(0.2, 0.5))
+    await id_field.press_sequentially(naver_id, delay=random.randint(60, 120))
+    await asyncio.sleep(random.uniform(0.3, 0.8))
 
     pw_field = page.locator("#pw")
     await pw_field.click()
-    await asyncio.sleep(0.3)
-    await pw_field.press_sequentially(naver_pw, delay=80)
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(random.uniform(0.2, 0.5))
+    await pw_field.press_sequentially(naver_pw, delay=random.randint(60, 120))
+    await asyncio.sleep(random.uniform(0.3, 0.8))
 
-    await page.click(".btn_login")
+    await page.click("#log\\.login")
 
-    # 로그인 결과 대기 (성공 or 에러 메시지)
+    # 로그인 결과 대기 (성공 or 에러 메시지 or 2FA/캡차)
     try:
-        await page.wait_for_url("https://www.naver.com/**", timeout=12_000)
+        await page.wait_for_url("https://www.naver.com/**", timeout=15_000)
         logger.info("로그인 성공")
         return True
     except Exception:
-        # 현재 URL + 에러 메시지 기록
         current_url = page.url
+        # 2FA / 캡차 / 디바이스 인증 감지
+        block_reason = await _detect_login_block(page, current_url)
+        if block_reason:
+            logger.error(f"로그인 차단 감지: {block_reason} (url={current_url})")
+            # 2FA/캡차는 재시도해도 동일하므로 즉시 중단 신호
+            raise _LoginBlockedError(block_reason)
+
         error_text = ""
         try:
-            # 실제 로그인 오류 셀렉터 (Caps Lock 경고 제외)
             error_el = await page.query_selector(
                 "#err_common:not(.capslock_wrap), .error_message"
             )
@@ -126,12 +194,16 @@ async def ensure_login(
     # 2. ID/PW 로그인 재시도
     for attempt in range(1, MAX_LOGIN_RETRIES + 1):
         logger.info(f"로그인 시도 {attempt}/{MAX_LOGIN_RETRIES}")
-        success = await _do_login(page, naver_id, naver_pw)
+        try:
+            success = await _do_login(page, naver_id, naver_pw)
+        except _LoginBlockedError as e:
+            logger.error(f"자동 로그인 불가 — {e}. 수동 로그인 필요 (python save_cookies.py)")
+            return False
         if success:
             await _save_cookies(context)
             return True
         if attempt < MAX_LOGIN_RETRIES:
-            time.sleep(3)
+            await asyncio.sleep(3)
 
     logger.error("로그인 최대 재시도 횟수 초과")
     return False

@@ -122,3 +122,51 @@ REVIEW_LOG.md 기록
 □ CODE_MAP.md 갱신 (파일 변경 시)
 □ Conventional Commit 메시지 형식
 ```
+
+---
+
+## 승인 워크플로우 개발 규칙 (2026-03-04 추가)
+
+> 텔레그램 봇 댓글 승인/실행 기능 개발 시 준수 사항
+
+### 데이터 흐름
+
+```
+[수집/AI 생성] → DB(pending) → 텔레그램(/pending) → 사용자 승인 → DB(queued) → /execute → 실제 실행 → DB(posted)
+```
+
+### 구현 체크리스트
+
+| 단계 | 체크 항목 | 파일 |
+|------|----------|------|
+| **저장** | `pending_comments` 테이블에 status='pending' 저장 | `database.py` |
+| **조회** | `/pending` 명령어로 pending 상태 조회 | `telegram_bot_simple.py` |
+| **승인** | status='approved' 또는 별도 실행 큐에 추가 | `telegram_bot_simple.py` |
+| **거부** | status='rejected' 변경 + 사용자 알림 | `telegram_bot_simple.py` |
+| **실행** | `/execute`로 승인된 댓글 일괄 처리 | `telegram_bot_simple.py` |
+| **결과** | 실행 결과 텔레그램 통보 + DB 업데이트 | `telegram_bot_simple.py` |
+
+### UI/UX 규칙
+
+1. **즉각적인 피드백**: 버튼 클릭 시 즉시 "승인됨" / "거부됨" 메시지
+2. **배치 처리**: 승인은 즉시, 실제 실행은 `/execute`로 일괄
+3. **상태 표시**: 현재 승인 개수 / 전체 개수 표시 (예: "3개 승인됨 / 5개 대기")
+4. **오류 처리**: 실행 실패 시 재시도 큐에 자동 추가
+
+### 데이터베이스 상태 흐름
+
+```
+pending → approved → posted (성공)
+   ↓         ↓
+rejected   retry_queue (실패 시)
+```
+
+### 테스트 시퀀스
+
+1. 테스트 데이터 생성: `scripts/add_test_comments.py`
+2. `/pending` 조회 → 3개 표시 확인
+3. `✅ 승인` 클릭 → "승인됨" 메시지 + 카운트 증가
+4. `❌ 거부` 클릭 → "거부됨" 메시지
+5. `/execute` → 일괄 실행 (dry-run 모드로 테스트)
+6. 결과 통보 메시지 확인
+
