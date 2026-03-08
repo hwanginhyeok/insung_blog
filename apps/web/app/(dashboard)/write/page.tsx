@@ -139,12 +139,21 @@ function WritePageContent() {
         .single();
       if (!data) return;
 
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
       const paths = (data.input_photos as string[]) || [];
+
+      // private 버킷이므로 signed URL로 미리보기 생성
+      let previewUrls: string[] = [];
+      if (paths.length > 0) {
+        const { data: signed } = await supabase.storage
+          .from("photos")
+          .createSignedUrls(paths, 3600);
+        previewUrls = (signed || []).map((s) => s.signedUrl);
+      }
+
       setPhotos(
-        paths.map((p) => ({
+        paths.map((p, i) => ({
           file: null,
-          preview: `${supabaseUrl}/storage/v1/object/public/photos/${p}`,
+          preview: previewUrls[i] || "",
           storagePath: p,
         }))
       );
