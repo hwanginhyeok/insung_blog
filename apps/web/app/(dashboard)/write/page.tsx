@@ -312,11 +312,14 @@ function WritePageContent() {
         }
       }
 
-      // 사진 public URL 생성
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-      const photoUrls = uploadedPaths.map(
-        (p) => `${supabaseUrl}/storage/v1/object/public/photos/${p}`
-      );
+      // 사진 signed URL 생성 (private 버킷이므로 public URL 사용 불가)
+      let photoUrls: string[] = [];
+      if (uploadedPaths.length > 0) {
+        const { data: signed } = await supabase.storage
+          .from("photos")
+          .createSignedUrls(uploadedPaths, 3600);
+        photoUrls = (signed || []).map((s) => s.signedUrl);
+      }
 
       // HTML 렌더링
       const html = renderPostHtml(
