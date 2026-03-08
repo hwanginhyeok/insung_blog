@@ -1,7 +1,7 @@
 # CODE_MAP — 코드베이스 지도
 
 > 파일 추가/삭제/이동/역할 변경 시 반드시 갱신.
-> 최종 갱신: 2026-03-08 (이탈 경고 + 저장된 글 불러오기)
+> 최종 갱신: 2026-03-08 (쿠키 업로드 기능 + bot_cookies 테이블)
 
 ---
 
@@ -37,6 +37,7 @@
 | `app/api/persona/crawl/route.ts` | 블로그 크롤링 API Route (POST, blogUrl → crawl → HTML 메타데이터 반환) | ✅ **신규** |
 | `app/api/persona/analyze/route.ts` | AI 페르소나 분석 API Route (POST, 2-pass Sonnet → persona_items INSERT) | ✅ **신규** |
 | `app/api/persona/feedback/route.ts` | 피드백 규칙 API Route — GET: 대기 규칙 + 히스토리 조회, POST: 규칙 승인/거절 | ✅ **신규** |
+| `app/api/bot/cookies/route.ts` | 쿠키 업로드 API Route — GET: 상태, POST: 업로드(upsert), DELETE: 삭제 | ✅ **신규** |
 | `lib/ai/analyze-persona.ts` | 페르소나 AI 분석 — 2-pass (콘텐츠 6카테고리 + 포맷팅), `analyzePersona()` | ✅ **신규** |
 | `lib/ai/analyze-feedback.ts` | 피드백 패턴 분석 — Haiku 모델, 5건 배치 → 최대 3개 규칙 도출, `analyzeFeedbackPatterns()` | ✅ **신규** |
 | `lib/render/naver-html.ts` | SmartEditor 호환 HTML 렌더러 — 인라인 CSS, 폰트 매핑, 볼드 마커, `renderToNaverHtml()` | ✅ **신규** |
@@ -50,6 +51,8 @@
 | `supabase/migrations/00006_create_persona_tables.sql` | 페르소나 3개 테이블 (user_personas, persona_items, persona_feedback) + RLS | ✅ 실행됨 |
 | `supabase/migrations/00007_add_user_tiers.sql` | users 테이블에 tier + monthly_gen_count + gen_count_reset_month 컬럼 추가 | ✅ 실행됨 |
 | `supabase/migrations/00008_reserve_generation_rpc.sql` | 원자적 사용량 체크+증분 RPC (`reserve_generation`, `rollback_generation`) | ✅ 실행됨 |
+| `supabase/migrations/00009_drop_user_credentials.sql` | user_credentials 테이블 삭제 (보안 — ID/PW 저장 제거) | ✅ 실행됨 |
+| `supabase/migrations/00010_bot_cookies.sql` | 쿠키 업로드 테이블 (bot_cookies) — 웹에서 업로드, 봇이 읽어 사용 | 미실행 |
 | `package.json` | 의존성 (Next 14, Supabase, shadcn/ui, react-hook-form, zod) | ✅ |
 
 ### 작업 문서
@@ -155,6 +158,7 @@
 | `pending_comments` | 승인 대기 댓글 큐 (웹·텔레그램 양쪽 제어) | ✅ W6 이관 |
 | `bot_settings` | 봇 설정 (모드, 시간대, 한도) | ✅ W6 이관 |
 | `bot_run_log` | 실행 이력 요약 (웹 대시보드용) | ✅ W6 이관 |
+| `bot_cookies` | 네이버 세션 쿠키 (웹 업로드 → 봇 읽기) | ✅ 신규 |
 
 ---
 

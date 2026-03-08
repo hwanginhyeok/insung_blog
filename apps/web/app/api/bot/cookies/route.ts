@@ -1,0 +1,129 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/auth-helpers-nextjs";
+import { cookies } from "next/headers";
+
+function getSupabase() {
+  const cookieStore = cookies();
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { getAll: () => cookieStore.getAll() } }
+  );
+}
+
+/**
+ * GET /api/bot/cookies
+ * 쿠키 업로드 상태 조회
+ */
+export async function GET() {
+  const supabase = getSupabase();
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 });
+  }
+
+  const { data } = await supabase
+    .from("bot_cookies")
+    .select("uploaded_at, cookie_data")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!data) {
+    return NextResponse.json({ hasCookies: false });
+  }
+
+  const cookieCount = Array.isArray(data.cookie_data)
+    ? data.cookie_data.length
+    : 0;
+
+  return NextResponse.json({
+    hasCookies: true,
+    uploadedAt: data.uploaded_at,
+    cookieCount,
+  });
+}
+
+/**
+ * POST /api/bot/cookies
+ * 쿠키 업로드 (upsert — 기존 있으면 덮어쓰기)
+ */
+export async function POST(req: NextRequest) {
+  const supabase = getSupabase();
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 });
+  }
+
+  const body = await req.json();
+  const { cookieData } = body;
+
+  if (!Array.isArray(cookieData) || cookieData.length === 0) {
+    return NextResponse.json(
+      { error: "유효한 쿠키 데이터가 없습니다" },
+      { status: 400 }
+    );
+  }
+
+  // 네이버 도메인 쿠키만 필터링
+  const naverCookies = cookieData.filter((c: Record<string, unknown>) => {
+    const domain = String(c.domain || "");
+    return domain.includes("naver.com");
+  });
+
+  if (naverCookies.length === 0) {
+    return NextResponse.json(
+      { error: "네이버 쿠키가 포함되어 있지 않습니다" },
+      { status: 400 }
+    );
+  }
+
+  const { error } = await supabase.from("bot_cookies").upsert(
+    {
+      user_id: user.id,
+      cookie_data: naverCookies,
+      uploaded_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id" }
+  );
+
+  if (error) {
+    console.error("쿠키 저장 실패:", error);
+    return NextResponse.json({ error: "쿠키 저장 실패" }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    success: true,
+    cookieCount: naverCookies.length,
+  });
+}
+
+/**
+ * DELETE /api/bot/cookies
+ * 쿠키 삭제
+ */
+export async function DELETE() {
+  const supabase = getSupabase();
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 });
+  }
+
+  await supabase.from("bot_cookies").delete().eq("user_id", user.id);
+
+  return NextResponse.json({ success: true });
+}

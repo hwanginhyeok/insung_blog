@@ -3,7 +3,7 @@
 .env.production
 data/
 logs/
-cookies/
+/cookies/
 __pycache__/
 *.pyc
 .venv/

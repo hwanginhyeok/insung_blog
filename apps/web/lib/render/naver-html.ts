@@ -22,16 +22,16 @@ export interface FormattingItem {
 
 // ── SmartEditor 폰트 매핑 ──
 
-/** se-ff-{key} → CSS font-family */
+/** se-ff-{key} → CSS font-family (따옴표 없이 — SmartEditor paste 호환) */
 const FONT_MAP: Record<string, string> = {
-  nanumbareunhipi: "'NanumBarunhipi', '나눔바른히피', sans-serif",
-  nanumgothic: "'NanumGothic', '나눔고딕', sans-serif",
-  nanummyeongjo: "'NanumMyeongjo', '나눔명조', serif",
-  nanumbarunpenscript: "'NanumBarunpenScript', '나눔바른펜', cursive",
-  nanumpenscript: "'NanumPenScript', '나눔손글씨 펜', cursive",
-  maruburig: "'MaruBuri', '마루 부리', serif",
-  ridibatang: "'RIDIBatang', '리디바탕', serif",
-  "noto-sans": "'Noto Sans KR', 'Noto Sans', sans-serif",
+  nanumbareunhipi: "NanumBarunhipi, 나눔바른히피, sans-serif",
+  nanumgothic: "NanumGothic, 나눔고딕, sans-serif",
+  nanummyeongjo: "NanumMyeongjo, 나눔명조, serif",
+  nanumbarunpenscript: "NanumBarunpenScript, 나눔바른펜, cursive",
+  nanumpenscript: "NanumPenScript, 나눔손글씨 펜, cursive",
+  maruburig: "MaruBuri, 마루 부리, serif",
+  ridibatang: "RIDIBatang, 리디바탕, serif",
+  "noto-sans": "Noto Sans KR, Noto Sans, sans-serif",
 };
 
 /** se-fs-{key} → CSS font-size (px) */
@@ -73,7 +73,7 @@ export interface RenderConfig {
 // ── 기본값 ──
 
 const DEFAULT_CONFIG: RenderConfig = {
-  fontFamily: "'NanumBarunhipi', '나눔바른히피', sans-serif",
+  fontFamily: "NanumBarunhipi, 나눔바른히피, sans-serif",
   fontSize: "16px",
   titleSize: "24px",
   fontClass: "se-ff-nanumbareunhipi",
@@ -100,7 +100,7 @@ export function buildRenderConfig(
     switch (item.key) {
       case "primary_font":
         config.fontFamily =
-          FONT_MAP[item.value] || `'${item.value}', sans-serif`;
+          FONT_MAP[item.value] || `${item.value}, sans-serif`;
         config.fontClass = `se-ff-${item.value}`;
         break;
       case "primary_size":
@@ -161,7 +161,24 @@ function processText(text: string): string {
   return escaped;
 }
 
-/** 텍스트 블록 (1 paragraph) — span에 se-* 클래스 + 인라인 CSS 병행 */
+/**
+ * SmartEditor ONE 내부 텍스트 컴포넌트 구조를 복제한 텍스트 블록.
+ *
+ * SmartEditor 에디터 영역의 실제 DOM:
+ *   <div class="se-component se-text …">
+ *     <div class="se-component-content">
+ *       <div class="se-section se-section-text">
+ *         <div class="se-module se-module-text">
+ *           <p class="se-text-paragraph se-text-paragraph-align-left">
+ *             <span class="se-ff-* se-fs-*">텍스트</span>
+ *           </p>
+ *         </div>
+ *       </div>
+ *     </div>
+ *   </div>
+ *
+ * paste handler가 이 구조를 "자기 것"으로 인식하여 스타일을 보존한다.
+ */
 function makeTextBlock(
   text: string,
   config: RenderConfig,
@@ -170,26 +187,52 @@ function makeTextBlock(
   const align = opts?.align || "left";
   const size = opts?.size || config.fontSize;
   const sizeClass = opts?.sizeClass || config.sizeClass;
-
   const spanClass = `${config.fontClass} ${sizeClass}`;
   const spanStyle = `font-family: ${config.fontFamily}; font-size: ${size};`;
 
   let content = processText(text);
   if (opts?.bold) content = `<b>${content}</b>`;
 
-  return `<p style="line-height: 1.8; text-align: ${align};"><span class="${spanClass}" style="${spanStyle}">${content}</span></p>`;
+  return [
+    `<div class="se-component se-text">`,
+    `<div class="se-component-content">`,
+    `<div class="se-section se-section-text">`,
+    `<div class="se-module se-module-text">`,
+    `<p class="se-text-paragraph se-text-paragraph-align-${align}" style="line-height: 1.8;">`,
+    `<span class="${spanClass}" style="${spanStyle}">${content}</span>`,
+    `</p>`,
+    `</div></div></div></div>`,
+  ].join("");
 }
 
-/** 빈 줄 (줄 간격 역할) — 제로폭스페이스 사용 */
+/** 빈 줄 (줄 간격 역할) — SmartEditor 내부 구조 + 제로폭스페이스 */
 function makeEmptyBlock(config: RenderConfig): string {
   const spanClass = `${config.fontClass} ${config.sizeClass}`;
   const spanStyle = `font-family: ${config.fontFamily}; font-size: ${config.fontSize};`;
-  return `<p style="line-height: 1.8;"><span class="${spanClass}" style="${spanStyle}">&#8203;</span></p>`;
+  return [
+    `<div class="se-component se-text">`,
+    `<div class="se-component-content">`,
+    `<div class="se-section se-section-text">`,
+    `<div class="se-module se-module-text">`,
+    `<p class="se-text-paragraph se-text-paragraph-align-left" style="line-height: 1.8;">`,
+    `<span class="${spanClass}" style="${spanStyle}">&#8203;</span>`,
+    `</p>`,
+    `</div></div></div></div>`,
+  ].join("");
 }
 
-/** 이미지 블록 */
+/** 이미지 블록 — SmartEditor 이미지 컴포넌트 구조 */
 function makeImageBlock(url: string): string {
-  return `<img src="${url}" style="max-width: 100%; display: block; margin: 0 auto;">`;
+  return [
+    `<div class="se-component se-image">`,
+    `<div class="se-component-content">`,
+    `<div class="se-section se-section-image">`,
+    `<div class="se-module se-module-image">`,
+    `<a class="se-module-image-link">`,
+    `<img src="${url}" class="se-image-resource" style="max-width: 100%;">`,
+    `</a>`,
+    `</div></div></div></div>`,
+  ].join("");
 }
 
 // ── 메인 렌더러 ──

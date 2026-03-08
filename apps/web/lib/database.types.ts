@@ -160,6 +160,24 @@ export interface Database {
           rule_status?: "pending" | "approved" | "rejected";
         };
       };
+      bot_cookies: {
+        Row: {
+          id: string;
+          user_id: string;
+          cookie_data: Json;
+          uploaded_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          cookie_data: Json;
+          uploaded_at?: string;
+        };
+        Update: {
+          cookie_data?: Json;
+          uploaded_at?: string;
+        };
+      };
       generation_queue: {
         Row: {
           id: string;

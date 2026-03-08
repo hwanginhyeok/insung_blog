@@ -45,6 +45,8 @@ function WritePageContent() {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [copyLabel, setCopyLabel] = useState("복사하기");
   const [htmlCopyLabel, setHtmlCopyLabel] = useState("HTML 복사");
+  const [cachedFormatting, setCachedFormatting] = useState<FormattingItem[]>([]);
+  const [cachedPhotoUrls, setCachedPhotoUrls] = useState<string[]>([]);
   const [quota, setQuota] = useState<{
     used: number;
     limit: number;
@@ -95,35 +97,51 @@ function WritePageContent() {
     };
   }, [isDirty]);
 
-  // 사용량 로드
+  // 사용량 + 페르소나 formatting 항목 로드 (캐싱)
   useEffect(() => {
-    async function loadQuota() {
+    async function loadInitialData() {
       const supabase = createClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
 
+      // 사용량
       const { data } = await supabase
         .from("users")
         .select("tier, monthly_gen_count, gen_count_reset_month")
         .eq("id", user.id)
         .single();
 
-      if (!data) return;
+      if (data) {
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        const used =
+          data.gen_count_reset_month === currentMonth
+            ? data.monthly_gen_count || 0
+            : 0;
+        const tier = (data.tier || "free") as string;
+        const limits: Record<string, number> = { free: 10, basic: 50, pro: 200 };
+        setQuota({ used, limit: limits[tier] || 10, tier });
+      }
 
-      const currentMonth = new Date().toISOString().slice(0, 7);
-      const used =
-        data.gen_count_reset_month === currentMonth
-          ? data.monthly_gen_count || 0
-          : 0;
+      // 페르소나 formatting 항목 캐싱 (HTML 복사 시 네트워크 호출 방지)
+      const { data: persona } = await supabase
+        .from("user_personas")
+        .select("id")
+        .eq("user_id", user.id)
+        .single();
 
-      const tier = (data.tier || "free") as string;
-      const limits: Record<string, number> = { free: 10, basic: 50, pro: 200 };
-
-      setQuota({ used, limit: limits[tier] || 10, tier });
+      if (persona) {
+        const { data: items } = await supabase
+          .from("persona_items")
+          .select("category, key, value, priority, is_active")
+          .eq("persona_id", persona.id)
+          .eq("category", "formatting")
+          .eq("is_active", true);
+        if (items) setCachedFormatting(items as FormattingItem[]);
+      }
     }
-    loadQuota();
+    loadInitialData();
   }, []);
 
   // 저장된 글 불러오기 (?id=xxx)
@@ -171,6 +189,22 @@ function WritePageContent() {
     }
     loadPost();
   }, [editId]);
+
+  // 사진 signed URL 캐싱 (uploadedPaths 변경 시)
+  useEffect(() => {
+    if (uploadedPaths.length === 0) {
+      setCachedPhotoUrls([]);
+      return;
+    }
+    async function cacheSignedUrls() {
+      const supabase = createClient();
+      const { data: signed } = await supabase.storage
+        .from("photos")
+        .createSignedUrls(uploadedPaths, 3600);
+      setCachedPhotoUrls((signed || []).map((s) => s.signedUrl));
+    }
+    cacheSignedUrls();
+  }, [uploadedPaths]);
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
@@ -287,58 +321,29 @@ function WritePageContent() {
     if (!draft) return;
 
     try {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      // 페르소나 formatting 항목 로드 (없으면 기본값으로 렌더링)
-      let formattingItems: FormattingItem[] = [];
-      if (user) {
-        const { data: persona } = await supabase
-          .from("user_personas")
-          .select("id")
-          .eq("user_id", user.id)
-          .single();
-
-        if (persona) {
-          const { data: items } = await supabase
-            .from("persona_items")
-            .select("category, key, value, priority, is_active")
-            .eq("persona_id", persona.id)
-            .eq("category", "formatting")
-            .eq("is_active", true);
-          if (items) formattingItems = items as FormattingItem[];
-        }
-      }
-
-      // 사진 signed URL 생성 (private 버킷이므로 public URL 사용 불가)
-      let photoUrls: string[] = [];
-      if (uploadedPaths.length > 0) {
-        const { data: signed } = await supabase.storage
-          .from("photos")
-          .createSignedUrls(uploadedPaths, 3600);
-        photoUrls = (signed || []).map((s) => s.signedUrl);
-      }
-
-      // HTML 렌더링
+      // 캐싱된 데이터로 즉시 HTML 생성 (네트워크 호출 없음 → user gesture 유지)
       const html = renderPostHtml(
         draft.title,
         draft.body,
-        photoUrls,
-        formattingItems
+        cachedPhotoUrls,
+        cachedFormatting
       );
 
-      // ClipboardItem으로 리치텍스트 복사
-      const blob = new Blob([html], { type: "text/html" });
+      const htmlBlob = new Blob([html], { type: "text/html" });
+      const textBlob = new Blob(
+        [draft.title + "\n\n" + draft.body.replace(/\[PHOTO_\d+\]/g, "").trim()],
+        { type: "text/plain" }
+      );
       await navigator.clipboard.write([
-        new ClipboardItem({ "text/html": blob }),
+        new ClipboardItem({
+          "text/html": htmlBlob,
+          "text/plain": textBlob,
+        }),
       ]);
 
       setHtmlCopyLabel("복사됨!");
       setTimeout(() => setHtmlCopyLabel("HTML 복사"), 2000);
     } catch {
-      // ClipboardItem 미지원 브라우저 폴백
       handleCopy();
     }
   }

@@ -194,4 +194,22 @@ Supabase (공유 제어 평면)
 
 ---
 
-*마지막 업데이트: 2026-03-08 (봇 서비스 재시작 — API서버+텔레그램 tmux 기동, execute 시뮬레이션→실제 API 연동)*
+### 보안 개선 (2026-03-08)
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| SEC-01 | `user_credentials` 테이블 삭제 (ID/PW 저장 제거) | ✅ 완료 | migration 00009 |
+| SEC-02 | 쿠키 업로드 기능 (웹 → Supabase → 봇) | ✅ 완료 | migration 00010 + API + UI + Python 연동 |
+| SEC-03 | 배치 댓글 생성 (3개 묶어서 API 1회) | ✅ 완료 | `generate_comments_batch()` + orchestrator 3단계 |
+
+### UX 개선 (2026-03-08)
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| UX-01 | 글쓰기 이탈 경고 — 작성 중 페이지 이동 시 확인 대화상자 | ✅ 완료 | beforeunload + pushState 패치 + popstate 3종 |
+| UX-02 | 저장된 글 불러오기 — 대시보드에서 완료 글 클릭 → `/write?id=xxx` 복원 | ✅ 완료 | useSearchParams + Suspense + signed URLs |
+| UX-03 | HTML 복사 signed URL 적용 — private 버킷 사진 403 수정 | ✅ 완료 | createSignedUrls 캐싱 (user gesture 유지) |
+| UX-04 | HTML 렌더러 SmartEditor 내부 구조 복제 | ✅ 완료 | se-component/se-text-paragraph 래퍼 + inline CSS 병행 |
+| UX-05 | formatting 항목 DB 누락 수정 — 크롤링 데이터 기반 수동 INSERT | ✅ 완료 | nanumbareunhipi + fs16 (블로그 실제 스타일 반영) |
+
+*마지막 업데이트: 2026-03-08 (글쓰기 UX 개선 — 이탈 경고, 저장글 복원, HTML 복사 수정)*

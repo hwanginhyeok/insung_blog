@@ -232,6 +232,37 @@ def get_pending_count_sb() -> int:
         return 0
 
 
+# ── bot_cookies (쿠키 업로드) ─────────────────────────────────────────────
+
+
+def get_bot_cookies_sb() -> list[dict] | None:
+    """
+    Supabase에서 업로드된 네이버 쿠키 조회.
+    반환: 쿠키 딕셔너리 리스트 (없으면 None).
+    """
+    try:
+        sb = get_supabase()
+        user_id = get_admin_user_id()
+
+        result = (
+            sb.table("bot_cookies")
+            .select("cookie_data")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+
+        if result.data and result.data[0].get("cookie_data"):
+            cookies = result.data[0]["cookie_data"]
+            logger.info(f"Supabase 쿠키 로드: {len(cookies)}개")
+            return cookies
+
+    except Exception as e:
+        logger.error(f"Supabase 쿠키 조회 실패: {e}")
+
+    return None
+
+
 # ── bot_settings (봇 설정) ────────────────────────────────────────────────
 
 

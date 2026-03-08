@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 // ── 타입 ──────────────────────────────────────────────────────
 
@@ -48,6 +49,12 @@ interface TodayStats {
   bloggers: number;
   comments: number;
   failed: number;
+}
+
+interface CookieStatus {
+  hasCookies: boolean;
+  uploadedAt?: string;
+  cookieCount?: number;
 }
 
 const defaultSettings: BotSettings = {
@@ -98,13 +105,18 @@ export default function BotPage() {
   const [bulkApproving, setBulkApproving] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<BotSettings>(defaultSettings);
+  const [cookieStatus, setCookieStatus] = useState<CookieStatus | null>(null);
+  const [cookieJson, setCookieJson] = useState("");
+  const [cookieUploading, setCookieUploading] = useState(false);
+  const [cookieMsg, setCookieMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   // 데이터 로드
   const fetchData = useCallback(async () => {
     try {
-      const [statusRes, pendingRes] = await Promise.all([
+      const [statusRes, pendingRes, cookieRes] = await Promise.all([
         fetch("/api/bot/status"),
         fetch("/api/bot/pending"),
+        fetch("/api/bot/cookies"),
       ]);
 
       if (statusRes.ok) {
@@ -121,6 +133,10 @@ export default function BotPage() {
       if (pendingRes.ok) {
         const data = await pendingRes.json();
         setPending(data.comments || []);
+      }
+
+      if (cookieRes.ok) {
+        setCookieStatus(await cookieRes.json());
       }
     } catch (e) {
       console.error("데이터 로드 실패:", e);
@@ -182,6 +198,49 @@ export default function BotPage() {
       }
     } finally {
       setSettingsSaving(false);
+    }
+  }
+
+  // 쿠키 업로드
+  async function handleCookieUpload() {
+    setCookieUploading(true);
+    setCookieMsg(null);
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(cookieJson);
+    } catch {
+      setCookieMsg({ type: "err", text: "JSON 형식이 올바르지 않습니다" });
+      setCookieUploading(false);
+      return;
+    }
+
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      setCookieMsg({ type: "err", text: "쿠키 배열이 비어있습니다" });
+      setCookieUploading(false);
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/bot/cookies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cookieData: parsed }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setCookieMsg({ type: "ok", text: `${data.cookieCount}개 쿠키 업로드 완료` });
+        setCookieJson("");
+        // 상태 새로고침
+        const refreshRes = await fetch("/api/bot/cookies");
+        if (refreshRes.ok) setCookieStatus(await refreshRes.json());
+      } else {
+        setCookieMsg({ type: "err", text: data.error || "업로드 실패" });
+      }
+    } catch {
+      setCookieMsg({ type: "err", text: "네트워크 오류" });
+    } finally {
+      setCookieUploading(false);
     }
   }
 
@@ -249,6 +308,52 @@ export default function BotPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── 네이버 쿠키 ────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>네이버 로그인 쿠키</CardTitle>
+          <CardDescription>
+            브라우저에서 네이버 로그인 후 쿠키를 내보내 업로드하세요
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {cookieStatus?.hasCookies && cookieStatus.uploadedAt && (
+            <div className="rounded border bg-muted/50 px-3 py-2 text-sm">
+              마지막 업로드: {timeAgo(cookieStatus.uploadedAt)}{" "}
+              ({cookieStatus.cookieCount}개 쿠키)
+            </div>
+          )}
+          <Textarea
+            placeholder='EditThisCookie 등에서 내보낸 JSON을 여기에 붙여넣기...'
+            rows={4}
+            value={cookieJson}
+            onChange={(e) => setCookieJson(e.target.value)}
+          />
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={handleCookieUpload}
+              disabled={cookieUploading || !cookieJson.trim()}
+            >
+              {cookieUploading ? "업로드 중..." : "쿠키 업로드"}
+            </Button>
+            {cookieMsg && (
+              <span
+                className={`text-sm ${
+                  cookieMsg.type === "ok" ? "text-green-600" : "text-red-500"
+                }`}
+              >
+                {cookieMsg.text}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Chrome &quot;EditThisCookie&quot; 확장 설치 &rarr; naver.com 로그인 &rarr;
+            확장 아이콘 클릭 &rarr; Export &rarr; 여기에 붙여넣기
+          </p>
+        </CardContent>
+      </Card>
 
       {/* ── 승인 대기 ─────────────────────────────── */}
       <Card>

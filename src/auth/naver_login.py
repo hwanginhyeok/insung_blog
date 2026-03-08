@@ -101,14 +101,72 @@ async def _save_cookies(context: BrowserContext) -> None:
     logger.info(f"쿠키 저장 완료: {COOKIES_PATH}")
 
 
+def _normalize_cookies(cookies: list[dict]) -> list[dict]:
+    """
+    EditThisCookie/Chrome 쿠키를 Playwright 형식으로 변환.
+    Chrome: expirationDate, sameSite="no_restriction"
+    Playwright: expires, sameSite="None"
+    """
+    _same_site_map = {
+        "no_restriction": "None",
+        "unspecified": "Lax",
+        "lax": "Lax",
+        "strict": "Strict",
+        "none": "None",
+        "None": "None",
+        "Lax": "Lax",
+        "Strict": "Strict",
+    }
+
+    result: list[dict] = []
+    for c in cookies:
+        normalized: dict = {
+            "name": c["name"],
+            "value": c["value"],
+            "domain": c.get("domain", ""),
+            "path": c.get("path", "/"),
+        }
+        if "expires" in c:
+            normalized["expires"] = c["expires"]
+        elif "expirationDate" in c:
+            normalized["expires"] = int(c["expirationDate"])
+        if "httpOnly" in c:
+            normalized["httpOnly"] = c["httpOnly"]
+        if "secure" in c:
+            normalized["secure"] = c["secure"]
+
+        same_site = c.get("sameSite", "")
+        if same_site:
+            normalized["sameSite"] = _same_site_map.get(str(same_site), "Lax")
+
+        result.append(normalized)
+    return result
+
+
 async def _load_cookies(context: BrowserContext) -> bool:
-    """저장된 쿠키 파일을 컨텍스트에 적용. 파일 없으면 False 반환"""
+    """
+    쿠키 복원. Supabase 우선 → 로컬 파일 폴백.
+    EditThisCookie(Chrome 확장) 형식도 자동 변환.
+    """
+    # 1. Supabase에서 업로드된 쿠키 시도
+    try:
+        from src.storage.supabase_client import get_bot_cookies_sb
+        sb_cookies = get_bot_cookies_sb()
+        if sb_cookies:
+            normalized = _normalize_cookies(sb_cookies)
+            await context.add_cookies(normalized)
+            logger.info(f"쿠키 복원 완료 (Supabase, {len(normalized)}개)")
+            return True
+    except Exception as e:
+        logger.debug(f"Supabase 쿠키 로드 실패 (로컬 폴백): {e}")
+
+    # 2. 로컬 파일 폴백
     if not COOKIES_PATH.exists():
         return False
     with open(COOKIES_PATH, encoding="utf-8") as f:
         cookies = json.load(f)
     await context.add_cookies(cookies)
-    logger.info("쿠키 복원 완료")
+    logger.info("쿠키 복원 완료 (로컬 파일)")
     return True
 
 
