@@ -1,10 +1,10 @@
 /**
  * 네이버 SmartEditor 호환 HTML 렌더러
  *
- * 역할: AI 텍스트 출력 → 인라인 스타일 HTML → ClipboardItem 복사 → SmartEditor 붙여넣기
+ * 역할: AI 텍스트 출력 → HTML → ClipboardItem 복사 → SmartEditor 붙여넣기
  *
  * 핵심 전략:
- *  - se-* 클래스 대신 **인라인 CSS** 사용 (복붙 호환성 우선)
+ *  - <span class="se-ff-* se-fs-*"> 클래스 + 인라인 CSS 병행 (SmartEditor 인식률 극대화)
  *  - SmartEditor가 인식하는 font-family/size 매핑
  *  - 빈 <p> 로 줄 간격 구현 (SmartEditor의 빈 텍스트 블록과 동일)
  *  - **text** 마크다운 → <b> 태그
@@ -56,6 +56,12 @@ export interface RenderConfig {
   fontSize: string;
   /** 제목 font-size (예: "24px") */
   titleSize: string;
+  /** SmartEditor 폰트 클래스 (예: "se-ff-nanumbareunhipi") */
+  fontClass: string;
+  /** SmartEditor 본문 크기 클래스 (예: "se-fs-fs16") */
+  sizeClass: string;
+  /** SmartEditor 제목 크기 클래스 (예: "se-fs-fs24") */
+  titleSizeClass: string;
   /** 문단 간 빈 줄 수 (기본 1) */
   lineSpacing: number;
   /** 볼드 관련 AI 설명 (참고용, 렌더러는 **마크다운** 기반 처리) */
@@ -70,6 +76,9 @@ const DEFAULT_CONFIG: RenderConfig = {
   fontFamily: "'NanumBarunhipi', '나눔바른히피', sans-serif",
   fontSize: "16px",
   titleSize: "24px",
+  fontClass: "se-ff-nanumbareunhipi",
+  sizeClass: "se-fs-fs16",
+  titleSizeClass: "se-fs-fs24",
   lineSpacing: 1,
   boldUsage: "",
   alignmentUsage: "",
@@ -92,12 +101,15 @@ export function buildRenderConfig(
       case "primary_font":
         config.fontFamily =
           FONT_MAP[item.value] || `'${item.value}', sans-serif`;
+        config.fontClass = `se-ff-${item.value}`;
         break;
       case "primary_size":
         config.fontSize = SIZE_MAP[item.value] || "16px";
+        config.sizeClass = `se-fs-${item.value}`;
         break;
       case "title_size":
         config.titleSize = SIZE_MAP[item.value] || "24px";
+        config.titleSizeClass = `se-fs-${item.value}`;
         break;
       case "line_spacing": {
         const match = item.value.match(/(\d+)/);
@@ -117,11 +129,6 @@ export function buildRenderConfig(
 }
 
 // ── HTML 블록 생성 유틸 ──
-
-/** 인라인 스타일 기본 텍스트 스타일 */
-function baseStyle(config: RenderConfig): string {
-  return `font-family: ${config.fontFamily}; font-size: ${config.fontSize}; line-height: 1.8;`;
-}
 
 /** HTML 특수문자 이스케이프 (볼드 마커 제외) */
 function escapeHtml(text: string): string {
@@ -154,27 +161,30 @@ function processText(text: string): string {
   return escaped;
 }
 
-/** 텍스트 블록 (1 paragraph) */
+/** 텍스트 블록 (1 paragraph) — span에 se-* 클래스 + 인라인 CSS 병행 */
 function makeTextBlock(
   text: string,
   config: RenderConfig,
-  opts?: { align?: "center" | "left"; size?: string; bold?: boolean }
+  opts?: { align?: "center" | "left"; size?: string; sizeClass?: string; bold?: boolean }
 ): string {
   const align = opts?.align || "left";
   const size = opts?.size || config.fontSize;
-  const style =
-    `font-family: ${config.fontFamily}; font-size: ${size}; ` +
-    `line-height: 1.8; text-align: ${align};`;
+  const sizeClass = opts?.sizeClass || config.sizeClass;
+
+  const spanClass = `${config.fontClass} ${sizeClass}`;
+  const spanStyle = `font-family: ${config.fontFamily}; font-size: ${size};`;
 
   let content = processText(text);
   if (opts?.bold) content = `<b>${content}</b>`;
 
-  return `<p style="${style}">${content}</p>`;
+  return `<p style="line-height: 1.8; text-align: ${align};"><span class="${spanClass}" style="${spanStyle}">${content}</span></p>`;
 }
 
 /** 빈 줄 (줄 간격 역할) — 제로폭스페이스 사용 */
 function makeEmptyBlock(config: RenderConfig): string {
-  return `<p style="${baseStyle(config)}">&#8203;</p>`;
+  const spanClass = `${config.fontClass} ${config.sizeClass}`;
+  const spanStyle = `font-family: ${config.fontFamily}; font-size: ${config.fontSize};`;
+  return `<p style="line-height: 1.8;"><span class="${spanClass}" style="${spanStyle}">&#8203;</span></p>`;
 }
 
 /** 이미지 블록 */
@@ -195,7 +205,7 @@ function makeImageBlock(url: string): string {
  *
  * @param title 제목
  * @param body 본문 (마커 포함)
- * @param photoUrls Storage public URL 배열 (인덱스 = PHOTO_N - 1)
+ * @param photoUrls Storage URL 배열 (인덱스 = PHOTO_N - 1)
  * @param config RenderConfig (buildRenderConfig으로 생성)
  */
 export function renderToNaverHtml(
@@ -207,7 +217,11 @@ export function renderToNaverHtml(
   const blocks: string[] = [];
 
   // 제목 블록
-  blocks.push(makeTextBlock(title, config, { bold: true, size: config.titleSize }));
+  blocks.push(makeTextBlock(title, config, {
+    bold: true,
+    size: config.titleSize,
+    sizeClass: config.titleSizeClass,
+  }));
   blocks.push(makeEmptyBlock(config));
 
   // 본문 처리
