@@ -360,6 +360,7 @@ async def execute_pending_comments(
                             post_url=post_url,
                             post_title=post_title,
                             dry_run=False,
+                            comment_text=comment_text,
                         )
 
                         if success:

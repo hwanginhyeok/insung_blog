@@ -16,9 +16,9 @@ from functools import lru_cache
 
 from supabase import create_client, Client
 
-from src.utils.logger import get_logger
+from src.utils.logger import setup_logger
 
-logger = get_logger("supabase_client")
+logger = setup_logger("supabase_client")
 
 _user_id_cache: str | None = None
 

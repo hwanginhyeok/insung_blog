@@ -95,9 +95,8 @@ export default function DashboardPage() {
               { year: "numeric", month: "long", day: "numeric" }
             );
 
-            return (
+            const cardElement = (
               <Card
-                key={post.id}
                 className="transition-shadow hover:shadow-md"
               >
                 <CardHeader className="pb-3">
@@ -143,6 +142,14 @@ export default function DashboardPage() {
                   </CardContent>
                 )}
               </Card>
+            );
+
+            return post.status === "completed" ? (
+              <Link key={post.id} href={`/write?id=${post.id}`}>
+                {cardElement}
+              </Link>
+            ) : (
+              <div key={post.id}>{cardElement}</div>
             );
           })}
         </div>

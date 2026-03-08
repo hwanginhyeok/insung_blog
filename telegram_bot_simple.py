@@ -138,66 +138,66 @@ def handle_approval(chat_id: int, comment_id: str, action: str, query_id: str = 
 
 
 def execute_approved(chat_id: int):
-    """승인된 댓글 일괄 실행 - Supabase에서 조회"""
-    from src.storage.supabase_client import get_pending_comments_sb, update_pending_status_sb
+    """승인된 댓글 일괄 실행 — API 서버 /comment/execute 호출"""
+    from src.storage.supabase_client import get_pending_comments_sb
 
-    # Supabase에서 approved 상태 댓글 조회
+    # 승인된 댓글 존재 확인
     approved = get_pending_comments_sb("approved")
-    
     if not approved:
         send_message(chat_id, "📭 승인된 댓글이 없습니다. 먼저 /pending 에서 승인하세요.")
         return
-    
+
     count = len(approved)
-    
-    # 실행 시작 알림
-    send_message(chat_id, f"🚀 <b>실행 시작!</b>\n\n총 {count}개의 댓글을 작성합니다...")
-    
-    # 실행 결과 추적
-    success_count = 0
-    failed_count = 0
-    results = []
-    
-    for i, comment in enumerate(approved, 1):
-        blog_id = comment['blog_id']
-        comment_text = comment['comment_text']
-        post_url = comment['post_url']
-        
-        # 실제 실행 (dry-run 모드로 테스트)
-        try:
-            # TODO: 실제 댓글 작성 로직 연동
-            # from src.commenter.comment_writer import write_comment
-            # success = write_comment(post_url, comment_text)
-            
-            # 현재는 테스트용으로 항상 성공 처리
-            import random
-            success = random.random() > 0.2  # 80% 성공률 시뮬레이션
-            
-            if success:
-                update_pending_status_sb(comment['id'], "posted", decided_by="telegram")
-                success_count += 1
-                results.append(f"✅ {blog_id}: {comment_text[:20]}...")
-            else:
-                update_pending_status_sb(comment['id'], "failed", decided_by="telegram")
-                failed_count += 1
-                results.append(f"❌ {blog_id}: 실패 (재시도 큐에 추가)")
-                
-        except Exception as e:
-            failed_count += 1
-            results.append(f"❌ {blog_id}: 오류 - {str(e)[:30]}")
-    
-    # 결과 통보
-    status_icon = "✅" if failed_count == 0 else "⚠️"
-    send_message(
-        chat_id,
-        f"{status_icon} <b>실행 완료!</b>\n\n"
-        f"📊 <b>결과:</b> 성공 {success_count}개 / 실패 {failed_count}개\n\n"
-        f"<b>상세 내역:</b>\n" +
-        "\n".join([f"{i+1}. {r}" for i, r in enumerate(results)]) +
-        f"\n\n━━━━━━━━━━━━━━━━━━━━━"
-    )
-    
-    # 메모리 큐도 초기화 (동기화)
+    send_message(chat_id, f"🚀 <b>실행 시작!</b>\n\n총 {count}개의 댓글을 API 서버로 전달합니다...")
+
+    api_token = os.environ.get("API_SECRET_TOKEN", "")
+    if not api_token:
+        send_message(chat_id, "❌ API_SECRET_TOKEN 미설정 — .env 확인 필요")
+        return
+
+    try:
+        resp = httpx.post(
+            "http://localhost:8001/comment/execute",
+            json={"chat_id": chat_id},
+            headers={"Authorization": f"Bearer {api_token}"},
+            timeout=300,  # 댓글 작성은 시간이 걸림
+        )
+
+        if resp.status_code != 200:
+            send_message(chat_id, f"❌ API 서버 오류 (HTTP {resp.status_code}): {resp.text[:200]}")
+            return
+
+        result = resp.json()
+        status_icon = "✅" if result.get("failed_count", 0) == 0 else "⚠️"
+
+        # 상세 내역
+        details_text = ""
+        for i, d in enumerate(result.get("details", [])[:10], 1):
+            icon = "✅" if d["status"] == "success" else "❌"
+            details_text += f"{i}. {icon} {d['blog_id']}: {d['message']}\n"
+
+        send_message(
+            chat_id,
+            f"{status_icon} <b>실행 완료!</b>\n\n"
+            f"📊 <b>결과:</b> 성공 {result.get('success_count', 0)}개 / "
+            f"실패 {result.get('failed_count', 0)}개\n\n"
+            f"<b>상세 내역:</b>\n{details_text}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━",
+        )
+
+    except httpx.ConnectError:
+        send_message(
+            chat_id,
+            "❌ API 서버 연결 실패\n\n"
+            "API 서버가 실행 중인지 확인하세요:\n"
+            "<code>tmux attach -t blog</code>",
+        )
+    except httpx.TimeoutException:
+        send_message(chat_id, "⏰ API 서버 응답 시간 초과 (5분). 로그를 확인하세요.")
+    except Exception as e:
+        send_message(chat_id, f"❌ 실행 오류: {str(e)[:100]}")
+
+    # 메모리 큐 초기화
     _approved_comments[chat_id] = []
 
 

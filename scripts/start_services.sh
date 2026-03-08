@@ -16,10 +16,12 @@ PROJECT_DIR="/home/gint_pcd/projects/인성이프로젝트"
 tmux new-session -d -s $SESSION -n "api" -c "$PROJECT_DIR"
 tmux send-keys -t $SESSION:api "source .venv/bin/activate && uvicorn api_server:app --port 8001" Enter
 
-# n8n (창 1)
-tmux new-window -t $SESSION -n "n8n"
-tmux send-keys -t $SESSION:n8n "n8n start" Enter
+# 텔레그램 봇 (창 1)
+tmux new-window -t $SESSION -n "telegram" -c "$PROJECT_DIR"
+tmux send-keys -t $SESSION:telegram "source .venv/bin/activate && python telegram_bot_simple.py" Enter
 
 echo "서비스 시작 완료!"
-echo "  확인: tmux attach -t $SESSION"
-echo "  종료: tmux kill-session -t $SESSION"
+echo "  API 서버:    tmux select-window -t $SESSION:api"
+echo "  텔레그램 봇: tmux select-window -t $SESSION:telegram"
+echo "  확인:        tmux attach -t $SESSION"
+echo "  종료:        tmux kill-session -t $SESSION"

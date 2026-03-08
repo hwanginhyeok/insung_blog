@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,12 +18,15 @@ import type { FormattingItem } from "@/lib/render/naver-html";
 const categories = ["맛집", "카페", "여행", "일상", "기타"];
 
 interface PhotoFile {
-  file: File;
-  preview: string;
-  storagePath?: string; // Storage 업로드 후 경로
+  file: File | null; // null = DB에서 불러온 사진
+  preview: string; // blob URL 또는 Storage public URL
+  storagePath?: string;
 }
 
-export default function WritePage() {
+function WritePageContent() {
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("id");
+
   const [photos, setPhotos] = useState<PhotoFile[]>([]);
   const [memo, setMemo] = useState("");
   const [category, setCategory] = useState<string | null>(null);
@@ -47,6 +51,49 @@ export default function WritePage() {
     tier: string;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // isDirty: 저장되지 않은 작업 내용이 있는지 판정
+  const isDirty =
+    !savedId &&
+    (photos.length > 0 || memo.trim() !== "" || draft !== null);
+
+  // 이탈 방지: beforeunload + pushState 패치 + popstate
+  useEffect(() => {
+    if (!isDirty) return;
+
+    // 1) 브라우저 닫기/새로고침
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+
+    // 2) Next.js 내부 네비게이션 (Link 클릭 → pushState)
+    const originalPushState = history.pushState.bind(history);
+    history.pushState = function (state, title, url) {
+      if (
+        window.confirm("작성 중인 내용이 사라집니다. 이동하시겠습니까?")
+      ) {
+        return originalPushState(state, title, url);
+      }
+    } as typeof history.pushState;
+
+    // 3) 브라우저 뒤로/앞으로
+    const handlePopState = () => {
+      if (
+        !window.confirm("작성 중인 내용이 사라집니다. 이동하시겠습니까?")
+      ) {
+        history.pushState(null, "", location.href);
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      history.pushState = originalPushState;
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [isDirty]);
 
   // 사용량 로드
   useEffect(() => {
@@ -79,6 +126,43 @@ export default function WritePage() {
     loadQuota();
   }, []);
 
+  // 저장된 글 불러오기 (?id=xxx)
+  useEffect(() => {
+    if (!editId) return;
+
+    async function loadPost() {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("generation_queue")
+        .select("*")
+        .eq("id", editId)
+        .single();
+      if (!data) return;
+
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+      const paths = (data.input_photos as string[]) || [];
+      setPhotos(
+        paths.map((p) => ({
+          file: null,
+          preview: `${supabaseUrl}/storage/v1/object/public/photos/${p}`,
+          storagePath: p,
+        }))
+      );
+      setUploadedPaths(paths);
+      setMemo(data.input_memo || "");
+      setCategory(data.input_category || null);
+      if (data.generated_title && data.generated_body) {
+        setDraft({
+          title: data.generated_title,
+          body: data.generated_body,
+          hashtags: (data.generated_hashtags as string[]) || [],
+        });
+      }
+      setSavedId(data.id);
+    }
+    loadPost();
+  }, [editId]);
+
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
     const newPhotos = files.slice(0, 10 - photos.length).map((file) => ({
@@ -91,7 +175,8 @@ export default function WritePage() {
 
   function removePhoto(index: number) {
     setPhotos((prev) => {
-      URL.revokeObjectURL(prev[index].preview);
+      const photo = prev[index];
+      if (photo.file) URL.revokeObjectURL(photo.preview);
       return prev.filter((_, i) => i !== index);
     });
   }
@@ -115,6 +200,8 @@ export default function WritePage() {
           paths.push(photo.storagePath);
           continue;
         }
+
+        if (!photo.file) continue;
 
         const ext = photo.file.name.split(".").pop() || "jpg";
         const storagePath = `${user.id}/${Date.now()}_${i}.${ext}`;
@@ -328,11 +415,15 @@ export default function WritePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${draft ? "pb-24" : ""}`}>
       <div>
-        <h1 className="text-2xl font-bold">새 글 쓰기</h1>
+        <h1 className="text-2xl font-bold">
+          {editId ? "저장된 글 보기" : "새 글 쓰기"}
+        </h1>
         <p className="text-sm text-muted-foreground">
-          사진과 메모를 입력하면 AI가 블로그 글을 작성해드립니다
+          {editId
+            ? "이전에 저장한 글을 확인하고 수정할 수 있습니다"
+            : "사진과 메모를 입력하면 AI가 블로그 글을 작성해드립니다"}
         </p>
       </div>
 
@@ -573,34 +664,6 @@ export default function WritePage() {
                 </CardContent>
               </Card>
 
-              {/* 재생성 */}
-              <Card>
-                <CardContent className="pt-6">
-                  <Textarea
-                    placeholder="수정 요청: 예) 두번째 문단 좀 더 자세하게, 이모지 줄여줘"
-                    rows={2}
-                    value={feedback}
-                    onChange={(e) => setFeedback(e.target.value)}
-                  />
-                  <Button
-                    variant="outline"
-                    className="mt-2 w-full"
-                    size="sm"
-                    disabled={
-                      !feedback.trim() ||
-                      isRegenerating ||
-                      (quota !== null && quota.used >= quota.limit)
-                    }
-                    onClick={handleRegenerate}
-                  >
-                    {isRegenerating
-                      ? "수정 중..."
-                      : quota !== null && quota.used >= quota.limit
-                        ? "한도 초과"
-                        : "피드백으로 재생성"}
-                  </Button>
-                </CardContent>
-              </Card>
             </>
           ) : (
             <Card className="flex min-h-[400px] items-center justify-center">
@@ -616,6 +679,57 @@ export default function WritePage() {
           )}
         </div>
       </div>
+
+      {/* 플로팅 피드백 바 */}
+      {draft && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <div className="mx-auto flex max-w-5xl items-end gap-3 px-4 py-3">
+            <Textarea
+              className="min-h-[40px] flex-1 resize-none"
+              placeholder="수정 요청: 예) 두번째 문단 더 자세하게, 이모지 줄여줘"
+              rows={1}
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              onFocus={(e) => (e.target.rows = 3)}
+              onBlur={(e) => {
+                if (!e.target.value) e.target.rows = 1;
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleRegenerate();
+                }
+              }}
+            />
+            <div className="flex flex-col items-end gap-1">
+              <Button
+                size="sm"
+                disabled={
+                  !feedback.trim() ||
+                  isRegenerating ||
+                  (quota !== null && quota.used >= quota.limit)
+                }
+                onClick={handleRegenerate}
+              >
+                {isRegenerating ? "수정 중..." : "재생성"}
+              </Button>
+              {quota && (
+                <span className="whitespace-nowrap text-xs text-muted-foreground">
+                  {quota.used}/{quota.limit}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+export default function WritePage() {
+  return (
+    <Suspense>
+      <WritePageContent />
+    </Suspense>
   );
 }

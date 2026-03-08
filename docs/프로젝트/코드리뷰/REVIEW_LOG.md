@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-03-08 — 댓글 봇 + 텔레그램 봇 재시작 (4건 수정)
+
+- **TASK**: 봇 서비스 재시작
+- **변경 파일**: telegram_bot_simple.py, src/commenter/comment_writer.py, api_server.py, scripts/start_services.sh
+- **이슈 요약**: Critical 0 / Major 0 / Minor 0
+
+### 수정 내역
+
+| # | 분류 | 이슈 | 수정 |
+|---|------|------|------|
+| 1 | 기능 | `execute_approved()` 시뮬레이션 (random.random) | API 서버 `/comment/execute` HTTP 호출로 교체 |
+| 2 | 기능 | `write_comment`에 승인된 댓글 전달 불가 | `comment_text` 선택 파라미터 추가 (하위 호환) |
+| 3 | 기능 | `/comment/execute`에서 AI 새로 생성 | 승인된 `comment_text` 전달하도록 수정 |
+| 4 | 인프라 | `start_services.sh`에 텔레그램 봇 누락 | telegram 창 추가, n8n 제거 |
+
+- **서비스 기동 확인**: API 서버(8001), 텔레그램 봇 — 정상
+- **판정**: 머지 가능
+
+---
+
 ## 2026-03-08 — W4-03 실사용 테스트 + 버그 수정 (7건)
 
 - **TASK**: W4-03

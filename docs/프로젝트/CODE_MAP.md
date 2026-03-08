@@ -1,7 +1,7 @@
 # CODE_MAP — 코드베이스 지도
 
 > 파일 추가/삭제/이동/역할 변경 시 반드시 갱신.
-> 최종 갱신: 2026-03-08 (W5-06 피드백 루프 완성, W5 전체 완료)
+> 최종 갱신: 2026-03-08 (이탈 경고 + 저장된 글 불러오기)
 
 ---
 
@@ -16,9 +16,10 @@
 | `app/page.tsx` | 랜딩 페이지 ("블로그 AI 파트너") | ✅ 스켈레톤 |
 | `app/(auth)/login/page.tsx` | 로그인/회원가입 (Supabase Auth 연동) | ✅ |
 | `app/(dashboard)/layout.tsx` | 대시보드 공유 레이아웃 (Header) | ✅ |
-| `app/(dashboard)/dashboard/page.tsx` | 내 글 목록 (Supabase 연동, TG 뱃지, 상태 표시) | ✅ |
-| `app/(dashboard)/write/page.tsx` | AI 글쓰기 에디터 (사진+메모+초안+재생성+저장+복사) | ✅ |
+| `app/(dashboard)/dashboard/page.tsx` | 내 글 목록 (Supabase 연동, TG 뱃지, 상태 표시, **완료 글 클릭→write 이동**) | ✅ |
+| `app/(dashboard)/write/page.tsx` | AI 글쓰기 에디터 (사진+메모+초안+재생성+저장+복사, **이탈 경고 3종**, **?id= 저장된 글 불러오기**) | ✅ |
 | `app/(dashboard)/persona/page.tsx` | 페르소나 관리 UI — 블로그 분석 + 7카테고리 아코디언 + 항목 토글/삭제/추가 + **피드백 규칙 승인/히스토리** | ✅ |
+| `app/(dashboard)/guide/page.tsx` | 사용법 가이드 — 3-Step 흐름 + 기능별 상세 + FAQ (서버 컴포넌트) | ✅ **신규** |
 | `app/globals.css` | 글로벌 스타일 + 테마 변수 (light/dark) | ✅ |
 | `middleware.ts` | 세션 갱신 + 보호 경로 리다이렉트 | ✅ |
 | `components/nav/header.tsx` | 대시보드 헤더 (네비+로그아웃) | ✅ |

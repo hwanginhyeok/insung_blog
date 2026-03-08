@@ -70,15 +70,17 @@ async def write_comment(
     context=None,  # 세션 갱신용
     naver_id: str | None = None,
     naver_pw: str | None = None,
+    comment_text: str | None = None,
 ) -> tuple[bool, str]:
     """
     게시물 URL에 댓글 작성.
     Returns (success, comment_text)
     dry_run=True 이면 실제 제출 없이 시뮬레이션.
+    comment_text: 미리 승인된 댓글 텍스트 (없으면 AI 생성)
     recent_comments: 최근 해당 블로거에게 단 댓글 목록 (중복 방지용)
     context/naver_id/naver_pw: 세션 만료 시 자동 갱신용 (선택)
     """
-    comment_text = ""
+    comment_text = comment_text or ""
     recent_comments = recent_comments or []
 
     for attempt in range(1, MAX_POST_RETRIES + 1):

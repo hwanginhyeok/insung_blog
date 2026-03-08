@@ -13,6 +13,7 @@ const navItems = [
   { href: "/write", label: "새 글 쓰기" },
   { href: "/persona", label: "페르소나" },
   { href: "/bot", label: "댓글 봇" },
+  { href: "/guide", label: "사용법" },
 ];
 
 export function Header() {
