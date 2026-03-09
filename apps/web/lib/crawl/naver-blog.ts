@@ -335,6 +335,82 @@ function extractHtmlMetadata(
   return meta;
 }
 
+// ── 게시물 성과 지표 추출 ──
+
+export interface PostMetrics {
+  viewCount: number;
+  commentCount: number;
+  likeCount: number;
+  title: string;
+}
+
+/**
+ * 모바일 게시물 페이지에서 조회수/댓글수/좋아요 추출
+ * 셀렉터 폴백 체인으로 네이버 DOM 변경에 대비
+ */
+export async function extractPostMetrics(
+  blogId: string,
+  logNo: string
+): Promise<PostMetrics> {
+  const url = MOBILE_POST_URL
+    .replace("{blogId}", blogId)
+    .replace("{logNo}", logNo);
+
+  const res = await fetchWithTimeout(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  const html = await res.text();
+  const $ = cheerio.load(html);
+
+  // 제목
+  const title =
+    $(".se-title-text").text().trim() ||
+    $(".post_title").text().trim() ||
+    $("h3.se_textarea").text().trim() ||
+    "";
+
+  // 조회수 (셀렉터 폴백 체인)
+  const viewText =
+    $(".se_count_num").text().trim() ||
+    $(".post_count .num").text().trim() ||
+    $(".cnt_view").text().trim() ||
+    $("[class*='view'] [class*='num']").first().text().trim() ||
+    "";
+  const viewCount = parseInt(viewText.replace(/,/g, ""), 10) || 0;
+
+  // 댓글수
+  const commentText =
+    $(".comment_count").text().trim() ||
+    $(".post_comment_count .num").text().trim() ||
+    $("[class*='comment'] [class*='num']").first().text().trim() ||
+    "";
+  const commentCount = parseInt(commentText.replace(/,/g, ""), 10) || 0;
+
+  // 좋아요
+  const likeText =
+    $(".u_cnt._count").text().trim() ||
+    $(".like_count").text().trim() ||
+    $("[class*='sympathy'] [class*='num']").first().text().trim() ||
+    "";
+  const likeCount = parseInt(likeText.replace(/,/g, ""), 10) || 0;
+
+  return { viewCount, commentCount, likeCount, title };
+}
+
+/**
+ * 블로그 URL에서 blogId + logNo 추출
+ * 지원: m.blog.naver.com/{blogId}/{logNo}, blog.naver.com/{blogId}/{logNo}
+ */
+export function extractBlogIdAndLogNo(
+  url: string
+): { blogId: string; logNo: string } | null {
+  const match = url.match(
+    /(?:m\.)?blog\.naver\.com\/([a-zA-Z0-9_]+)\/(\d+)/
+  );
+  if (match) return { blogId: match[1], logNo: match[2] };
+  return null;
+}
+
 // ── 3단계: 전체 크롤링 ──
 
 /**

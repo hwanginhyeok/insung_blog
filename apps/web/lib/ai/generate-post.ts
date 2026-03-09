@@ -105,20 +105,34 @@ function renderPersonaToPrompt(items: PersonaItemRow[]): string {
   return sections.join("\n");
 }
 
+interface PersonaLoadResult {
+  spec: string;
+  /** 카테고리별 추가 지시 (key = 맛집/카페/여행/일상/기타) */
+  categoryPrompts: Record<string, string>;
+}
+
 /**
- * DB에서 사용자 페르소나 로드 → 프롬프트 텍스트 반환
+ * DB에서 사용자 페르소나 로드 → 스타일 프롬프트 + 카테고리별 지시 반환
  * 페르소나가 없거나 분석 미완료면 null 반환 (→ PRODUCTION_SPEC 폴백)
+ * @param personaId 특정 페르소나 ID (없으면 기본 페르소나 사용)
  */
-async function loadUserPersona(userId: string): Promise<string | null> {
+async function loadUserPersona(userId: string, personaId?: string): Promise<PersonaLoadResult | null> {
   try {
     const admin = createAdminClient();
 
-    const { data: persona } = await admin
+    let query = admin
       .from("user_personas")
       .select("id")
       .eq("user_id", userId)
-      .eq("crawl_status", "done")
-      .single();
+      .eq("crawl_status", "done");
+
+    if (personaId) {
+      query = query.eq("id", personaId);
+    } else {
+      query = query.eq("is_default", true);
+    }
+
+    const { data: persona } = await query.maybeSingle();
 
     if (!persona) return null;
 
@@ -131,7 +145,17 @@ async function loadUserPersona(userId: string): Promise<string | null> {
 
     if (!items?.length) return null;
 
-    return renderPersonaToPrompt(items);
+    // 카테고리별 지시 분리 (category_prompt → 블로그 카테고리별 추가 지시)
+    const regularItems = items.filter(i => i.category !== "category_prompt");
+    const categoryPrompts: Record<string, string> = {};
+    for (const item of items.filter(i => i.category === "category_prompt")) {
+      categoryPrompts[item.key] = item.value;
+    }
+
+    return {
+      spec: regularItems.length > 0 ? renderPersonaToPrompt(regularItems) : "",
+      categoryPrompts,
+    };
   } catch {
     return null;
   }
@@ -272,10 +296,11 @@ async function generateDraft(
   analysis: string,
   memo: string,
   category: string,
-  spec: string
+  spec: string,
+  categoryInstruction: string | null = null
 ): Promise<{ title: string; body: string }> {
 
-  const systemPrompt = `너는 네이버 블로그 작성자야. 아래 제작 스펙을 **반드시 준수**하여 블로그 게시물을 작성해.
+  let systemPrompt = `너는 네이버 블로그 작성자야. 아래 제작 스펙을 **반드시 준수**하여 블로그 게시물을 작성해.
 
 ${spec}
 
@@ -289,6 +314,10 @@ ${spec}
 - 각 마커 앞뒤로 해당 사진에 대한 코멘터리 2~4줄 작성
 - 출력 형식: 반드시 아래 JSON만 출력. 인사말, 설명, 마크다운 등 다른 텍스트 절대 금지.
 {"title": "제목", "body": "본문"}`;
+
+  if (categoryInstruction) {
+    systemPrompt += `\n\n=== 카테고리별 추가 지시 (${category}) ===\n${categoryInstruction}`;
+  }
 
   let userMessage = `[사진 분석 결과]\n${analysis}`;
   if (memo) userMessage += `\n\n[메모]\n${memo}`;
@@ -354,12 +383,14 @@ async function generateHashtags(
 /**
  * 메인 함수: 사진 + 메모 → AI 블로그 초안
  * @param userId 사용자 ID (있으면 DB 페르소나 로드, 없으면 PRODUCTION_SPEC)
+ * @param personaId 특정 페르소나 ID (없으면 기본 페르소나 사용)
  */
 export async function generatePost(
   photos: PhotoInput[],
   memo: string,
   userCategory: string | null,
-  userId?: string
+  userId?: string,
+  personaId?: string
 ): Promise<GenerateResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -369,9 +400,8 @@ export async function generatePost(
   const client = new Anthropic({ apiKey });
 
   // 페르소나 로드 (DB → 폴백: PRODUCTION_SPEC)
-  const spec = userId
-    ? (await loadUserPersona(userId)) || loadProductionSpec()
-    : loadProductionSpec();
+  const personaResult = userId ? await loadUserPersona(userId, personaId) : null;
+  const spec = personaResult?.spec || loadProductionSpec();
 
   // Step 1: 사진 분석
   const analysis = await analyzeImages(client, photos);
@@ -379,8 +409,9 @@ export async function generatePost(
   // Step 2: 카테고리 감지 (사용자 선택 있으면 스킵)
   const category = userCategory || (await detectCategory(client, analysis, memo));
 
-  // Step 3: 초안 생성
-  const draft = await generateDraft(client, analysis, memo, category, spec);
+  // Step 3: 초안 생성 (카테고리별 추가 지시 포함)
+  const categoryInstruction = personaResult?.categoryPrompts[category] || null;
+  const draft = await generateDraft(client, analysis, memo, category, spec, categoryInstruction);
 
   // Step 4: 해시태그
   const hashtags = await generateHashtags(client, draft.title, draft.body);
@@ -397,13 +428,15 @@ export async function generatePost(
  * 재생성: 이전 초안 + 피드백 → 수정된 초안.
  * Vision 단계 생략 — 비용/시간 절약.
  * @param userId 사용자 ID (있으면 DB 페르소나 로드)
+ * @param personaId 특정 페르소나 ID (없으면 기본 페르소나 사용)
  */
 export async function regeneratePost(
   previousTitle: string,
   previousBody: string,
   feedback: string,
   category: string,
-  userId?: string
+  userId?: string,
+  personaId?: string
 ): Promise<GenerateResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -411,11 +444,11 @@ export async function regeneratePost(
   }
 
   const client = new Anthropic({ apiKey });
-  const spec = userId
-    ? (await loadUserPersona(userId)) || loadProductionSpec()
-    : loadProductionSpec();
+  const personaResult = userId ? await loadUserPersona(userId, personaId) : null;
+  const spec = personaResult?.spec || loadProductionSpec();
+  const categoryInstruction = personaResult?.categoryPrompts[category] || null;
 
-  const systemPrompt = `너는 네이버 블로그 작성자야. 아래 제작 스펙을 준수하여 블로그 게시물을 **수정**해.
+  let systemPrompt = `너는 네이버 블로그 작성자야. 아래 제작 스펙을 준수하여 블로그 게시물을 **수정**해.
 
 ${spec}
 
@@ -429,6 +462,10 @@ ${spec}
 - [PHOTO_N] 마커 위치는 유지 (피드백에서 변경 요청하지 않는 한)
 - 출력 형식: 반드시 아래 JSON만 출력. 다른 텍스트 절대 금지.
 {"title": "제목", "body": "본문"}`;
+
+  if (categoryInstruction) {
+    systemPrompt += `\n\n=== 카테고리별 추가 지시 (${category}) ===\n${categoryInstruction}`;
+  }
 
   const userMessage = `[기존 제목]\n${previousTitle}\n\n[기존 본문]\n${previousBody}\n\n[수정 요청]\n${feedback}`;
 

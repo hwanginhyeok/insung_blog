@@ -36,6 +36,8 @@ interface DraftVersion {
 function WritePageContent() {
   const searchParams = useSearchParams();
   const editId = searchParams.get("id");
+  const calendarTopic = searchParams.get("topic");
+  const calendarCategory = searchParams.get("category");
 
   const [photos, setPhotos] = useState<PhotoFile[]>([]);
   const [memo, setMemo] = useState("");
@@ -68,6 +70,12 @@ function WritePageContent() {
     limit: number;
     tier: string;
   } | null>(null);
+  const [personaList, setPersonaList] = useState<
+    { id: string; display_name: string; is_default: boolean }[]
+  >([]);
+  const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(
+    null
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // isDirty: 저장되지 않은 작업 내용이 있는지 판정
@@ -113,6 +121,13 @@ function WritePageContent() {
     };
   }, [isDirty]);
 
+  // 캘린더에서 넘어온 주제/카테고리 초기값 설정
+  useEffect(() => {
+    if (calendarTopic && !memo) setMemo(calendarTopic);
+    if (calendarCategory && !category) setCategory(calendarCategory);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarTopic, calendarCategory]);
+
   // 사용량 + 페르소나 formatting 항목 로드 (캐싱)
   useEffect(() => {
     async function loadInitialData() {
@@ -140,12 +155,34 @@ function WritePageContent() {
         setQuota({ used, limit: limits[tier] || 10, tier });
       }
 
-      // 페르소나 formatting 항목 캐싱 (HTML 복사 시 네트워크 호출 방지)
+      // 페르소나 목록 로드 + formatting 항목 캐싱
+      try {
+        const pRes = await fetch("/api/persona/list");
+        if (pRes.ok) {
+          const pData = await pRes.json();
+          const list = (pData.personas || []) as {
+            id: string;
+            display_name: string;
+            is_default: boolean;
+            crawl_status: string;
+          }[];
+          // 분석 완료된 페르소나만 표시
+          const doneList = list.filter((p) => p.crawl_status === "done");
+          setPersonaList(doneList);
+          // 기본 페르소나 자동 선택
+          const defaultP = doneList.find((p) => p.is_default);
+          if (defaultP) setSelectedPersonaId(defaultP.id);
+        }
+      } catch {
+        // 페르소나 목록 로드 실패 무시
+      }
+
       const { data: persona } = await supabase
         .from("user_personas")
         .select("id")
         .eq("user_id", user.id)
-        .single();
+        .eq("is_default", true)
+        .maybeSingle();
 
       if (persona) {
         const { data: items } = await supabase
@@ -324,6 +361,7 @@ function WritePageContent() {
           photoPaths: paths,
           memo,
           category,
+          personaId: selectedPersonaId || undefined,
         }),
       });
 
@@ -491,6 +529,7 @@ function WritePageContent() {
           previousBody: draft.body,
           feedback: feedback.trim(),
           category: category || "일상",
+          personaId: selectedPersonaId || undefined,
         }),
       });
 
@@ -662,6 +701,35 @@ function WritePageContent() {
               </div>
             </CardContent>
           </Card>
+
+          {/* 페르소나 선택 */}
+          {personaList.length > 1 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">페르소나</CardTitle>
+                <CardDescription>
+                  글쓰기 스타일을 선택합니다
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <select
+                  value={selectedPersonaId || ""}
+                  onChange={(e) =>
+                    setSelectedPersonaId(e.target.value || null)
+                  }
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">기본 페르소나</option>
+                  {personaList.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.display_name || "이름 없음"}
+                      {p.is_default ? " (기본)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </CardContent>
+            </Card>
+          )}
 
           {/* 사용량 + 생성 버튼 */}
           {quota && (

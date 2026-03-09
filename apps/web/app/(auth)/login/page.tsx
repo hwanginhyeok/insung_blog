@@ -25,7 +25,6 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<"login" | "signup">("login");
 
   const router = useRouter();
@@ -35,6 +34,10 @@ function LoginForm() {
   const redirect = rawRedirect.startsWith("/") && !rawRedirect.startsWith("//")
     ? rawRedirect
     : "/dashboard";
+
+  // OAuth 콜백 에러 메시지 표시
+  const oauthError = searchParams.get("error");
+  const [error, setError] = useState<string | null>(oauthError);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -162,6 +165,40 @@ function LoginForm() {
               )}
             </p>
           </form>
+
+          {/* 소셜 로그인 */}
+          <div className="mt-6 space-y-3">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">또는</span>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              className="w-full border-0 font-medium"
+              style={{ backgroundColor: "#FEE500", color: "#191919" }}
+              onClick={() =>
+                (window.location.href = `/api/auth/kakao/login?redirect=${encodeURIComponent(redirect)}`)
+              }
+            >
+              카카오로 로그인
+            </Button>
+
+            <Button
+              type="button"
+              className="w-full border-0 font-medium text-white"
+              style={{ backgroundColor: "#03C75A" }}
+              onClick={() =>
+                (window.location.href = `/api/auth/naver/login?redirect=${encodeURIComponent(redirect)}`)
+              }
+            >
+              네이버로 로그인
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </main>

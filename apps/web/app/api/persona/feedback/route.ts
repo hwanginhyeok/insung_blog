@@ -32,12 +32,13 @@ export async function GET() {
     return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 });
   }
 
-  // 사용자 페르소나 조회
+  // 사용자 기본 페르소나 조회 (다중 페르소나 대응)
   const { data: persona } = await supabase
     .from("user_personas")
     .select("id")
     .eq("user_id", user.id)
-    .single();
+    .eq("is_default", true)
+    .maybeSingle();
 
   if (!persona) {
     return NextResponse.json({ pendingRules: [], recentFeedbacks: [] });
@@ -97,9 +98,10 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { feedbackId, action } = body as {
+  const { feedbackId, action, personaId: reqPersonaId } = body as {
     feedbackId: string;
     action: "approve" | "reject";
+    personaId?: string;
   };
 
   if (!feedbackId || !["approve", "reject"].includes(action)) {
@@ -109,12 +111,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 사용자 페르소나 조회
-  const { data: persona } = await supabase
+  // 사용자 페르소나 조회 (personaId 지정 또는 기본 페르소나)
+  let personaQuery = supabase
     .from("user_personas")
     .select("id")
-    .eq("user_id", user.id)
-    .single();
+    .eq("user_id", user.id);
+
+  if (reqPersonaId) {
+    personaQuery = personaQuery.eq("id", reqPersonaId);
+  } else {
+    personaQuery = personaQuery.eq("is_default", true);
+  }
+
+  const { data: persona } = await personaQuery.maybeSingle();
 
   if (!persona) {
     return NextResponse.json(

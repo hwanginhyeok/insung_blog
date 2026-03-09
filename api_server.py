@@ -44,10 +44,13 @@ def _verify_token(
     return credentials.credentials
 
 from src.storage.database import (
+    add_to_retry_queue,
     count_today_bloggers,
     count_today_comments,
+    get_retry_targets,
     init_db,
     record_post,
+    remove_from_retry_queue,
     update_post_status,
 )
 from src.utils.logger import get_api_logger
@@ -95,6 +98,10 @@ class StatusResponse(BaseModel):
     today_comments: int
     today_bloggers: int
     comment_bot_running: bool = False
+    retry_queue_count: int = 0
+    pending_count: int = 0
+    approval_mode: str = "manual"
+    last_run: dict | None = None
 
 
 class CommentRunResponse(BaseModel):
@@ -231,11 +238,26 @@ async def publish_post_endpoint(req: PublishRequest, _=Depends(_verify_token)):
 @app.get("/status", response_model=StatusResponse)
 async def get_status(_=Depends(_verify_token)):
     """오늘 댓글 봇 현황 조회"""
+    from src.storage.supabase_client import (
+        get_bot_settings_sb,
+        get_pending_count_sb,
+        get_recent_runs_sb,
+    )
+
+    settings = get_bot_settings_sb()
+    retry_targets = get_retry_targets()
+    runs = get_recent_runs_sb(limit=1)
+    last_run = runs[0] if runs else None
+
     return StatusResponse(
         today_comments=count_today_comments(),
         today_bloggers=count_today_bloggers(),
         comment_bot_running=_comment_bot_task is not None
         and not _comment_bot_task.done(),
+        retry_queue_count=len(retry_targets),
+        pending_count=get_pending_count_sb(),
+        approval_mode=settings.get("approval_mode", "manual"),
+        last_run=last_run,
     )
 
 
@@ -279,6 +301,107 @@ async def submit_feedback(req: FeedbackRequest, _=Depends(_verify_token)):
     if ok:
         return FeedbackResponse(success=True, message="피드백 반영 완료")
     return FeedbackResponse(success=False, message="피드백 반영 실패")
+
+
+class RetryResponse(BaseModel):
+    success: bool
+    total: int = 0
+    success_count: int = 0  # JSON 키: success
+    failed_count: int = 0   # JSON 키: failed
+    message: str = ""
+
+
+@app.post("/comment/retry", response_model=RetryResponse)
+async def retry_failed_comments(_=Depends(_verify_token)):
+    """재시도 큐 댓글 일괄 실행"""
+    from playwright.async_api import async_playwright
+
+    from src.auth.naver_login import ensure_login
+    from src.commenter.comment_writer import write_comment
+    from src.storage.database import record_comment
+    from src.utils.browser import create_browser
+
+    targets = get_retry_targets()
+    if not targets:
+        return RetryResponse(success=True, total=0, message="재시도 대상 없음")
+
+    naver_id = os.environ.get("NAVER_ID", "")
+    naver_pw = os.environ.get("NAVER_PW", "")
+
+    if not all([naver_id, naver_pw]):
+        raise HTTPException(status_code=500, detail=".env 인증 정보 누락")
+
+    total = len(targets)
+    success_count = 0
+    failed_count = 0
+
+    logger.info(f"▶ 재시도 실행 시작: 총 {total}건")
+
+    try:
+        async with async_playwright() as pw:
+            browser, context, page = await create_browser(pw, headless=True)
+
+            try:
+                logged_in = await ensure_login(context, page, naver_id, naver_pw)
+                if not logged_in:
+                    return RetryResponse(
+                        success=False, total=total, message="네이버 로그인 실패",
+                    )
+
+                for i, target in enumerate(targets, 1):
+                    logger.info(f"▶ 재시도 [{i}/{total}] {target['blog_id']}")
+                    try:
+                        ok, _ = await write_comment(
+                            page=page,
+                            post_url=target["post_url"],
+                            post_title=target["post_title"],
+                            dry_run=False,
+                            comment_text=None,
+                            context=context,
+                            naver_id=naver_id,
+                            naver_pw=naver_pw,
+                        )
+                        if ok:
+                            remove_from_retry_queue(target["post_url"])
+                            record_comment(
+                                target["post_url"], target["blog_id"],
+                                target["post_title"], "", True,
+                            )
+                            success_count += 1
+                            logger.info(f"✓ 재시도 [{i}/{total}] 성공")
+                        else:
+                            add_to_retry_queue(
+                                target["blog_id"], target["post_url"],
+                                target["post_title"], "재시도 실패",
+                            )
+                            failed_count += 1
+                            logger.warning(f"✗ 재시도 [{i}/{total}] 실패")
+                    except Exception as e:
+                        add_to_retry_queue(
+                            target["blog_id"], target["post_url"],
+                            target["post_title"], str(e)[:100],
+                        )
+                        failed_count += 1
+                        logger.error(f"✗ 재시도 [{i}/{total}] 예외: {e}")
+
+                    if i < total:
+                        await asyncio.sleep(3)
+            finally:
+                await browser.close()
+
+    except Exception as e:
+        logger.error(f"재시도 실행 중 오류: {e}", exc_info=True)
+        return RetryResponse(
+            success=False, total=total,
+            success_count=success_count, failed_count=failed_count,
+            message=f"실행 중 오류: {str(e)[:100]}",
+        )
+
+    return RetryResponse(
+        success=True, total=total,
+        success_count=success_count, failed_count=failed_count,
+        message=f"재시도 완료: 성공 {success_count} / 실패 {failed_count}",
+    )
 
 
 @app.post("/comment/execute", response_model=CommentExecuteResponse)

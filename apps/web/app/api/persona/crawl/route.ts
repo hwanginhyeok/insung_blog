@@ -64,19 +64,29 @@ export async function POST(req: NextRequest) {
 
   const admin = createAdminClient();
 
-  // 3. user_personas upsert (crawl_status → 'crawling')
-  const { data: existing } = await admin
-    .from("user_personas")
-    .select("id")
-    .eq("user_id", user.id)
-    .single();
+  // 3. 동일 블로그 URL의 기존 페르소나 검색 (또는 personaId로 업데이트)
+  const reqPersonaId = body.personaId as string | undefined;
 
   let personaId: string;
 
-  if (existing) {
+  if (reqPersonaId) {
+    // 특정 페르소나 재크롤링
+    const { data: existing } = await admin
+      .from("user_personas")
+      .select("id")
+      .eq("id", reqPersonaId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: "페르소나를 찾을 수 없습니다" },
+        { status: 404 }
+      );
+    }
+
     personaId = existing.id;
 
-    // 기존 페르소나 업데이트 (재크롤링)
     await admin
       .from("user_personas")
       .update({
@@ -93,25 +103,60 @@ export async function POST(req: NextRequest) {
       .eq("persona_id", personaId)
       .eq("source", "ai");
   } else {
-    // 신규 페르소나 생성
-    const { data: created, error: insertError } = await admin
+    // 동일 블로그 URL의 기존 페르소나 검색
+    const { data: existing } = await admin
       .from("user_personas")
-      .insert({
-        user_id: user.id,
-        source_blog_url: blogUrl.trim(),
-        crawl_status: "crawling",
-      })
       .select("id")
-      .single();
+      .eq("user_id", user.id)
+      .eq("source_blog_url", blogUrl.trim())
+      .maybeSingle();
 
-    if (insertError || !created) {
-      console.error("페르소나 생성 실패:", insertError);
-      return NextResponse.json(
-        { error: "페르소나 생성 실패" },
-        { status: 500 }
-      );
+    if (existing) {
+      personaId = existing.id;
+
+      await admin
+        .from("user_personas")
+        .update({
+          crawl_status: "crawling",
+          crawl_error: null,
+        })
+        .eq("id", personaId);
+
+      await admin
+        .from("persona_items")
+        .delete()
+        .eq("persona_id", personaId)
+        .eq("source", "ai");
+    } else {
+      // 신규 페르소나 생성
+      // 기존 페르소나가 없으면 기본으로 설정
+      const { data: anyPersona } = await admin
+        .from("user_personas")
+        .select("id")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      const { data: created, error: insertError } = await admin
+        .from("user_personas")
+        .insert({
+          user_id: user.id,
+          source_blog_url: blogUrl.trim(),
+          crawl_status: "crawling",
+          is_default: !anyPersona, // 첫 페르소나면 기본으로
+        })
+        .select("id")
+        .single();
+
+      if (insertError || !created) {
+        console.error("페르소나 생성 실패:", insertError);
+        return NextResponse.json(
+          { error: "페르소나 생성 실패" },
+          { status: 500 }
+        );
+      }
+      personaId = created.id;
     }
-    personaId = created.id;
   }
 
   // 4. 크롤링 실행

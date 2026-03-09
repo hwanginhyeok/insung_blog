@@ -44,6 +44,7 @@ Supabase (공유 제어 평면)
 | W5 | 페르소나 학습 파이프라인 — 전체 완료 (01~07) | P1 | ✅ 완료 | `tasks/W5-페르소나.md` |
 | W4-05 | 3티어 사용량 제한 시스템 (무료 10/월, 베이직 50/월, 프로 200/월) | P1 | ✅ 완료 | — |
 | W4-03 | 인성이 실사용 테스트 + 버그 수정 (코드리뷰 7건 수정 완료) | P2 | ✅ 완료 | — |
+| LOC-01 | 로컬 봇 Phase 2+3 완성 (STEP 1~4) | P2 | ✅ 완료 | — |
 
 ---
 
@@ -135,9 +136,9 @@ Supabase (공유 제어 평면)
 
 | 기존 작업 | 판단 | 사유 |
 |----------|------|------|
-| Phase 2 스마트에디터 셀렉터 | 🗑️ 제거 | 자동 발행 안 함 |
-| publisher_main.py | 🗑️ 제거 | 위와 동일 |
-| validate_selectors.py | 🗑️ 제거 | 위와 동일 |
+| Phase 2 스마트에디터 셀렉터 | 🔧 테스트 필요 | STEP 5: DOM 덤프 → 셀렉터 업데이트 (브라우저 실행 필요) |
+| publisher_main.py | 🔧 테스트 필요 | 셀렉터 업데이트 후 --dry-run 테스트 |
+| validate_selectors.py | 🗑️ 제거 | debug_publisher.py --validate로 대체 |
 | QUALITY-REPORT | 📦 보류 | 댓글 봇 P3, 웹 플랫폼 완성 후 |
 | HTML-LAYOUT | 📦 보류 | 웹 에디터로 대체 |
 | AUTO-REPLY-COLLECT | 📦 보류 | 댓글 봇 P3 |
@@ -221,6 +222,16 @@ Supabase (공유 제어 평면)
 | ADM-03 | Header 관리 링크 조건부 표시 | ✅ 완료 | isAdmin 상태 + users 테이블 조회 |
 | ADM-04 | Middleware `/admin` 보호 경로 추가 | ✅ 완료 | protectedPaths + matcher |
 
+### 로컬 봇 Phase 2+3 완성 (2026-03-09)
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| LOC-01 | orchestrator.py — auto/manual 분기 + retry_queue 처리 통합 | ✅ 완료 | `_process_retry_queue()` 신규 |
+| LOC-02 | telegram_bot_simple.py — /status, /retry, /retry_now 명령어 추가 | ✅ 완료 | 3→6개 명령어 |
+| LOC-03 | api_server.py — POST /comment/retry + GET /status 확장 | ✅ 완료 | RetryResponse 모델 신규 |
+| LOC-04 | debug_publisher.py — --validate 모드 (blog_publisher.py 셀렉터 검증) | ✅ 완료 | `_validate_publisher_selectors()` 신규 |
+| LOC-05 | blog_publisher.py — 셀렉터 업데이트 (DOM 덤프 분석 후) | 대기 | 브라우저 실행 필요 |
+
 ### 댓글 봇 개선 (2026-03-08)
 
 | # | 작업 | 상태 | 비고 |
@@ -259,15 +270,16 @@ Supabase (공유 제어 평면)
 
 | # | 작업 | 상태 | 비고 |
 |---|------|------|------|
-| UX-08 | 카테고리별 프롬프트 커스텀 | 대기 | 맛집/카페/여행마다 다른 지시 가능 |
+| UX-08 | 카테고리별 프롬프트 커스텀 | ✅ 완료 | persona_items category_prompt + generate-post.ts 주입 + 페르소나 상세 UI (03-09) |
+| CAL-01 | 캘린더 클릭→글 보기 | ✅ 완료 | dayPosts 클릭 + 모달 "글 보기" 버튼 (03-09) |
 
-### P3: 확장 기능 (잔여)
+### P3: 확장 기능 — ✅ 전체 완료
 
 | # | 작업 | 상태 | 비고 |
 |---|------|------|------|
-| EXT-02 | 콘텐츠 캘린더 (주제 추천 + 발행 스케줄) | 대기 | — |
-| EXT-03 | 성과 분석 연동 (조회수/유입 키워드 추적) | 대기 | 네이버 API 가능 여부 확인 필요 |
-| EXT-04 | 다중 페르소나 (1인 다계정/스타일 전환) | 대기 | 현재 user:persona 1:1 제약 |
-| EXT-05 | OAuth 소셜 로그인 (Google/Kakao/Naver) | 대기 | W4-04에서 대기 중이던 항목 |
+| EXT-02 | 콘텐츠 캘린더 (주제 예약 + 발행 스케줄) | ✅ 완료 | 월별 그리드 + CRUD + write 연동 (03-09) |
+| EXT-03 | 성과 분석 (조회수/댓글/좋아요 추적) | ✅ 완료 | recharts 차트 + 네이버 크롤링 + 시계열 DB (03-09) |
+| EXT-04 | 다중 페르소나 (1인 다계정/스타일 전환) | ✅ 완료 | UNIQUE 제거 + is_default + 목록/상세 UI (03-09) |
+| EXT-05 | OAuth 소셜 로그인 (Kakao/Naver) | 📦 보류 | 코드+DB 준비됨, 개발자 콘솔 앱 등록 미완. 사용자 확장 시 진행 |
 
-*마지막 업데이트: 2026-03-09 (P0/P2/P3 일괄 완료)*
+*마지막 업데이트: 2026-03-09 (UX-08 카테고리별 프롬프트 + CAL-01 캘린더 클릭→글 보기)*

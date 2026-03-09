@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-03-09 — P3 확장 기능 보안 수정 (6건)
+
+- **TASK**: P3 코드리뷰 후속 수정
+- **변경 파일**: kakao/login/route.ts, kakao/callback/route.ts, naver/login/route.ts, naver/callback/route.ts, login/page.tsx, calendar/route.ts
+- **이슈 요약**: Critical 1 / Major 0 / Minor 2 — 전건 수정
+
+### 수정 내역
+
+| # | 심각도 | 이슈 | 수정 |
+|---|--------|------|------|
+| 1 | Critical | OAuth redirect 파라미터 Open Redirect 취약점 | 4개 파일(kakao/naver login+callback) — `startsWith("/") && !startsWith("//")` 검증 추가 |
+| 2 | Minor | OAuth 콜백 에러 메시지 로그인 페이지에 미표시 | login/page.tsx — `searchParams.get("error")`로 초기 에러 상태 설정 |
+| 3 | Minor | Calendar PATCH 업데이트 필드 미제한 | calendar/route.ts — 화이트리스트 방식으로 허용 필드(topic, category, memo, status, planned_date)만 추출 |
+
+- **타입 체크**: `tsc --noEmit` 통과 (exit code 0)
+- **판정**: 전건 수정 완료
+
+---
+
 ## 2026-03-08 — 댓글 봇 + 텔레그램 봇 재시작 (4건 수정)
 
 - **TASK**: 봇 서비스 재시작

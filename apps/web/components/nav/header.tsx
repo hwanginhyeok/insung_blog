@@ -11,7 +11,9 @@ import type { User } from "@supabase/supabase-js";
 const navItems = [
   { href: "/dashboard", label: "내 글" },
   { href: "/write", label: "새 글 쓰기" },
+  { href: "/calendar", label: "캘린더" },
   { href: "/persona", label: "페르소나" },
+  { href: "/analytics", label: "성과 분석" },
   { href: "/bot", label: "댓글 봇" },
   { href: "/guide", label: "사용법" },
 ];

@@ -30,14 +30,17 @@ from src.commenter.ai_comment import generate_comments_batch
 from src.commenter.comment_writer import visit_and_extract, write_comment
 from src.detectors.auto_blogger_detector import is_auto_blogger
 from src.storage.database import (
+    add_to_retry_queue,
     count_today_bloggers,
     count_today_comments,
+    get_retry_targets,
     init_db,
     is_blogger_visited_today,
     is_post_commented,
     mark_blogger_visited,
     record_comment,
     record_run,
+    remove_from_retry_queue,
 )
 from src.storage.supabase_client import (
     add_pending_comment_sb,
@@ -248,36 +251,43 @@ async def run(dry_run: bool = False, test_visit: str | None = None, mode: str | 
                         f"API 1회 호출 → {len(ai_comments)}개 댓글"
                     )
 
-                    # ── 3단계: 재방문 + 댓글 작성 ──
+                    # ── 3단계: 재방문 + 댓글 작성 (auto) 또는 대기 등록 (manual) ──
                     for i, data in enumerate(batch_data):
                         if count_today_comments() >= max_comments:
                             logger.info(f"오늘 댓글 한도({max_comments}개) 달성 — 중단")
                             break
 
-                        success, comment_text = await write_comment(
-                            page, data["url"], data["title"],
-                            dry_run=dry_run,
-                            context=context, naver_id=naver_id, naver_pw=naver_pw,
-                            comment_text=ai_comments[i],
-                        )
+                        if approval_mode == "auto":
+                            # auto: 즉시 댓글 작성
+                            success, comment_text = await write_comment(
+                                page, data["url"], data["title"],
+                                dry_run=dry_run,
+                                context=context, naver_id=naver_id, naver_pw=naver_pw,
+                                comment_text=ai_comments[i],
+                            )
+                            record_comment(data["url"], blog_id, data["title"], comment_text, success)
 
-                        # SQLite 이력 기록
-                        record_comment(data["url"], blog_id, data["title"], comment_text, success)
-
-                        # Supabase 대기 댓글 기록
-                        if success and comment_text:
+                            if success:
+                                comments_written += 1
+                                blogger_had_comment = True
+                            else:
+                                comments_failed += 1
+                                add_to_retry_queue(
+                                    blog_id=blog_id,
+                                    post_url=data["url"],
+                                    post_title=data["title"],
+                                    fail_reason="auto 모드 작성 실패",
+                                )
+                        else:
+                            # manual: Supabase pending에 저장 (댓글 작성 안 함)
                             add_pending_comment_sb(
                                 blog_id=blog_id,
                                 post_url=data["url"],
                                 post_title=data["title"],
-                                comment_text=comment_text,
+                                comment_text=ai_comments[i],
                             )
-
-                        if success:
-                            comments_written += 1
+                            logger.info(f"승인 대기 등록: {data['url'][:60]}")
                             blogger_had_comment = True
-                        else:
-                            comments_failed += 1
 
                         await delay_between_comments()
 
@@ -286,6 +296,13 @@ async def run(dry_run: bool = False, test_visit: str | None = None, mode: str | 
                     bloggers_visited += 1
                     logger.info(f"✓ {blog_id} 방문 완료")
                     await delay_between_bloggers()
+
+            # ── retry_queue 재시도 처리 ──
+            retry_ok, retry_fail = await _process_retry_queue(
+                page, context, naver_id, naver_pw, my_blog_id, dry_run,
+            )
+            comments_written += retry_ok
+            comments_failed += retry_fail
 
     except Exception as e:
         run_error = str(e)
@@ -312,3 +329,56 @@ async def run(dry_run: bool = False, test_visit: str | None = None, mode: str | 
             f"댓글: {comments_written}개 성공 / {comments_failed}개 실패 "
             f"({duration}초)"
         )
+
+
+async def _process_retry_queue(
+    page, context, naver_id: str, naver_pw: str, my_blog_id: str, dry_run: bool,
+) -> tuple[int, int]:
+    """
+    재시도 큐(retry_queue)에서 should_retry=1인 대상을 순차 처리.
+    Returns: (성공 건수, 실패 건수)
+    """
+    targets = get_retry_targets()
+    if not targets:
+        return 0, 0
+
+    logger.info(f"▶ 재시도 대상 {len(targets)}건 처리 시작")
+    success = 0
+    failed = 0
+
+    for target in targets:
+        try:
+            ok, _ = await write_comment(
+                page,
+                target["post_url"],
+                target["post_title"],
+                dry_run=dry_run,
+                comment_text=None,  # AI로 새로 생성
+                context=context,
+                naver_id=naver_id,
+                naver_pw=naver_pw,
+            )
+            if ok:
+                remove_from_retry_queue(target["post_url"])
+                record_comment(
+                    target["post_url"], target["blog_id"],
+                    target["post_title"], "", True,
+                )
+                success += 1
+            else:
+                add_to_retry_queue(
+                    target["blog_id"], target["post_url"],
+                    target["post_title"], "재시도 실패",
+                )
+                failed += 1
+        except Exception as e:
+            logger.warning(f"재시도 예외: {e}")
+            add_to_retry_queue(
+                target["blog_id"], target["post_url"],
+                target["post_title"], str(e)[:100],
+            )
+            failed += 1
+        await delay_between_comments()
+
+    logger.info(f"재시도 완료: 성공 {success} / 실패 {failed}")
+    return success, failed

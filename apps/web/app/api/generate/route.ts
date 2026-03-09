@@ -51,10 +51,11 @@ export async function POST(req: NextRequest) {
 
   // 3. 요청 파싱
   const body = await req.json();
-  const { photoPaths, memo, category } = body as {
+  const { photoPaths, memo, category, personaId } = body as {
     photoPaths: string[];
     memo: string;
     category: string | null;
+    personaId?: string;
   };
 
   if (!photoPaths?.length) {
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest) {
 
   // 5. AI 초안 생성 (사용량은 이미 예약됨 — 실패 시 원복)
   try {
-    const result = await generatePost(photos, memo || "", category, user.id);
+    const result = await generatePost(photos, memo || "", category, user.id, personaId);
     return NextResponse.json(result);
   } catch (e) {
     await rollbackUsage(user.id);

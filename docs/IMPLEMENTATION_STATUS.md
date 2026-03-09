@@ -1,12 +1,14 @@
 # 구현 현황 — 인성이프로젝트
 
-> 최종 업데이트: 2026-03-04
-> 
-> 각 Phase별 구현 완료도 및 현재 상태 정리
+> 최종 업데이트: 2026-03-09
+>
+> 로컬 봇(Phase 1~4) + 웹 플랫폼(W1~W6 + P3) 구현 현황
 
 ---
 
 ## 📊 전체 진행 요약
+
+### 로컬 봇 (Python + Playwright)
 
 | Phase | 주요 기능 | 상태 | 완료율 |
 |-------|----------|------|--------|
@@ -14,6 +16,18 @@
 | Phase 2 | 게시물 발행 시스템 | ⚠️ **부분 완료** | 70% |
 | Phase 3 | n8n + Telegram 연동 | 🚧 **진행 중** | 80% |
 | Phase 4 | 피드백 루프 | ✅ **완료** | 100% |
+
+### 웹 플랫폼 (Next.js 14 + Supabase + Vercel)
+
+| Week | 주요 기능 | 상태 | 완료율 |
+|------|----------|------|--------|
+| W1 | 인프라 세팅 (Supabase, Storage, 레이아웃) | ✅ **완료** | 100% |
+| W2 | 인증 + 대시보드 (Auth, RLS, 내 글 목록) | ✅ **완료** | 100% |
+| W3 | AI 글쓰기 (사진 업로드 → Vision → 초안 → 저장) | ✅ **완료** | 100% |
+| W4 | 마무리 + 보안 (재생성, 코드리뷰 7건, 3티어 사용량 제한) | ✅ **완료** | 100% |
+| W5 | 페르소나 학습 (크롤링 → AI 2-pass 분석 → HTML 렌더러 → 피드백 루프) | ✅ **완료** | 100% |
+| W6 | 댓글 봇 웹 통합 (Supabase 제어 평면, 텔레그램+웹 이중 제어) | ✅ **완료** | 100% |
+| P3 | 확장 기능 (다중 페르소나, 캘린더, 성과 분석, OAuth) | ✅ **완료** | 100% |
 
 ---
 
@@ -149,45 +163,65 @@ retry_queue (
 
 ---
 
-## 🎯 현재 집중 영역
+## 웹 플랫폼: P3 확장 기능 — ✅ 완료
 
-### P0 (즉시 처리 필요)
+> 상세 문서: `docs/프로젝트/tasks/P3-확장기능.md`
 
-| 작업 | 설명 | 담당 파일 |
-|------|------|----------|
-| 셀렉터 업데이트 | 네이버 UI 변경 대응 | `src/publisher/blog_publisher.py` |
-| 승인 워크플로 완성 | `/execute` 명령어 + 일괄 실행 | `telegram_bot_simple.py` |
-| orchestrator 연동 | 수동 승인 모드 통합 | `src/orchestrator.py` |
+### EXT-04: 다중 페르소나
 
-### P1 (다음 단계)
+| 기능 | 구현 상태 | 파일 | 비고 |
+|------|----------|------|------|
+| 1:N 관계 전환 | ✅ | migration 00012 | UNIQUE 제거 + is_default |
+| 페르소나 목록 UI | ✅ | `persona/page.tsx` | 그리드 카드 + 추가 폼 |
+| 페르소나 상세 UI | ✅ | `persona/[id]/page.tsx` | 7카테고리 아코디언 |
+| 글쓰기 시 선택 | ✅ | `write/page.tsx` | 드롭다운 선택기 |
+| 기본 페르소나 지정 | ✅ | `api/persona/default` | admin 클라이언트 |
 
-| 작업 | 설명 | 담당 파일 |
-|------|------|----------|
-| 재시도 큐 처리 | 다음날 우선 실행 | `src/orchestrator.py` |
-| 캡차 알림 | 텔레그램 캡차 알림 | `telegram_bot.py` |
-| 실행 리포트 | 결과 통계 및 모드 전환 제안 | `telegram_bot.py` |
+### EXT-02: 콘텐츠 캘린더
+
+| 기능 | 구현 상태 | 파일 | 비고 |
+|------|----------|------|------|
+| 캘린더 테이블 | ✅ | migration 00013 | RLS 4개 정책 |
+| CRUD API | ✅ | `api/calendar/route.ts` | GET/POST/PATCH/DELETE |
+| 월별 그리드 UI | ✅ | `calendar/page.tsx` | 순수 React (라이브러리 없음) |
+| 글쓰기 연동 | ✅ | `write/page.tsx` | `?calendar_id=` 파라미터 |
+
+### EXT-03: 성과 분석
+
+| 기능 | 구현 상태 | 파일 | 비고 |
+|------|----------|------|------|
+| 분석 테이블 + 뷰 | ✅ | migration 00014 | DISTINCT ON 최신 스냅샷 뷰 |
+| 크롤링 모듈 | ✅ | `lib/crawl/naver-blog.ts` | `extractPostMetrics()` |
+| 통계 API | ✅ | `api/analytics/route.ts` | 스냅샷 + 타임라인 + 요약 |
+| 대시보드 UI | ✅ | `analytics/page.tsx` | recharts 차트 + 카드 |
+
+### EXT-05: OAuth 소셜 로그인
+
+| 기능 | 구현 상태 | 파일 | 비고 |
+|------|----------|------|------|
+| 카카오 OAuth | ✅ | `api/auth/kakao/` | login + callback |
+| 네이버 OAuth | ✅ | `api/auth/naver/` | login + callback |
+| 계정 연결 | ✅ | callback routes | 동일 이메일 자동 merge |
+| 로그인 버튼 | ✅ | `login/page.tsx` | 카카오 노랑 + 네이버 초록 |
 
 ---
 
-## 📁 주요 파일 목록
+## 🎯 현재 집중 영역
 
-### 진입점
+### 웹 플랫폼 — 다음 단계
 
-| 파일 | 역할 | 상태 |
-|------|------|------|
-| `main.py` | 댓글 봇 스케줄러 | ✅ |
-| `publisher_main.py` | 게시물 발행 CLI | ⚠️ (셀렉터 이슈) |
-| `api_server.py` | FastAPI 서버 | ✅ |
-| `telegram_bot.py` | 텔레그램 봇 (사진→AI) | ✅ |
-| `telegram_bot_simple.py` | 텔레그램 봇 (승인 워크플로) | 🚧 |
+| 우선순위 | 작업 | 설명 |
+|----------|------|------|
+| P1 | Vercel 프로덕션 배포 | 환경변수 + 도메인 설정 |
+| P1 | 모바일 반응형 | write 페이지 핵심 (블로거 대다수 모바일) |
+| P1 | 신규 가입자 온보딩 | 가입→블로그URL→크롤링→첫 글 플로우 |
+| P2 | 랜딩 페이지 | 서비스 소개 + 사용 예시 |
 
-### 설정 및 문서
+### 로컬 봇 — 잔여
 
-| 파일 | 역할 |
-|------|------|
-| `skills/PRODUCTION_SPEC.md` | AI 블로그 제작 스펙 |
-| `skills/INPUT_GUIDE.md` | 텔레그램 입력 가이드 |
-| `scripts/validate_selectors.py` | 셀렉터 검증 도구 |
+| 작업 | 설명 | 담당 파일 |
+|------|------|----------|
+| 셀렉터 업데이트 | 네이버 UI 변경 대응 (보류) | `blog_publisher.py` |
 
 ---
 
@@ -196,7 +230,10 @@ retry_queue (
 | 항목 | 비용 | 비고 |
 |------|------|------|
 | AI 댓글 (Haiku) | ~$0.00018/건 | 월 50개 기준 ~$0.11 |
-| AI 블로그 초안 (Sonnet) | ~$0.01-0.03/건 | Vision + 텍스트 생성 |
+| AI 블로그 초안 (Haiku) | ~$0.003-0.01/건 | 웹 플랫폼 기준 |
+| AI 페르소나 분석 (Sonnet) | ~$0.05/회 | 1회성 (크롤링 시) |
+| Supabase | 무료 | Free tier 범위 내 |
+| Vercel | 무료 | Hobby plan |
 
 ---
 
@@ -204,9 +241,12 @@ retry_queue (
 
 | 날짜 | 변경 내용 | 관련 파일 |
 |------|----------|----------|
+| 2026-03-09 | P3 확장 기능 4건 전체 완료 | 마이그레이션 00012~00015 + 신규 라우트/페이지 |
+| 2026-03-08 | 보안 개선 3건 (쿠키 업로드, 배치 댓글, credentials 삭제) | migration 00009, 00010 |
+| 2026-03-08 | UX 개선 5건 (이탈 경고, 글 불러오기, 이미지 압축 등) | write/page.tsx, image-compress.ts |
+| 2026-03-08 | 관리자 페이지 (사용자 목록, 티어/상태 변경) | admin/page.tsx, api/admin |
+| 2026-03-08 | 댓글 봇 웹 통합 (W6 완료) | bot/page.tsx, api/bot/* |
+| 2026-03-07 | 페르소나 학습 파이프라인 (W5 완료) | persona/*, api/persona/*, lib/ai/* |
+| 2026-03-06 | 웹 플랫폼 W1~W4 일괄 완료 | apps/web/ 전체 |
 | 2026-03-04 | 텔레그램 승인 워크플로 추가 | `telegram_bot_simple.py` |
-| 2026-03-04 | pending_comments 테이블 추가 | `src/storage/database.py` |
 | 2026-03-04 | AI 댓글 안전 필터 강화 | `src/commenter/ai_comment.py` |
-| 2026-03-04 | 주말 시간대 확장 (13-18시) | `src/utils/time_guard.py` |
-| 2026-03-03 | 사진 마커 시스템 구현 | `src/utils/photo_marker.py` |
-| 2026-03-03 | 셀렉터 검증 도구 작성 | `scripts/validate_selectors.py` |

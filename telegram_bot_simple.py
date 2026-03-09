@@ -137,6 +137,93 @@ def handle_approval(chat_id: int, comment_id: str, action: str, query_id: str = 
     update_pending_status_sb(comment_id, "approved", decided_by="telegram")
 
 
+def show_status(chat_id: int):
+    """봇 현황 요약"""
+    from src.storage.database import count_today_comments, count_today_bloggers
+    from src.storage.supabase_client import (
+        get_pending_count_sb, get_recent_runs_sb, get_bot_settings_sb,
+    )
+
+    settings = get_bot_settings_sb()
+    pending = get_pending_count_sb()
+    today_c = count_today_comments()
+    today_b = count_today_bloggers()
+    runs = get_recent_runs_sb(limit=1)
+    last_run = runs[0] if runs else None
+
+    text = (
+        f"<b>📊 봇 현황</b>\n\n"
+        f"<b>오늘:</b> 댓글 {today_c}개 / 블로거 {today_b}명\n"
+        f"<b>대기:</b> {pending}개 (pending)\n"
+        f"<b>모드:</b> {settings.get('approval_mode', 'manual')}\n"
+        f"<b>활성:</b> {'✅' if settings.get('is_active') else '❌'}\n"
+    )
+    if last_run:
+        run_at = last_run.get("run_at", "")[:16] if last_run.get("run_at") else ""
+        text += (
+            f"\n<b>최근 실행:</b> {run_at}\n"
+            f"  성공 {last_run.get('comments_written', 0)} / "
+            f"실패 {last_run.get('comments_failed', 0)}"
+        )
+
+    send_message(chat_id, text)
+
+
+def show_retry(chat_id: int):
+    """재시도 큐 현황"""
+    from src.storage.database import get_retry_targets
+
+    targets = get_retry_targets()
+    if not targets:
+        send_message(chat_id, "📭 재시도 대기 중인 댓글이 없습니다.")
+        return
+
+    text = f"<b>🔄 재시도 대기: {len(targets)}건</b>\n\n"
+    for i, t in enumerate(targets[:10], 1):
+        text += f"{i}. {t['blog_id']} (실패 {t['fail_count']}회)\n"
+
+    if len(targets) > 10:
+        text += f"... 외 {len(targets) - 10}건\n"
+
+    text += "\n/retry_now 로 즉시 재시도"
+    send_message(chat_id, text)
+
+
+def execute_retry(chat_id: int):
+    """재시도 큐 즉시 실행 — API 서버로 위임"""
+    api_token = os.environ.get("API_SECRET_TOKEN", "")
+    if not api_token:
+        send_message(chat_id, "❌ API_SECRET_TOKEN 미설정 — .env 확인 필요")
+        return
+
+    send_message(chat_id, "🔄 재시도 실행 중...")
+
+    try:
+        resp = httpx.post(
+            "http://localhost:8001/comment/retry",
+            headers={"Authorization": f"Bearer {api_token}"},
+            timeout=300,
+        )
+
+        if resp.status_code != 200:
+            send_message(chat_id, f"❌ API 서버 오류 (HTTP {resp.status_code}): {resp.text[:200]}")
+            return
+
+        result = resp.json()
+        send_message(
+            chat_id,
+            f"🔄 <b>재시도 완료</b>\n\n"
+            f"총 {result.get('total', 0)}건 / "
+            f"성공 {result.get('success_count', 0)} / 실패 {result.get('failed_count', 0)}",
+        )
+    except httpx.ConnectError:
+        send_message(chat_id, "❌ API 서버 연결 실패 — 서버 실행 중인지 확인하세요.")
+    except httpx.TimeoutException:
+        send_message(chat_id, "⏰ API 서버 응답 시간 초과 (5분). 로그를 확인하세요.")
+    except Exception as e:
+        send_message(chat_id, f"❌ 재시도 실패: {str(e)[:100]}")
+
+
 def execute_approved(chat_id: int):
     """승인된 댓글 일괄 실행 — API 서버 /comment/execute 호출"""
     from src.storage.supabase_client import get_pending_comments_sb
@@ -258,12 +345,21 @@ def main():
                     show_pending(chat_id)
                 elif text == "/execute":
                     execute_approved(chat_id)
+                elif text == "/status":
+                    show_status(chat_id)
+                elif text == "/retry":
+                    show_retry(chat_id)
+                elif text == "/retry_now":
+                    execute_retry(chat_id)
                 elif text == "/help":
                     send_message(
                         chat_id,
                         "<b>📋 명령어</b>\n\n"
+                        "/status - 봇 현황 요약\n"
                         "/pending - 승인 대기 목록\n"
                         "/execute - 승인된 댓글 실행\n"
+                        "/retry - 재시도 큐 현황\n"
+                        "/retry_now - 재시도 즉시 실행\n"
                         "/help - 도움말"
                     )
                 else:

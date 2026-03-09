@@ -52,11 +52,12 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { previousTitle, previousBody, feedback, category } = body as {
+  const { previousTitle, previousBody, feedback, category, personaId } = body as {
     previousTitle: string;
     previousBody: string;
     feedback: string;
     category: string;
+    personaId?: string;
   };
 
   if (!previousBody?.trim()) {
@@ -79,7 +80,8 @@ export async function POST(req: NextRequest) {
       previousBody,
       feedback,
       category || "일상",
-      user.id
+      user.id,
+      personaId
     );
 
     // 피드백 DB 저장 + 패턴 분석 (실패해도 재생성 결과에 영향 없음)

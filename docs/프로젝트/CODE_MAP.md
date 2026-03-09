@@ -1,7 +1,7 @@
 # CODE_MAP — 코드베이스 지도
 
 > 파일 추가/삭제/이동/역할 변경 시 반드시 갱신.
-> 최종 갱신: 2026-03-09 (P0 버그 수정 + UX 개선 + 글 히스토리)
+> 최종 갱신: 2026-03-09 (UX-08 카테고리별 프롬프트 + CAL-01 캘린더 클릭→글 보기)
 
 ---
 
@@ -14,17 +14,20 @@
 |------|------|------|
 | `app/layout.tsx` | 루트 레이아웃 (Geist 폰트, lang="ko") | ✅ |
 | `app/page.tsx` | 랜딩 페이지 ("블로그 AI 파트너") | ✅ 스켈레톤 |
-| `app/(auth)/login/page.tsx` | 로그인/회원가입 (Supabase Auth 연동) | ✅ |
+| `app/(auth)/login/page.tsx` | 로그인/회원가입 (Supabase Auth + **카카오/네이버 소셜 로그인 버튼**) | ✅ (P3 확장) |
 | `app/(dashboard)/layout.tsx` | 대시보드 공유 레이아웃 (Header) | ✅ |
 | `app/(dashboard)/dashboard/page.tsx` | 내 글 목록 (Supabase 연동, TG 뱃지, 상태 표시, **완료 글 클릭→write 이동**) | ✅ |
-| `app/(dashboard)/write/page.tsx` | AI 글쓰기 에디터 (사진+메모+초안+재생성+저장+복사, **이탈 경고 3종**, **?id= 저장된 글 불러오기**) | ✅ |
-| `app/(dashboard)/persona/page.tsx` | 페르소나 관리 UI — 블로그 분석 + 7카테고리 아코디언 + 항목 토글/삭제/추가 + **피드백 규칙 승인/히스토리** | ✅ |
+| `app/(dashboard)/write/page.tsx` | AI 글쓰기 에디터 (사진+메모+초안+재생성+저장+복사, 이탈 경고, ?id= 불러오기, **페르소나 선택**, **?calendar_id= 캘린더 연동**) | ✅ (P3 확장) |
+| `app/(dashboard)/persona/page.tsx` | 페르소나 관리 UI — **목록 뷰** (그리드 카드 + 새 페르소나 추가 + 기본 설정) | ✅ (P3 개편) |
+| `app/(dashboard)/persona/[id]/page.tsx` | 개별 페르소나 상세 — 7카테고리 아코디언 + 항목 토글/삭제/추가 + **카테고리별 글쓰기 가이드** + 피드백 규칙 + 이름 편집 + 삭제 | ✅ (UX-08 추가) |
+| `app/(dashboard)/calendar/page.tsx` | 콘텐츠 캘린더 — 월별 7열 그리드 + 이벤트 배지 + 생성/수정/삭제 모달 + 글쓰기 연동 + **완료 글 클릭→write 이동** | ✅ (CAL-01 추가) |
+| `app/(dashboard)/analytics/page.tsx` | 성과 분석 — 통계 카드 3개 + recharts 추이 차트 + URL 추가 + 게시물 목록 | ✅ **신규** |
 | `app/(dashboard)/guide/page.tsx` | 사용법 가이드 — 3-Step 흐름 + 기능별 상세 + FAQ (서버 컴포넌트) | ✅ **신규** |
 | `app/globals.css` | 글로벌 스타일 + 테마 변수 (light/dark) | ✅ |
 | `app/(dashboard)/admin/page.tsx` | 관리자 페이지 — 사용자 목록, 티어/상태 변경, 통계 카드 | ✅ **신규** |
 | `app/api/admin/users/route.ts` | 관리자 API — GET 사용자 목록, PATCH 티어/상태 수정 (admin 검증) | ✅ **신규** |
-| `middleware.ts` | 세션 갱신 + 보호 경로 리다이렉트 (/admin 포함) | ✅ |
-| `components/nav/header.tsx` | 대시보드 헤더 (네비+로그아웃, admin일 때 "관리" 링크 표시) | ✅ |
+| `middleware.ts` | 세션 갱신 + 보호 경로 리다이렉트 (/admin, /calendar, /analytics 포함) | ✅ |
+| `components/nav/header.tsx` | 대시보드 헤더 (네비+로그아웃, 캘린더+성과분석 링크 추가, admin일 때 "관리" 링크 표시) | ✅ |
 | `components/ui/` | shadcn/ui 컴포넌트 (button, card, input, textarea) | ✅ |
 | `lib/supabase.ts` | 브라우저용 Supabase 클라이언트 | ✅ |
 | `lib/supabase-server.ts` | 서버 컴포넌트용 Supabase 클라이언트 (쿠키 인증) | ✅ |
@@ -32,7 +35,7 @@
 | `lib/database.types.ts` | Supabase 테이블 TypeScript 타입 정의 (tier/usage 컬럼 포함) | ✅ 수동 |
 | `lib/tier.ts` | 구독 티어 정의 + 원자적 사용량 예약/롤백 (`reserveUsage` RPC 기반, 서버 전용) | ✅ |
 | `lib/hooks/use-user.ts` | 현재 사용자 프로필 + role 훅 (`useUser()` → `{ user, loading, isAdmin }`) | ✅ **신규** |
-| `lib/ai/generate-post.ts` | AI 4단계 파이프라인 TS 포팅 (Vision → Category → Draft → Hashtags) + `regeneratePost()` 재생성 | ✅ |
+| `lib/ai/generate-post.ts` | AI 4단계 파이프라인 TS 포팅 (Vision → Category → Draft → Hashtags) + `regeneratePost()` 재생성 + **카테고리별 프롬프트 주입** | ✅ (UX-08 추가) |
 | `lib/crawl/naver-blog.ts` | 네이버 블로그 크롤링 모듈 — cheerio 기반, HTML 메타데이터 추출 (`crawlBlog()`, `extractBlogId()`) | ✅ **신규** |
 | `app/api/generate/route.ts` | AI 생성 API Route (POST /api/generate, getUser 인증, 티어 한도 체크) | ✅ |
 | `app/api/regenerate/route.ts` | AI 재생성 API Route (POST /api/regenerate, 피드백 기반 수정, 티어 한도 체크, **피드백 DB 저장 + 패턴 분석 트리거**) | ✅ |
@@ -41,6 +44,14 @@
 | `app/api/persona/feedback/route.ts` | 피드백 규칙 API Route — GET: 대기 규칙 + 히스토리 조회, POST: 규칙 승인/거절 | ✅ **신규** |
 | `app/api/bot/cookies/route.ts` | 쿠키 업로드 API Route — GET: 상태, POST: 업로드(upsert), DELETE: 삭제 | ✅ **신규** |
 | `app/api/posts/route.ts` | 글 관리 API Route — DELETE: 삭제(Storage 동시 정리), PATCH: 제목/본문/해시태그/버전 수정 | ✅ **신규** |
+| `app/api/persona/list/route.ts` | 페르소나 목록 API Route (GET: 사용자 전체 페르소나) | ✅ **신규** |
+| `app/api/persona/default/route.ts` | 기본 페르소나 지정 API Route (POST: is_default 토글) | ✅ **신규** |
+| `app/api/calendar/route.ts` | 콘텐츠 캘린더 API Route — GET 월별 조회, POST 생성, PATCH 수정, DELETE 삭제 | ✅ **신규** |
+| `app/api/analytics/route.ts` | 성과 분석 API Route — GET 통계+타임라인, POST 크롤링 트리거 | ✅ **신규** |
+| `app/api/auth/kakao/login/route.ts` | 카카오 OAuth 로그인 리다이렉트 (state 쿠키 저장) | ✅ **신규** |
+| `app/api/auth/kakao/callback/route.ts` | 카카오 OAuth 콜백 — 토큰 교환 + 사용자 생성/연결 + magic link 세션 | ✅ **신규** |
+| `app/api/auth/naver/login/route.ts` | 네이버 OAuth 로그인 리다이렉트 (state 쿠키 저장) | ✅ **신규** |
+| `app/api/auth/naver/callback/route.ts` | 네이버 OAuth 콜백 — 토큰 교환 + 사용자 생성/연결 + magic link 세션 | ✅ **신규** |
 | `lib/ai/analyze-persona.ts` | 페르소나 AI 분석 — 2-pass (콘텐츠 6카테고리 + 포맷팅), `analyzePersona()` | ✅ **신규** |
 | `lib/ai/analyze-feedback.ts` | 피드백 패턴 분석 — Haiku 모델, 5건 배치 → 최대 3개 규칙 도출, `analyzeFeedbackPatterns()` | ✅ **신규** |
 | `lib/render/naver-html.ts` | SmartEditor 호환 HTML 렌더러 — 인라인 CSS, 폰트 매핑, 볼드 마커, `renderToNaverHtml()` | ✅ **신규** |
@@ -56,8 +67,12 @@
 | `supabase/migrations/00007_add_user_tiers.sql` | users 테이블에 tier + monthly_gen_count + gen_count_reset_month 컬럼 추가 | ✅ 실행됨 |
 | `supabase/migrations/00008_reserve_generation_rpc.sql` | 원자적 사용량 체크+증분 RPC (`reserve_generation`, `rollback_generation`) | ✅ 실행됨 |
 | `supabase/migrations/00009_drop_user_credentials.sql` | user_credentials 테이블 삭제 (보안 — ID/PW 저장 제거) | ✅ 실행됨 |
-| `supabase/migrations/00010_bot_cookies.sql` | 쿠키 업로드 테이블 (bot_cookies) — 웹에서 업로드, 봇이 읽어 사용 | 미실행 |
-| `supabase/migrations/00011_add_versions_column.sql` | generation_queue에 `versions` JSONB 컬럼 추가 (글 히스토리) | 미실행 |
+| `supabase/migrations/00010_bot_cookies.sql` | 쿠키 업로드 테이블 (bot_cookies) — 웹에서 업로드, 봇이 읽어 사용 | ✅ 실행됨 |
+| `supabase/migrations/00011_add_versions_column.sql` | generation_queue에 `versions` JSONB 컬럼 추가 (글 히스토리) | ✅ 실행됨 |
+| `supabase/migrations/00012_enable_multiple_personas.sql` | UNIQUE 제거 + is_default 컬럼 + 부분 유니크 인덱스 (다중 페르소나) | ✅ 실행됨 |
+| `supabase/migrations/00013_create_content_calendar.sql` | content_calendar 테이블 + RLS (콘텐츠 캘린더) | ✅ 실행됨 |
+| `supabase/migrations/00014_create_post_analytics.sql` | post_analytics 테이블 + user_post_stats 뷰 + RLS (성과 분석) | ✅ 실행됨 |
+| `supabase/migrations/00015_add_oauth_providers.sql` | users에 kakao_id, naver_id 컬럼 + 부분 유니크 인덱스 (OAuth) | ✅ 실행됨 |
 | `package.json` | 의존성 (Next 14, Supabase, shadcn/ui, react-hook-form, zod) | ✅ |
 
 ### 작업 문서
@@ -77,10 +92,10 @@
 |------|------|-------|------|
 | `main.py` | 댓글 봇 스케줄러 진입점 (argparse + schedule) | 1 | ✅ |
 | `publisher_main.py` | 게시물 발행 CLI 진입점 (--photos, --memo, --dry-run, --no-ai) | 2 | ⚠️ (셀렉터 이슈) |
-| `api_server.py` | FastAPI 웹훅 서버 — n8n 연동 6개 엔드포인트 (generate, publish, status, comment/run, feedback, health) | 3 | ✅ |
+| `api_server.py` | FastAPI 웹훅 서버 — 8개 엔드포인트 (generate, publish, status, comment/run, comment/execute, comment/retry, feedback, health) | 3 | ✅ |
 | `telegram_bot.py` | 텔레그램 봇 (사진 수신 → AI 초안) | 3 | ✅ |
-| `telegram_bot_simple.py` | 텔레그램 봇 (댓글 승인 워크플로) — `/pending`, `/execute` | 3 | 🚧 개발 중 |
-| `debug_publisher.py` | 스마트에디터 DOM 분석 도구 (headless=False, 셀렉터 탐색) | 2 | ✅ |
+| `telegram_bot_simple.py` | 텔레그램 봇 (댓글 승인 워크플로) — `/status`, `/pending`, `/execute`, `/retry`, `/retry_now` | 3 | ✅ |
+| `debug_publisher.py` | 스마트에디터 DOM 분석 도구 (headless=False, 셀렉터 탐색, `--validate` 셀렉터 검증) | 2 | ✅ |
 
 ---
 
@@ -192,7 +207,7 @@
 
 | 파일 | 역할 | 상태 |
 |------|------|------|
-| `orchestrator.py` | 댓글 봇 전체 흐름 조율 — 로그인 → 수집 → 댓글 → DB. `run()` | ✅ (승인 모드 연동 예정) |
+| `orchestrator.py` | 댓글 봇 전체 흐름 조율 — 로그인 → 수집 → 댓글(auto)/대기등록(manual) → retry_queue 처리 → DB. `run()` + `_process_retry_queue()` | ✅ |
 
 ---
 

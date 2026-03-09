@@ -136,7 +136,62 @@ async def _save_html_dump(page: Page) -> str:
     return path
 
 
-async def run_debug(screenshot_only: bool = False, no_wait: bool = False) -> None:
+async def _validate_publisher_selectors(page: Page) -> dict:
+    """blog_publisher.py의 실제 셀렉터가 현재 에디터에서 동작하는지 검증"""
+    from src.publisher.blog_publisher import (
+        _TITLE_SELECTORS,
+        _BODY_SELECTORS,
+        _IMAGE_BUTTON_SELECTORS,
+        _TAG_SELECTORS,
+        _FONT_BUTTON_SELECTORS,
+        _FONTSIZE_BUTTON_SELECTORS,
+    )
+
+    groups = {
+        "제목 (_TITLE_SELECTORS)": _TITLE_SELECTORS,
+        "본문 (_BODY_SELECTORS)": _BODY_SELECTORS,
+        "이미지 (_IMAGE_BUTTON_SELECTORS)": _IMAGE_BUTTON_SELECTORS,
+        "태그 (_TAG_SELECTORS)": _TAG_SELECTORS,
+        "폰트 (_FONT_BUTTON_SELECTORS)": _FONT_BUTTON_SELECTORS,
+        "폰트크기 (_FONTSIZE_BUTTON_SELECTORS)": _FONTSIZE_BUTTON_SELECTORS,
+    }
+
+    results: dict[str, list[dict]] = {}
+    search_targets = [("page", page)] + [
+        (f.name or f"frame_{i}", f) for i, f in enumerate(page.frames) if f != page.main_frame
+    ]
+
+    for group_name, selectors in groups.items():
+        matches: list[dict] = []
+        for sel in selectors:
+            for target_name, target in search_targets:
+                try:
+                    el = await target.query_selector(sel)
+                    if el:
+                        tag = await el.evaluate("e => e.tagName")
+                        classes = await el.evaluate("e => e.className")
+                        editable = await el.evaluate(
+                            "e => e.isContentEditable || e.tagName === 'INPUT' || e.tagName === 'TEXTAREA'"
+                        )
+                        matches.append({
+                            "selector": sel,
+                            "target": target_name,
+                            "tag": tag,
+                            "class": str(classes)[:80],
+                            "editable": editable,
+                        })
+                except Exception:
+                    pass
+        results[group_name] = matches
+
+    return results
+
+
+async def run_debug(
+    screenshot_only: bool = False,
+    no_wait: bool = False,
+    validate: bool = False,
+) -> None:
     """글쓰기 페이지를 열고 DOM 구조를 분석"""
     naver_id = os.getenv("NAVER_ID", "")
     naver_pw = os.getenv("NAVER_PW", "")
@@ -195,6 +250,29 @@ async def run_debug(screenshot_only: bool = False, no_wait: bool = False) -> Non
         html_path = await _save_html_dump(page)
         logger.info(f"HTML 덤프 저장: {html_path}")
 
+        # blog_publisher.py 셀렉터 검증
+        if validate:
+            print("\n" + "=" * 60)
+            print("blog_publisher.py 셀렉터 검증")
+            print("=" * 60)
+            validation = await _validate_publisher_selectors(page)
+            all_ok = True
+            for group_name, matches in validation.items():
+                if matches:
+                    print(f"\n✅ {group_name}")
+                    for m in matches:
+                        edit_mark = " [editable]" if m["editable"] else ""
+                        print(f"   ✓ {m['selector']} → <{m['tag']}>{edit_mark}")
+                        print(f"     위치: {m['target']}, class: {m['class'][:50]}")
+                else:
+                    print(f"\n❌ {group_name} — 매칭 없음!")
+                    all_ok = False
+
+            if all_ok:
+                print("\n🎉 모든 셀렉터 그룹에서 최소 1개 매칭 확인!")
+            else:
+                print("\n⚠️  일부 셀렉터 그룹에서 매칭 실패 — 업데이트 필요")
+
         print(f"\n스크린샷: {screenshot_path}")
         print(f"HTML 덤프: {html_path}")
 
@@ -214,9 +292,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="스마트에디터 DOM 구조 분석")
     parser.add_argument("--screenshot", action="store_true", help="스크린샷만 저장")
     parser.add_argument("--no-wait", action="store_true", help="분석 후 자동 종료 (Enter 대기 없음)")
+    parser.add_argument("--validate", action="store_true", help="blog_publisher.py 셀렉터 검증")
     args = parser.parse_args()
 
-    asyncio.run(run_debug(screenshot_only=args.screenshot, no_wait=args.no_wait))
+    asyncio.run(run_debug(
+        screenshot_only=args.screenshot,
+        no_wait=args.no_wait,
+        validate=args.validate,
+    ))
 
 
 if __name__ == "__main__":
