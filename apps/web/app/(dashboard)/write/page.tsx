@@ -14,6 +14,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { renderPostHtml } from "@/lib/render/naver-html";
 import type { FormattingItem } from "@/lib/render/naver-html";
+import { compressImage } from "@/lib/image-compress";
 
 const categories = ["맛집", "카페", "여행", "일상", "기타"];
 
@@ -21,6 +22,15 @@ interface PhotoFile {
   file: File | null; // null = DB에서 불러온 사진
   preview: string; // blob URL 또는 Storage public URL
   storagePath?: string;
+}
+
+interface DraftVersion {
+  version: number;
+  title: string;
+  body: string;
+  hashtags: string[];
+  feedback: string | null; // v1은 null, v2+는 수정 요청 내용
+  created_at: string;
 }
 
 function WritePageContent() {
@@ -40,13 +50,19 @@ function WritePageContent() {
   } | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [uploadedPaths, setUploadedPaths] = useState<string[]>([]);
   const [feedback, setFeedback] = useState("");
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [copyLabel, setCopyLabel] = useState("복사하기");
   const [htmlCopyLabel, setHtmlCopyLabel] = useState("HTML 복사");
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [versions, setVersions] = useState<DraftVersion[]>([]);
+  const [currentVersion, setCurrentVersion] = useState<number>(0); // 0 = 최신 (draft)
   const [cachedFormatting, setCachedFormatting] = useState<FormattingItem[]>([]);
   const [cachedPhotoUrls, setCachedPhotoUrls] = useState<string[]>([]);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [quota, setQuota] = useState<{
     used: number;
     limit: number;
@@ -185,6 +201,11 @@ function WritePageContent() {
           hashtags: (data.generated_hashtags as string[]) || [],
         });
       }
+      // 버전 히스토리 복원
+      const savedVersions = (data.versions as DraftVersion[]) || [];
+      if (savedVersions.length > 0) {
+        setVersions(savedVersions);
+      }
       setSavedId(data.id);
     }
     loadPost();
@@ -206,9 +227,14 @@ function WritePageContent() {
     cacheSignedUrls();
   }, [uploadedPaths]);
 
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
-    const newPhotos = files.slice(0, 10 - photos.length).map((file) => ({
+    const toProcess = files.slice(0, 10 - photos.length);
+
+    // 압축 처리 (병렬)
+    const compressed = await Promise.all(toProcess.map(compressImage));
+
+    const newPhotos = compressed.map((file) => ({
       file,
       preview: URL.createObjectURL(file),
     }));
@@ -222,6 +248,31 @@ function WritePageContent() {
       if (photo.file) URL.revokeObjectURL(photo.preview);
       return prev.filter((_, i) => i !== index);
     });
+  }
+
+  function handleDragStart(index: number) {
+    setDragIndex(index);
+  }
+
+  function handleDragOver(e: React.DragEvent, index: number) {
+    e.preventDefault();
+    setDragOverIndex(index);
+  }
+
+  function handleDrop(index: number) {
+    if (dragIndex === null || dragIndex === index) {
+      setDragIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    setPhotos((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(dragIndex, 1);
+      next.splice(index, 0, moved);
+      return next;
+    });
+    setDragIndex(null);
+    setDragOverIndex(null);
   }
 
   async function handleGenerate() {
@@ -289,11 +340,21 @@ function WritePageContent() {
       }
 
       const result = await res.json();
-      setDraft({
+      const newDraft = {
         title: result.title,
         body: result.body,
         hashtags: result.hashtags,
-      });
+      };
+      setDraft(newDraft);
+      setVersions([{
+        version: 1,
+        title: newDraft.title,
+        body: newDraft.body,
+        hashtags: newDraft.hashtags,
+        feedback: null,
+        created_at: new Date().toISOString(),
+      }]);
+      setCurrentVersion(0);
       setUploadedPaths(paths);
       setSavedId(null);
       setQuota((prev) => (prev ? { ...prev, used: prev.used + 1 } : null));
@@ -372,6 +433,7 @@ function WritePageContent() {
           generated_body: draft.body,
           generated_hashtags: draft.hashtags,
           source: "web",
+          versions: versions.length > 0 ? versions : undefined,
         })
         .select("id")
         .single();
@@ -383,6 +445,35 @@ function WritePageContent() {
       setError(e instanceof Error ? e.message : "저장 중 오류가 발생했습니다");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleUpdate() {
+    if (!draft || !savedId) return;
+    setIsUpdating(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/posts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: savedId,
+          title: draft.title,
+          body: draft.body,
+          hashtags: draft.hashtags,
+          versions: versions.length > 0 ? versions : undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "수정 실패");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "수정 중 오류가 발생했습니다");
+    } finally {
+      setIsUpdating(false);
     }
   }
 
@@ -416,11 +507,28 @@ function WritePageContent() {
       }
 
       const result = await res.json();
-      setDraft({
+      const newDraft = {
         title: result.title,
         body: result.body,
         hashtags: result.hashtags,
-      });
+      };
+
+      // 이전 버전 보존
+      const nextVersion = versions.length + 1;
+      setVersions((prev) => [
+        ...prev,
+        {
+          version: nextVersion,
+          title: newDraft.title,
+          body: newDraft.body,
+          hashtags: newDraft.hashtags,
+          feedback: feedback.trim(),
+          created_at: new Date().toISOString(),
+        },
+      ]);
+      setCurrentVersion(0); // 최신 보기
+
+      setDraft(newDraft);
       setFeedback("");
       setSavedId(null);
       setQuota((prev) => (prev ? { ...prev, used: prev.used + 1 } : null));
@@ -468,7 +576,17 @@ function WritePageContent() {
               {photos.length > 0 && (
                 <div className="grid grid-cols-4 gap-2">
                   {photos.map((photo, i) => (
-                    <div key={i} className="group relative aspect-square">
+                    <div
+                      key={i}
+                      className={`group relative aspect-square cursor-grab active:cursor-grabbing ${
+                        dragIndex === i ? "opacity-40" : ""
+                      } ${dragOverIndex === i && dragIndex !== i ? "ring-2 ring-primary ring-offset-1" : ""}`}
+                      draggable
+                      onDragStart={() => handleDragStart(i)}
+                      onDragOver={(e) => handleDragOver(e, i)}
+                      onDrop={() => handleDrop(i)}
+                      onDragEnd={() => { setDragIndex(null); setDragOverIndex(null); }}
+                    >
                       <img
                         src={photo.preview}
                         alt={`사진 ${i + 1}`}
@@ -584,7 +702,19 @@ function WritePageContent() {
               <Card>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">AI 초안</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-base">AI 초안</CardTitle>
+                      <button
+                        onClick={() => setIsEditMode(!isEditMode)}
+                        className={`rounded-md px-2 py-0.5 text-xs font-medium transition-colors ${
+                          isEditMode
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                        }`}
+                      >
+                        {isEditMode ? "미리보기" : "편집"}
+                      </button>
+                    </div>
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" onClick={handleCopy}>
                         {copyLabel}
@@ -592,21 +722,68 @@ function WritePageContent() {
                       <Button variant="outline" size="sm" onClick={handleCopyHtml}>
                         {htmlCopyLabel}
                       </Button>
-                      <Button
-                        size="sm"
-                        onClick={handleSave}
-                        disabled={isSaving || !!savedId}
-                      >
-                        {savedId
-                          ? "저장됨"
-                          : isSaving
-                            ? "저장 중..."
-                            : "저장"}
-                      </Button>
+                      {savedId ? (
+                        <Button
+                          size="sm"
+                          onClick={handleUpdate}
+                          disabled={isUpdating}
+                        >
+                          {isUpdating ? "저장 중..." : "수정 저장"}
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={handleSave}
+                          disabled={isSaving}
+                        >
+                          {isSaving ? "저장 중..." : "저장"}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* 버전 히스토리 */}
+                  {versions.length > 1 && (
+                    <div className="flex items-center gap-2 rounded-md bg-secondary/50 px-3 py-2">
+                      <span className="text-xs font-medium text-muted-foreground">버전</span>
+                      <div className="flex gap-1">
+                        {versions.map((v) => (
+                          <button
+                            key={v.version}
+                            onClick={() => {
+                              if (v.version === versions.length) {
+                                // 최신 버전 = 현재 draft
+                                setCurrentVersion(0);
+                              } else {
+                                setCurrentVersion(v.version);
+                                setDraft({
+                                  title: v.title,
+                                  body: v.body,
+                                  hashtags: v.hashtags,
+                                });
+                              }
+                            }}
+                            className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
+                              (currentVersion === 0 && v.version === versions.length) ||
+                              currentVersion === v.version
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                            }`}
+                            title={v.feedback ? `수정 요청: ${v.feedback}` : "초안"}
+                          >
+                            v{v.version}
+                          </button>
+                        ))}
+                      </div>
+                      {currentVersion > 0 && currentVersion < versions.length && (
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          이전 버전 보기 중
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   {/* 제목 */}
                   <div>
                     <label className="mb-1 block text-xs font-medium text-muted-foreground">
@@ -625,41 +802,52 @@ function WritePageContent() {
                   {/* 본문 */}
                   <div>
                     <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                      본문
+                      본문 {isEditMode && <span className="text-muted-foreground/60">([PHOTO_N] = 사진 위치)</span>}
                     </label>
-                    <div className="space-y-3">
-                      {draft.body.split("\n\n").map((paragraph, i) => {
-                        const photoMatch = paragraph.match(
-                          /^\[PHOTO_(\d+)\]$/
-                        );
-                        if (photoMatch) {
-                          const photoIdx = parseInt(photoMatch[1]) - 1;
-                          const photo = photos[photoIdx];
-                          if (photo) {
-                            return (
-                              <div
-                                key={i}
-                                className="overflow-hidden rounded-lg"
-                              >
-                                <img
-                                  src={photo.preview}
-                                  alt={`사진 ${photoIdx + 1}`}
-                                  className="w-full"
-                                />
-                              </div>
-                            );
-                          }
+                    {isEditMode ? (
+                      <textarea
+                        value={draft.body}
+                        onChange={(e) =>
+                          setDraft({ ...draft, body: e.target.value })
                         }
-                        return (
-                          <p
-                            key={i}
-                            className="text-sm leading-relaxed text-foreground"
-                          >
-                            {paragraph}
-                          </p>
-                        );
-                      })}
-                    </div>
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-1 focus:ring-ring"
+                        rows={Math.max(15, draft.body.split("\n").length + 2)}
+                      />
+                    ) : (
+                      <div className="space-y-3">
+                        {draft.body.split("\n\n").map((paragraph, i) => {
+                          const photoMatch = paragraph.match(
+                            /^\[PHOTO_(\d+)\]$/
+                          );
+                          if (photoMatch) {
+                            const photoIdx = parseInt(photoMatch[1]) - 1;
+                            const photo = photos[photoIdx];
+                            if (photo) {
+                              return (
+                                <div
+                                  key={i}
+                                  className="overflow-hidden rounded-lg"
+                                >
+                                  <img
+                                    src={photo.preview}
+                                    alt={`사진 ${photoIdx + 1}`}
+                                    className="w-full"
+                                  />
+                                </div>
+                              );
+                            }
+                          }
+                          return (
+                            <p
+                              key={i}
+                              className="text-sm leading-relaxed text-foreground"
+                            >
+                              {paragraph}
+                            </p>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   {/* 해시태그 */}

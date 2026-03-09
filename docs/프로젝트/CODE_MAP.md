@@ -1,7 +1,7 @@
 # CODE_MAP — 코드베이스 지도
 
 > 파일 추가/삭제/이동/역할 변경 시 반드시 갱신.
-> 최종 갱신: 2026-03-08 (관리자 페이지 + 사용자 티어 관리)
+> 최종 갱신: 2026-03-09 (P0 버그 수정 + UX 개선 + 글 히스토리)
 
 ---
 
@@ -40,9 +40,11 @@
 | `app/api/persona/analyze/route.ts` | AI 페르소나 분석 API Route (POST, 2-pass Sonnet → persona_items INSERT) | ✅ **신규** |
 | `app/api/persona/feedback/route.ts` | 피드백 규칙 API Route — GET: 대기 규칙 + 히스토리 조회, POST: 규칙 승인/거절 | ✅ **신규** |
 | `app/api/bot/cookies/route.ts` | 쿠키 업로드 API Route — GET: 상태, POST: 업로드(upsert), DELETE: 삭제 | ✅ **신규** |
+| `app/api/posts/route.ts` | 글 관리 API Route — DELETE: 삭제(Storage 동시 정리), PATCH: 제목/본문/해시태그/버전 수정 | ✅ **신규** |
 | `lib/ai/analyze-persona.ts` | 페르소나 AI 분석 — 2-pass (콘텐츠 6카테고리 + 포맷팅), `analyzePersona()` | ✅ **신규** |
 | `lib/ai/analyze-feedback.ts` | 피드백 패턴 분석 — Haiku 모델, 5건 배치 → 최대 3개 규칙 도출, `analyzeFeedbackPatterns()` | ✅ **신규** |
 | `lib/render/naver-html.ts` | SmartEditor 호환 HTML 렌더러 — 인라인 CSS, 폰트 매핑, 볼드 마커, `renderToNaverHtml()` | ✅ **신규** |
+| `lib/image-compress.ts` | 클라이언트 이미지 압축/리사이즈 — Canvas API, max 1920px, JPEG 0.8. `compressImage()` | ✅ **신규** |
 | `lib/utils.ts` | cn() 유틸리티 (clsx + tailwind-merge) | ✅ |
 | `supabase/config.toml` | Supabase 로컬 개발 설정 | ✅ |
 | `supabase/migrations/00001_create_users.sql` | users + user_credentials 테이블 | ✅ 실행됨 |
@@ -55,6 +57,7 @@
 | `supabase/migrations/00008_reserve_generation_rpc.sql` | 원자적 사용량 체크+증분 RPC (`reserve_generation`, `rollback_generation`) | ✅ 실행됨 |
 | `supabase/migrations/00009_drop_user_credentials.sql` | user_credentials 테이블 삭제 (보안 — ID/PW 저장 제거) | ✅ 실행됨 |
 | `supabase/migrations/00010_bot_cookies.sql` | 쿠키 업로드 테이블 (bot_cookies) — 웹에서 업로드, 봇이 읽어 사용 | 미실행 |
+| `supabase/migrations/00011_add_versions_column.sql` | generation_queue에 `versions` JSONB 컬럼 추가 (글 히스토리) | 미실행 |
 | `package.json` | 의존성 (Next 14, Supabase, shadcn/ui, react-hook-form, zod) | ✅ |
 
 ### 작업 문서

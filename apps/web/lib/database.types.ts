@@ -210,6 +210,7 @@ export interface Database {
           error_message: string | null;
           retry_count: number;
           source: "web" | "telegram";
+          versions: Json;
           created_at: string;
           updated_at: string;
         };
@@ -237,6 +238,7 @@ export interface Database {
           generated_html?: string | null;
           generated_hashtags?: Json;
           source?: "web" | "telegram";
+          versions?: Json;
         };
         Update: {
           status?:
@@ -257,6 +259,7 @@ export interface Database {
           error_message?: string | null;
           retry_count?: number;
           source?: "web" | "telegram";
+          versions?: Json;
         };
       };
     };

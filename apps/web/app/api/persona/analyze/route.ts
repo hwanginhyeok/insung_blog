@@ -72,29 +72,53 @@ export async function POST(req: NextRequest) {
 
   // 4. AI 분석 실행
   try {
-    const items = await analyzePersona(posts, fontSummary);
+    const { items, warnings } = await analyzePersona(posts, fontSummary);
 
     if (items.length === 0) {
       throw new Error("분석 결과가 없습니다. 게시물 내용을 확인해주세요.");
     }
 
-    // 5. persona_items 일괄 INSERT
-    const insertRows = items.map((item) => ({
-      persona_id: personaId,
-      category: item.category,
-      key: item.key,
-      value: item.value,
-      priority: item.priority,
-      source: "ai" as const,
-    }));
+    // 5. 콘텐츠 항목과 포맷팅 항목을 분리 저장 (한쪽 실패 시 다른 쪽 보존)
+    const contentRows = items
+      .filter((item) => item.category !== "formatting")
+      .map((item) => ({
+        persona_id: personaId,
+        category: item.category,
+        key: item.key,
+        value: item.value,
+        priority: item.priority,
+        source: "ai" as const,
+      }));
 
-    const { error: insertError } = await admin
-      .from("persona_items")
-      .insert(insertRows);
+    const formattingRows = items
+      .filter((item) => item.category === "formatting")
+      .map((item) => ({
+        persona_id: personaId,
+        category: item.category,
+        key: item.key,
+        value: item.value,
+        priority: item.priority,
+        source: "ai" as const,
+      }));
 
-    if (insertError) {
-      console.error("persona_items INSERT 실패:", insertError);
-      throw new Error("분석 결과 저장 실패");
+    if (contentRows.length > 0) {
+      const { error: contentErr } = await admin
+        .from("persona_items")
+        .insert(contentRows);
+      if (contentErr) {
+        console.error("콘텐츠 항목 INSERT 실패:", contentErr);
+        throw new Error("콘텐츠 분석 결과 저장 실패");
+      }
+    }
+
+    if (formattingRows.length > 0) {
+      const { error: fmtErr } = await admin
+        .from("persona_items")
+        .insert(formattingRows);
+      if (fmtErr) {
+        console.error("포맷팅 항목 INSERT 실패:", fmtErr);
+        warnings.push("포맷팅 항목 저장 실패 — 페르소나 페이지에서 수동 추가해주세요");
+      }
     }
 
     // 6. crawl_status → 'done'
@@ -106,6 +130,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       personaId,
       itemCount: items.length,
+      formattingCount: formattingRows.length,
+      warnings,
       items,
     });
   } catch (e) {

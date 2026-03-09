@@ -304,22 +304,43 @@ priority는 해당 패턴의 일관성 (1~10):
  * Pass 1: 콘텐츠 (voice, emoji, structure, ending, forbidden, custom)
  * Pass 2: 포맷팅 (formatting — HTML 메타데이터 기반)
  */
+export interface AnalysisResult {
+  items: PersonaItem[];
+  warnings: string[];
+}
+
 export async function analyzePersona(
   posts: CrawledPost[],
   fontSummary: CrawlResult["fontSummary"]
-): Promise<PersonaItem[]> {
+): Promise<AnalysisResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY가 설정되지 않았습니다");
   }
 
   const client = new Anthropic({ apiKey });
+  const warnings: string[] = [];
 
   // Pass 1: 콘텐츠 분석 (Sonnet)
   const contentItems = await analyzeContent(client, posts);
+  console.log(`[페르소나] Pass 1 콘텐츠 분석 완료: ${contentItems.length}건`);
 
-  // Pass 2: 포맷팅 분석 (Sonnet)
-  const formattingItems = await analyzeFormatting(client, posts, fontSummary);
+  // Pass 2: 포맷팅 분석 (Sonnet) — 실패 시 1회 재시도
+  let formattingItems = await analyzeFormatting(client, posts, fontSummary);
+  console.log(`[페르소나] Pass 2 포맷팅 분석 완료: ${formattingItems.length}건`);
 
-  return [...contentItems, ...formattingItems];
+  if (formattingItems.length === 0) {
+    console.warn("[페르소나] Pass 2 포맷팅 0건 — 1회 재시도");
+    formattingItems = await analyzeFormatting(client, posts, fontSummary);
+    console.log(`[페르소나] Pass 2 재시도 결과: ${formattingItems.length}건`);
+
+    if (formattingItems.length === 0) {
+      warnings.push("포맷팅 분석 실패 — 수동으로 formatting 항목을 추가해주세요");
+    }
+  }
+
+  return {
+    items: [...contentItems, ...formattingItems],
+    warnings,
+  };
 }
