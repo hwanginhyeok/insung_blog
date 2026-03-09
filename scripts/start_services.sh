@@ -20,8 +20,13 @@ tmux send-keys -t $SESSION:api "source .venv/bin/activate && uvicorn api_server:
 tmux new-window -t $SESSION -n "telegram" -c "$PROJECT_DIR"
 tmux send-keys -t $SESSION:telegram "source .venv/bin/activate && python telegram_bot_simple.py" Enter
 
+# 명령 큐 워커 (창 2)
+tmux new-window -t $SESSION -n "worker" -c "$PROJECT_DIR"
+tmux send-keys -t $SESSION:worker "source .venv/bin/activate && python command_worker.py" Enter
+
 echo "서비스 시작 완료!"
 echo "  API 서버:    tmux select-window -t $SESSION:api"
 echo "  텔레그램 봇: tmux select-window -t $SESSION:telegram"
+echo "  명령 워커:   tmux select-window -t $SESSION:worker"
 echo "  확인:        tmux attach -t $SESSION"
 echo "  종료:        tmux kill-session -t $SESSION"

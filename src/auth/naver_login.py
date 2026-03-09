@@ -92,13 +92,21 @@ async def _is_logged_in(page: Page) -> bool:
 
 
 async def _save_cookies(context: BrowserContext) -> None:
-    """현재 세션 쿠키를 파일로 저장 (소유자만 읽기/쓰기)"""
+    """현재 세션 쿠키를 파일로 저장 (소유자만 읽기/쓰기) + Supabase 동기화"""
     COOKIES_PATH.parent.mkdir(parents=True, exist_ok=True)
     cookies = await context.cookies()
     with open(COOKIES_PATH, "w", encoding="utf-8") as f:
         json.dump(cookies, f, ensure_ascii=False, indent=2)
     os.chmod(COOKIES_PATH, 0o600)
     logger.info(f"쿠키 저장 완료: {COOKIES_PATH}")
+
+    # Supabase 양방향 동기화 (실패해도 로컬 저장은 이미 완료)
+    try:
+        from src.storage.supabase_client import save_bot_cookies_sb
+        save_bot_cookies_sb(cookies)
+        logger.info("쿠키 Supabase 동기화 완료")
+    except Exception as e:
+        logger.warning(f"쿠키 Supabase 동기화 실패 (로컬은 정상): {e}")
 
 
 def _normalize_cookies(cookies: list[dict]) -> list[dict]:

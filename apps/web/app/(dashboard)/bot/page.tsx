@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -57,6 +57,23 @@ interface CookieStatus {
   cookieCount?: number;
 }
 
+interface BotCommandRecord {
+  id: string;
+  command: "run" | "execute" | "retry";
+  status: "pending" | "running" | "completed" | "failed";
+  result: Record<string, unknown> | null;
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+const COMMAND_LABELS: Record<string, string> = {
+  run: "봇 실행",
+  execute: "댓글 게시",
+  retry: "재시도",
+};
+
 const defaultSettings: BotSettings = {
   approval_mode: "manual",
   is_active: true,
@@ -109,6 +126,74 @@ export default function BotPage() {
   const [cookieJson, setCookieJson] = useState("");
   const [cookieUploading, setCookieUploading] = useState(false);
   const [cookieMsg, setCookieMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+
+  // 봇 명령 제어
+  const [botCommands, setBotCommands] = useState<BotCommandRecord[]>([]);
+  const [activeCommand, setActiveCommand] = useState<BotCommandRecord | null>(null);
+  const [sendingCommand, setSendingCommand] = useState(false);
+  const [commandError, setCommandError] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // 봇 명령 폴링 (5초)
+  const fetchCommands = useCallback(async () => {
+    try {
+      const res = await fetch("/api/bot/command");
+      if (res.ok) {
+        const data = await res.json();
+        setBotCommands(data.commands || []);
+        setActiveCommand(data.activeCommand || null);
+      }
+    } catch {
+      // 폴링 실패는 무시
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCommands();
+    const interval = setInterval(fetchCommands, 5000);
+    return () => clearInterval(interval);
+  }, [fetchCommands]);
+
+  // running 상태일 때 경과 시간 카운터
+  useEffect(() => {
+    if (activeCommand?.status === "running" && activeCommand.started_at) {
+      const start = new Date(activeCommand.started_at).getTime();
+      const tick = () => setElapsed(Math.floor((Date.now() - start) / 1000));
+      tick();
+      elapsedRef.current = setInterval(tick, 1000);
+      return () => {
+        if (elapsedRef.current) clearInterval(elapsedRef.current);
+      };
+    } else {
+      setElapsed(0);
+      if (elapsedRef.current) clearInterval(elapsedRef.current);
+    }
+  }, [activeCommand?.status, activeCommand?.started_at]);
+
+  // 명령 전송
+  async function sendCommand(command: "run" | "execute" | "retry") {
+    setSendingCommand(true);
+    setCommandError(null);
+    try {
+      const res = await fetch("/api/bot/command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCommandError(data.error || "명령 전송 실패");
+      } else {
+        // 즉시 폴링 갱신
+        await fetchCommands();
+      }
+    } catch {
+      setCommandError("네트워크 오류");
+    } finally {
+      setSendingCommand(false);
+    }
+  }
 
   // 데이터 로드
   const fetchData = useCallback(async () => {
@@ -308,6 +393,99 @@ export default function BotPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── 봇 제어 ──────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>봇 제어</CardTitle>
+          <CardDescription>
+            로컬 워커에 명령을 전송합니다 (10초 이내 실행)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => sendCommand("run")}
+              disabled={sendingCommand || !!activeCommand}
+            >
+              {sendingCommand ? "전송 중..." : "봇 실행"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => sendCommand("execute")}
+              disabled={sendingCommand || !!activeCommand}
+            >
+              댓글 게시
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => sendCommand("retry")}
+              disabled={sendingCommand || !!activeCommand}
+            >
+              재시도
+            </Button>
+          </div>
+
+          {commandError && (
+            <p className="text-sm text-red-500">{commandError}</p>
+          )}
+
+          {/* 활성 명령 상태 */}
+          {activeCommand && (
+            <div className="rounded-lg border bg-muted/30 p-3">
+              {activeCommand.status === "pending" && (
+                <p className="text-sm">
+                  <span className="mr-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-yellow-500" />
+                  대기 중: {COMMAND_LABELS[activeCommand.command] || activeCommand.command}...
+                </p>
+              )}
+              {activeCommand.status === "running" && (
+                <p className="text-sm">
+                  <span className="mr-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-blue-500" />
+                  진행 중: {COMMAND_LABELS[activeCommand.command] || activeCommand.command}...{" "}
+                  <span className="font-mono text-muted-foreground">({elapsed}초 경과)</span>
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* 최근 완료 명령 */}
+          {botCommands.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-muted-foreground">최근 명령</p>
+              {botCommands
+                .filter((c) => c.status === "completed" || c.status === "failed")
+                .slice(0, 3)
+                .map((c) => (
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between rounded border px-3 py-1.5 text-sm"
+                  >
+                    <span className="text-muted-foreground">
+                      {timeAgo(c.created_at)}
+                    </span>
+                    <span>
+                      {c.status === "completed" ? (
+                        <span className="text-green-600">
+                          {COMMAND_LABELS[c.command]} 완료
+                        </span>
+                      ) : (
+                        <span className="text-red-500">
+                          {COMMAND_LABELS[c.command]} 실패
+                        </span>
+                      )}
+                    </span>
+                    <span className="max-w-[200px] truncate text-xs text-muted-foreground">
+                      {c.status === "completed" && c.result
+                        ? (c.result as Record<string, unknown>).message as string || ""
+                        : c.error_message || ""}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── 네이버 쿠키 ────────────────────────────── */}
       <Card>

@@ -11,7 +11,7 @@ service_role 키 사용 (RLS 우회). 서버 사이드 전용.
 """
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import lru_cache
 
 from supabase import create_client, Client
@@ -233,6 +233,26 @@ def get_pending_count_sb() -> int:
 
 
 # ── bot_cookies (쿠키 업로드) ─────────────────────────────────────────────
+
+
+def save_bot_cookies_sb(cookies: list[dict]) -> bool:
+    """로컬 로그인 성공 시 쿠키를 Supabase에 업로드 (양방향 동기화)."""
+    try:
+        sb = get_supabase()
+        user_id = get_admin_user_id()
+        sb.table("bot_cookies").upsert(
+            {
+                "user_id": user_id,
+                "cookie_data": cookies,
+                "uploaded_at": datetime.now(timezone.utc).isoformat(),
+            },
+            on_conflict="user_id",
+        ).execute()
+        logger.info(f"쿠키 Supabase 업로드 완료: {len(cookies)}개")
+        return True
+    except Exception as e:
+        logger.error(f"쿠키 Supabase 업로드 실패: {e}")
+        return False
 
 
 def get_bot_cookies_sb() -> list[dict] | None:

@@ -1,0 +1,349 @@
+"""
+명령 큐 워커 — Supabase bot_commands 테이블을 10초마다 폴링하여 실행.
+
+웹 /bot 페이지에서 버튼 클릭 → bot_commands INSERT →
+이 워커가 감지 → 실행 → 결과 UPDATE → 웹에서 폴링으로 상태 표시.
+
+실행:
+  source .venv/bin/activate
+  python command_worker.py
+"""
+
+import asyncio
+import os
+import signal
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+# 프로젝트 루트를 sys.path에 추가
+sys.path.insert(0, str(Path(__file__).parent))
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from src.storage.supabase_client import get_supabase, get_admin_user_id
+from src.utils.logger import setup_logger
+
+logger = setup_logger("command_worker")
+
+POLL_INTERVAL = 10  # 초
+
+# 종료 시그널 처리
+_shutdown = False
+
+
+def _handle_signal(signum, frame):
+    global _shutdown
+    logger.info(f"종료 시그널 수신 ({signum}), 현재 작업 완료 후 종료...")
+    _shutdown = True
+
+
+signal.signal(signal.SIGINT, _handle_signal)
+signal.signal(signal.SIGTERM, _handle_signal)
+
+
+# ── 명령 감지 ──────────────────────────────────────────────────────────────
+
+
+def fetch_pending_command() -> dict | None:
+    """pending 상태인 가장 오래된 명령 1개 가져오기."""
+    try:
+        sb = get_supabase()
+        result = (
+            sb.table("bot_commands")
+            .select("*")
+            .eq("status", "pending")
+            .order("created_at")
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            return result.data[0]
+    except Exception as e:
+        logger.error(f"명령 조회 실패: {e}")
+    return None
+
+
+def update_command(command_id: str, **kwargs) -> None:
+    """명령 상태 업데이트."""
+    try:
+        sb = get_supabase()
+        sb.table("bot_commands").update(kwargs).eq("id", command_id).execute()
+    except Exception as e:
+        logger.error(f"명령 상태 업데이트 실패: {e}")
+
+
+def mark_running(command_id: str) -> None:
+    """명령을 running 상태로 변경."""
+    update_command(
+        command_id,
+        status="running",
+        started_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
+def mark_completed(command_id: str, result: dict | None = None) -> None:
+    """명령을 completed 상태로 변경."""
+    update_command(
+        command_id,
+        status="completed",
+        result=result,
+        completed_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
+def mark_failed(command_id: str, error_message: str) -> None:
+    """명령을 failed 상태로 변경."""
+    update_command(
+        command_id,
+        status="failed",
+        error_message=error_message[:500],
+        completed_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
+# ── 명령 실행 핸들러 ──────────────────────────────────────────────────────
+
+
+async def handle_run() -> dict:
+    """봇 1회 실행 (orchestrator.run)."""
+    from src.orchestrator import run
+
+    logger.info("▶ 봇 실행 시작")
+    await run(dry_run=False)
+    logger.info("✓ 봇 실행 완료")
+    return {"message": "봇 실행 완료"}
+
+
+async def handle_execute() -> dict:
+    """승인된 댓글 일괄 게시."""
+    from playwright.async_api import async_playwright
+
+    from src.auth.naver_login import ensure_login
+    from src.commenter.comment_writer import write_comment
+    from src.storage.database import add_to_retry_queue
+    from src.storage.supabase_client import (
+        get_pending_comments_sb,
+        update_pending_status_sb,
+    )
+    from src.utils.browser import create_browser
+
+    approved = get_pending_comments_sb("approved")
+    if not approved:
+        return {"message": "승인된 댓글 없음", "total": 0, "success": 0, "failed": 0}
+
+    naver_id = os.environ.get("NAVER_ID", "")
+    naver_pw = os.environ.get("NAVER_PW", "")
+
+    if not all([naver_id, naver_pw]):
+        raise RuntimeError(".env 인증 정보 누락 (NAVER_ID, NAVER_PW)")
+
+    total = len(approved)
+    success_count = 0
+    failed_count = 0
+
+    logger.info(f"▶ 댓글 게시 시작: 총 {total}개")
+
+    async with async_playwright() as pw:
+        browser, context, page = await create_browser(pw, headless=True)
+
+        try:
+            logged_in = await ensure_login(context, page, naver_id, naver_pw)
+            if not logged_in:
+                raise RuntimeError("네이버 로그인 실패")
+
+            for i, comment in enumerate(approved, 1):
+                comment_id = comment["id"]
+                blog_id = comment["blog_id"]
+                post_url = comment["post_url"]
+                post_title = comment["post_title"]
+                comment_text = comment["comment_text"]
+
+                logger.info(f"▶ [{i}/{total}] {blog_id} 댓글 작성 중...")
+
+                try:
+                    ok, _ = await write_comment(
+                        page=page,
+                        post_url=post_url,
+                        post_title=post_title,
+                        dry_run=False,
+                        comment_text=comment_text,
+                    )
+                    if ok:
+                        update_pending_status_sb(comment_id, "posted", decided_by="worker")
+                        success_count += 1
+                        logger.info(f"✓ [{i}/{total}] 성공: {blog_id}")
+                    else:
+                        update_pending_status_sb(comment_id, "failed", decided_by="worker")
+                        add_to_retry_queue(blog_id, post_url, post_title, "댓글 작성 실패")
+                        failed_count += 1
+                        logger.warning(f"✗ [{i}/{total}] 실패: {blog_id}")
+                except Exception as e:
+                    update_pending_status_sb(comment_id, "failed", decided_by="worker")
+                    add_to_retry_queue(blog_id, post_url, post_title, str(e)[:100])
+                    failed_count += 1
+                    logger.error(f"✗ [{i}/{total}] 예외: {e}")
+
+                if i < total:
+                    await asyncio.sleep(3)
+        finally:
+            await browser.close()
+
+    return {
+        "message": f"댓글 게시 완료: 성공 {success_count} / 실패 {failed_count}",
+        "total": total,
+        "success": success_count,
+        "failed": failed_count,
+    }
+
+
+async def handle_retry() -> dict:
+    """재시도 큐 처리."""
+    from playwright.async_api import async_playwright
+
+    from src.auth.naver_login import ensure_login
+    from src.commenter.comment_writer import write_comment
+    from src.storage.database import (
+        add_to_retry_queue,
+        get_retry_targets,
+        record_comment,
+        remove_from_retry_queue,
+    )
+    from src.utils.browser import create_browser
+
+    targets = get_retry_targets()
+    if not targets:
+        return {"message": "재시도 대상 없음", "total": 0, "success": 0, "failed": 0}
+
+    naver_id = os.environ.get("NAVER_ID", "")
+    naver_pw = os.environ.get("NAVER_PW", "")
+
+    if not all([naver_id, naver_pw]):
+        raise RuntimeError(".env 인증 정보 누락 (NAVER_ID, NAVER_PW)")
+
+    total = len(targets)
+    success_count = 0
+    failed_count = 0
+
+    logger.info(f"▶ 재시도 실행 시작: 총 {total}건")
+
+    async with async_playwright() as pw:
+        browser, context, page = await create_browser(pw, headless=True)
+
+        try:
+            logged_in = await ensure_login(context, page, naver_id, naver_pw)
+            if not logged_in:
+                raise RuntimeError("네이버 로그인 실패")
+
+            for i, target in enumerate(targets, 1):
+                logger.info(f"▶ 재시도 [{i}/{total}] {target['blog_id']}")
+                try:
+                    ok, _ = await write_comment(
+                        page=page,
+                        post_url=target["post_url"],
+                        post_title=target["post_title"],
+                        dry_run=False,
+                        comment_text=None,
+                        context=context,
+                        naver_id=naver_id,
+                        naver_pw=naver_pw,
+                    )
+                    if ok:
+                        remove_from_retry_queue(target["post_url"])
+                        record_comment(
+                            target["post_url"], target["blog_id"],
+                            target["post_title"], "", True,
+                        )
+                        success_count += 1
+                        logger.info(f"✓ 재시도 [{i}/{total}] 성공")
+                    else:
+                        add_to_retry_queue(
+                            target["blog_id"], target["post_url"],
+                            target["post_title"], "재시도 실패",
+                        )
+                        failed_count += 1
+                        logger.warning(f"✗ 재시도 [{i}/{total}] 실패")
+                except Exception as e:
+                    add_to_retry_queue(
+                        target["blog_id"], target["post_url"],
+                        target["post_title"], str(e)[:100],
+                    )
+                    failed_count += 1
+                    logger.error(f"✗ 재시도 [{i}/{total}] 예외: {e}")
+
+                if i < total:
+                    await asyncio.sleep(3)
+        finally:
+            await browser.close()
+
+    return {
+        "message": f"재시도 완료: 성공 {success_count} / 실패 {failed_count}",
+        "total": total,
+        "success": success_count,
+        "failed": failed_count,
+    }
+
+
+# ── 명령 핸들러 매핑 ──
+
+
+_HANDLERS = {
+    "run": handle_run,
+    "execute": handle_execute,
+    "retry": handle_retry,
+}
+
+
+# ── 메인 폴링 루프 ────────────────────────────────────────────────────────
+
+
+async def process_command(cmd: dict) -> None:
+    """명령 1개를 실행하고 결과를 DB에 기록."""
+    command_id = cmd["id"]
+    command_type = cmd["command"]
+    handler = _HANDLERS.get(command_type)
+
+    if not handler:
+        mark_failed(command_id, f"알 수 없는 명령: {command_type}")
+        return
+
+    mark_running(command_id)
+    logger.info(f"━━━ 명령 실행: {command_type} (id={command_id[:8]}...) ━━━")
+
+    try:
+        result = await handler()
+        mark_completed(command_id, result)
+        logger.info(f"━━━ 명령 완료: {command_type} → {result.get('message', '')} ━━━")
+    except Exception as e:
+        logger.error(f"━━━ 명령 실패: {command_type} → {e} ━━━", exc_info=True)
+        mark_failed(command_id, str(e)[:500])
+
+
+async def main_loop() -> None:
+    """10초 간격 폴링 루프."""
+    logger.info("╔════════════════════════════════════════════╗")
+    logger.info("║   명령 큐 워커 시작 (10초 간격 폴링)        ║")
+    logger.info("╚════════════════════════════════════════════╝")
+
+    # 시작 시 admin user_id 캐싱 (실패하면 즉시 종료)
+    get_admin_user_id()
+
+    while not _shutdown:
+        cmd = fetch_pending_command()
+        if cmd:
+            await process_command(cmd)
+        else:
+            # pending 없으면 대기
+            for _ in range(POLL_INTERVAL):
+                if _shutdown:
+                    break
+                await asyncio.sleep(1)
+
+    logger.info("워커 정상 종료")
+
+
+if __name__ == "__main__":
+    asyncio.run(main_loop())
