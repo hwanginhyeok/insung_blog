@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { BLOG_CATEGORIES } from "@/lib/constants";
 
 // ── 타입 ──
 
@@ -32,7 +33,7 @@ interface CompletedPost {
   created_at: string;
 }
 
-const CATEGORIES = ["맛집", "카페", "여행", "일상", "기타"];
+const CATEGORIES = BLOG_CATEGORIES;
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
 const STATUS_COLORS: Record<string, string> = {

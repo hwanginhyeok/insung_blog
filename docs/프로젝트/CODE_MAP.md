@@ -32,6 +32,7 @@
 | `lib/supabase.ts` | 브라우저용 Supabase 클라이언트 | ✅ |
 | `lib/supabase-server.ts` | 서버 컴포넌트용 Supabase 클라이언트 (쿠키 인증) | ✅ |
 | `lib/supabase-admin.ts` | 관리자 전용 Supabase 클라이언트 (service_role) | ✅ |
+| `lib/constants.ts` | 공유 상수 (`BLOG_CATEGORIES` — 캘린더/페르소나/AI 생성 공통) | ✅ **신규** |
 | `lib/database.types.ts` | Supabase 테이블 TypeScript 타입 정의 (tier/usage 컬럼 포함) | ✅ 수동 |
 | `lib/tier.ts` | 구독 티어 정의 + 원자적 사용량 예약/롤백 (`reserveUsage` RPC 기반, 서버 전용) | ✅ |
 | `lib/hooks/use-user.ts` | 현재 사용자 프로필 + role 훅 (`useUser()` → `{ user, loading, isAdmin }`) | ✅ **신규** |

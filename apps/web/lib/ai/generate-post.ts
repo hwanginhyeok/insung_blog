@@ -11,11 +11,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import fs from "fs";
 import path from "path";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { BLOG_CATEGORIES } from "@/lib/constants";
 
 // ── 설정 상수 (Python config/settings.py 대응) ──
 const CONTENT_MODEL = "claude-haiku-4-5-20251001";
 const HASHTAG_MODEL = "claude-haiku-4-5-20251001";
-const CATEGORIES = ["맛집", "카페", "여행", "일상", "기타"] as const;
+const CATEGORIES = BLOG_CATEGORIES;
 const DEFAULT_CATEGORY = "일상";
 const POST_BODY_MIN_CHARS = 300;
 const POST_BODY_MAX_CHARS = 1500;

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { BLOG_CATEGORIES } from "@/lib/constants";
 
 // ── 상수 ──
 
@@ -27,8 +28,6 @@ const CATEGORIES = [
 ] as const;
 
 type CategoryKey = (typeof CATEGORIES)[number]["key"];
-
-const BLOG_CATEGORIES = ["맛집", "카페", "여행", "일상", "기타"] as const;
 
 // ── 타입 ──
 
@@ -334,47 +333,52 @@ export default function PersonaDetailPage() {
     if (!persona) return;
     setSavingCategory(blogCategory);
 
-    const supabase = createClient();
-    const text = categoryPrompts[blogCategory]?.trim() || "";
-    const existingId = categoryPromptIds[blogCategory];
+    try {
+      const supabase = createClient();
+      const text = categoryPrompts[blogCategory]?.trim() || "";
+      const existingId = categoryPromptIds[blogCategory];
 
-    if (existingId) {
-      if (text) {
-        // 업데이트
-        await supabase
+      if (existingId) {
+        if (text) {
+          // 업데이트
+          await supabase
+            .from("persona_items")
+            .update({ value: text })
+            .eq("id", existingId);
+        } else {
+          // 빈 텍스트면 삭제
+          await supabase.from("persona_items").delete().eq("id", existingId);
+          setCategoryPromptIds((prev) => {
+            const next = { ...prev };
+            delete next[blogCategory];
+            return next;
+          });
+        }
+      } else if (text) {
+        // 신규 생성
+        const { data } = await supabase
           .from("persona_items")
-          .update({ value: text })
-          .eq("id", existingId);
-      } else {
-        // 빈 텍스트면 삭제
-        await supabase.from("persona_items").delete().eq("id", existingId);
-        setCategoryPromptIds((prev) => {
-          const next = { ...prev };
-          delete next[blogCategory];
-          return next;
-        });
-      }
-    } else if (text) {
-      // 신규 생성
-      const { data } = await supabase
-        .from("persona_items")
-        .insert({
-          persona_id: persona.id,
-          category: "category_prompt",
-          key: blogCategory,
-          value: text,
-          priority: 5,
-          source: "user",
-        })
-        .select("id")
-        .single();
+          .insert({
+            persona_id: persona.id,
+            category: "category_prompt",
+            key: blogCategory,
+            value: text,
+            priority: 5,
+            source: "user",
+          })
+          .select("id")
+          .single();
 
-      if (data) {
-        setCategoryPromptIds((prev) => ({ ...prev, [blogCategory]: data.id }));
+        if (data) {
+          setCategoryPromptIds((prev) => ({ ...prev, [blogCategory]: data.id }));
+        }
       }
+    } catch (e) {
+      console.error("카테고리 지시 저장 실패:", e);
+      setError("카테고리 지시 저장에 실패했습니다");
+    } finally {
+      setSavingCategory(null);
     }
-
-    setSavingCategory(null);
   }
 
   // ── 페르소나 삭제 ──

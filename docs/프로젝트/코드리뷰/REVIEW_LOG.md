@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-03-09 — CAL-01 캘린더 클릭편집 + UX-08 카테고리별 프롬프트
+
+- **TASK**: CAL-01, UX-08
+- **변경 파일**: calendar/page.tsx, generate-post.ts, persona/[id]/page.tsx
+- **이슈 요약**: Critical 0 / Major 0 / Minor 2
+
+### 수정 내역
+
+| # | 심각도 | 이슈 | 수정 |
+|---|--------|------|------|
+| 1 | Minor | `saveCategoryPrompt()` try/catch 없음 — Supabase 실패 시 무피드백 | try/catch 추가 + 기존 error 상태로 에러 표시 |
+| 2 | Minor | `BLOG_CATEGORIES` 3파일 중복 정의 | `lib/constants.ts` 공유 상수 추출, 3파일에서 import |
+
+- **타입 체크**: `tsc --noEmit` 통과
+- **판정**: 수정 후 머지
+
+---
+
 ## 2026-03-09 — P3 확장 기능 보안 수정 (6건)
 
 - **TASK**: P3 코드리뷰 후속 수정
