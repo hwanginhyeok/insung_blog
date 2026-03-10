@@ -154,8 +154,9 @@ Supabase (공유 제어 평면)
 |--------|------|------|
 | 댓글 봇 (Cron) | ✅ 등록됨 | 평일 20:30, 주말 13:30 |
 | 텔레그램 봇 | ✅ 실행 중 | tmux blog:telegram (03-08 재시작) |
-| API 서버 | ✅ 실행 중 | tmux blog:api, 포트 8001 (03-08 재시작) |
+| API 서버 | ✅ 실행 중 | tmux blog:api, 포트 8001 (03-10 확인) |
 | 웹 대시보드 (/bot) | ✅ 완료 | 상태·승인·설정 통합 UI |
+| Next.js 웹앱 | ✅ 실행 중 | localhost:3002 (03-10 시작, 3000/3001 사용 중) |
 
 ### W6: 댓글 봇 웹 통합 — ✅ 완료
 
@@ -298,4 +299,19 @@ Supabase (공유 제어 평면)
 | W7-06 | `start_services.sh` worker 창 추가 | ✅ 완료 | tmux blog:worker (03-09) |
 | W7-07 | E2E 테스트 (웹 버튼 → 워커 실행 → 결과 표시) | ✅ 완료 | pending→running→completed 전이 확인 (03-09) |
 
-*마지막 업데이트: 2026-03-09 (W7 웹 봇 제어 + 쿠키 양방향 동기화)*
+### W7-BUG: 워커 중복 실행 방지 — ✅ 완료
+
+> ojh919 블로그에 댓글 2중 게시 발생 → 원인: 워커 다중 실행 + race condition
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| BUG-01 | pidfile 잠금 (`fcntl.flock`) | ✅ 완료 | `data/worker.lock`, 프로세스 종료 시 자동 해제 (03-10) |
+| BUG-02 | atomic claim (`claim_command()`) | ✅ 완료 | `.eq("status", "pending")` 조건부 UPDATE (03-10) |
+| BUG-03 | `start_services.sh` 안전장치 | ✅ 완료 | 워커 시작 전 `pkill -f "command_worker.py"` (03-10) |
+
+**방어 레이어 3중:**
+1. `start_services.sh` → 서비스 재시작 시 기존 워커 종료
+2. `_acquire_lock()` → 프로세스 수준 중복 실행 차단
+3. `claim_command()` → DB 수준 atomic claim으로 race condition 제거
+
+*마지막 업데이트: 2026-03-10 (W7-BUG 워커 중복 실행 방지)*

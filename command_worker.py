@@ -10,6 +10,7 @@
 """
 
 import asyncio
+import fcntl
 import os
 import signal
 import sys
@@ -43,6 +44,22 @@ def _handle_signal(signum, frame):
 
 signal.signal(signal.SIGINT, _handle_signal)
 signal.signal(signal.SIGTERM, _handle_signal)
+
+LOCK_FILE = Path(__file__).parent / "data" / "worker.lock"
+
+
+def _acquire_lock():
+    """pidfile 잠금으로 워커 중복 실행 방지. 이미 실행 중이면 즉시 종료."""
+    LOCK_FILE.parent.mkdir(exist_ok=True)
+    fd = open(LOCK_FILE, "w")
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fd.write(str(os.getpid()))
+        fd.flush()
+        return fd  # fd를 반환해야 잠금 유지 (GC 방지)
+    except BlockingIOError:
+        logger.error("이미 다른 워커가 실행 중 — 종료")
+        sys.exit(1)
 
 
 # ── 명령 감지 ──────────────────────────────────────────────────────────────
@@ -103,6 +120,34 @@ def mark_failed(command_id: str, error_message: str) -> None:
         error_message=error_message[:500],
         completed_at=datetime.now(timezone.utc).isoformat(),
     )
+
+
+def claim_command() -> dict | None:
+    """pending 명령을 atomic하게 claim (SELECT 조건부 UPDATE)."""
+    cmd = fetch_pending_command()
+    if not cmd:
+        return None
+
+    # status='pending' 조건부 UPDATE — 다른 워커가 먼저 가져갔으면 0건 매치
+    try:
+        sb = get_supabase()
+        result = (
+            sb.table("bot_commands")
+            .update({
+                "status": "running",
+                "started_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("id", cmd["id"])
+            .eq("status", "pending")
+            .execute()
+        )
+        if not result.data:
+            logger.warning(f"명령 선점 실패 (다른 워커가 먼저 처리): {cmd['id'][:8]}")
+            return None
+        return result.data[0]
+    except Exception as e:
+        logger.error(f"명령 claim 실패: {e}")
+        return None
 
 
 # ── 명령 실행 핸들러 ──────────────────────────────────────────────────────
@@ -301,7 +346,7 @@ _HANDLERS = {
 
 
 async def process_command(cmd: dict) -> None:
-    """명령 1개를 실행하고 결과를 DB에 기록."""
+    """명령 1개를 실행하고 결과를 DB에 기록. (claim_command()에서 이미 running 상태)"""
     command_id = cmd["id"]
     command_type = cmd["command"]
     handler = _HANDLERS.get(command_type)
@@ -310,7 +355,6 @@ async def process_command(cmd: dict) -> None:
         mark_failed(command_id, f"알 수 없는 명령: {command_type}")
         return
 
-    mark_running(command_id)
     logger.info(f"━━━ 명령 실행: {command_type} (id={command_id[:8]}...) ━━━")
 
     try:
@@ -324,6 +368,8 @@ async def process_command(cmd: dict) -> None:
 
 async def main_loop() -> None:
     """10초 간격 폴링 루프."""
+    _lock_fd = _acquire_lock()  # noqa: F841 — 변수 유지해야 잠금 유지
+
     logger.info("╔════════════════════════════════════════════╗")
     logger.info("║   명령 큐 워커 시작 (10초 간격 폴링)        ║")
     logger.info("╚════════════════════════════════════════════╝")
@@ -332,7 +378,7 @@ async def main_loop() -> None:
     get_admin_user_id()
 
     while not _shutdown:
-        cmd = fetch_pending_command()
+        cmd = claim_command()
         if cmd:
             await process_command(cmd)
         else:

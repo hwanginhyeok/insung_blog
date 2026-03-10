@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-03-10 — W7-BUG 워커 중복 실행 방지
+
+- **TASK**: W7-BUG
+- **변경 파일**: command_worker.py, scripts/start_services.sh
+- **이슈 요약**: Critical 0 / Major 0 / Minor 0
+- **조치**: 이슈 없음
+- **구문 검증**: `py_compile` 통과
+- **판정**: 머지 가능
+
+---
+
 ## 2026-03-09 — CAL-01 캘린더 클릭편집 + UX-08 카테고리별 프롬프트
 
 - **TASK**: CAL-01, UX-08
