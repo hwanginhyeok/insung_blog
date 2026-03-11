@@ -12,4 +12,6 @@ __pycache__/
 # 디버그 아티팩트 (스크린샷, HTML 덤프)
 *.png
 *.txt
+*.log
 !requirements.txt
+output/
