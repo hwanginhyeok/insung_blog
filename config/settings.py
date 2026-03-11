@@ -27,6 +27,16 @@ BLOG_COMMENT_ADMIN_URL = "https://admin.blog.naver.com/{blog_id}/comment"
 BLOG_POST_LIST_URL = "https://blog.naver.com/PostList.naver?blogId={blog_id}&categoryNo=0"
 BLOG_POST_URL = "https://blog.naver.com/{blog_id}/{log_no}"
 
+# 모바일 (댓글 수집용 — 데스크톱 cbox JS 미로드 대응)
+MOBILE_BLOG_POST_URL = "https://m.blog.naver.com/{blog_id}/{log_no}"
+MOBILE_UA = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+    "Version/16.6 Mobile/15E148 Safari/604.1"
+)
+MOBILE_VIEWPORT = {"width": 390, "height": 844}
+COMMENT_LOAD_WAIT = 5  # 댓글 lazy-load 대기 (초)
+
 # 일일 한도
 MAX_BLOGGERS_PER_DAY = 10       # 하루 최대 방문 블로거 수
 MAX_COMMENTS_PER_DAY = 30       # 하루 최대 총 댓글 수 (봇 감지 방지)

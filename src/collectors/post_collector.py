@@ -74,6 +74,7 @@ async def _parse_post_list(
     post_date는 파악 불가 시 None.
     """
     results: list[tuple[str, str, datetime | None]] = []
+    seen_urls: set[str] = set()
 
     frame = page.frame("mainFrame") or page
 
@@ -95,8 +96,9 @@ async def _parse_post_list(
                 href = await el.get_attribute("href") or ""
                 title = (await el.inner_text()).strip()
                 url = _normalize_post_url(href, blog_id)
-                if not url:
+                if not url or url in seen_urls:
                     continue
+                seen_urls.add(url)
                 post_date = await _get_nearby_date(el)
                 results.append((url, title or "제목 없음", post_date))
             if results:
@@ -106,6 +108,10 @@ async def _parse_post_list(
 
     if not results:
         results = await _extract_by_log_no(frame, blog_id)
+
+    # 최종 폴백: SPA/피드 형태 — HTML 소스에서 logNo 정규식 추출
+    if not results:
+        results = await _extract_log_nos_from_html(page, blog_id)
 
     return results
 
@@ -195,6 +201,34 @@ async def _extract_by_log_no(frame, blog_id: str) -> list[tuple[str, str, dateti
                 results.append((url, title, post_date))
     except Exception as e:
         logger.warning(f"logNo 추출 실패 ({blog_id}): {e}")
+    return results
+
+
+async def _extract_log_nos_from_html(
+    page: Page, blog_id: str
+) -> list[tuple[str, str, datetime | None]]:
+    """
+    페이지 HTML 소스에서 logNo 정규식 추출 (SPA/피드 형태 대응).
+    네이버 블로그가 mainFrame iframe 없이 렌더링하는 새 형식에 대응.
+    """
+    results: list[tuple[str, str, datetime | None]] = []
+    try:
+        content = await page.content()
+        # logNo=숫자 또는 "logNo":"숫자" 패턴
+        pattern1 = re.findall(r'"logNo"\s*:\s*"?(\d{9,})"?', content)
+        # /blog_id/숫자 패턴
+        pattern2 = re.findall(rf"/{re.escape(blog_id)}/(\d{{9,}})", content)
+        all_nos = list(dict.fromkeys(pattern1 + pattern2))  # 중복 제거, 순서 유지
+
+        for log_no in all_nos:
+            url = BLOG_POST_URL.format(blog_id=blog_id, log_no=log_no)
+            results.append((url, "제목 없음", None))
+
+        if results:
+            logger.debug(f"HTML 소스에서 logNo {len(results)}개 추출 ({blog_id})")
+    except Exception as e:
+        logger.warning(f"HTML logNo 추출 실패 ({blog_id}): {e}")
+
     return results
 
 
