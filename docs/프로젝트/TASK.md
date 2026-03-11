@@ -314,4 +314,32 @@ Supabase (공유 제어 평면)
 2. `_acquire_lock()` → 프로세스 수준 중복 실행 차단
 3. `claim_command()` → DB 수준 atomic claim으로 race condition 제거
 
-*마지막 업데이트: 2026-03-10 (W7-BUG 워커 중복 실행 방지)*
+### 네이버 댓글 조회 방식 확인 (03-10~11)
+
+> 외부 블로그 댓글 읽기 — API vs Playwright 비교 테스트
+
+**결론: 모바일 Playwright만 동작**
+
+| 방식 | 결과 | 비고 |
+|------|------|------|
+| cbox3 API (`web_naver_list_jsonp.json`) | ❌ 404/라우팅 에러 | cbox9로 전환되어 폐기됨 |
+| cbox9 API | ❌ "API does not exist" | 엔드포인트명 변경, 인증 필요 추정 |
+| command.blog.naver.com | ❌ 404 | |
+| CommentListAsync.naver | ❌ 404 | |
+| m.blog.naver.com getAllComments | ❌ 로그인 리다이렉트 | |
+| 데스크톱 Playwright (PostView iframe) | ❌ cbox JS 미로드 | iframe 19개, 댓글 영역 빈 상태 |
+| **모바일 Playwright** | ✅ 성공 | `a._commentCount` 클릭 → `u_cbox_comment_box` 추출 |
+
+**모바일 Playwright 댓글 조회 패턴:**
+```
+1. m.blog.naver.com/{blogId}/{logNo} 접근 (모바일 UA)
+2. a._commentCount 클릭 (댓글 영역 lazy-load 트리거)
+3. 4초 대기
+4. .u_cbox_comment_box 셀렉터로 댓글 추출
+5. .u_cbox_nick (닉네임), .u_cbox_date (날짜), .u_cbox_contents (내용)
+```
+
+- youyoubear0517 테스트: 최신글 3개 댓글 정상 추출 (29/14/40개)
+- letter_hih (우리 블로그): 댓글 0개 확인
+
+*마지막 업데이트: 2026-03-11 (댓글 조회 방식 확인 + W7-BUG 완료)*
