@@ -131,8 +131,8 @@
 
 | 파일 | 역할 |
 |------|------|
-| `comment_collector.py` | 내 블로그 댓글 작성자 수집 (관리자 → 폭백: 게시물 직접). `collect_commenters()` |
-| `post_collector.py` | 타겟 블로거 최근 게시물 수집 (신형/구형 지원). `collect_posts()` |
+| `comment_collector.py` | 내 블로그 댓글 작성자 수집 (관리자 → 폴백: 모바일 Playwright). `collect_commenters()` |
+| `post_collector.py` | 타겟 블로거 최근 게시물 수집 (셀렉터 → logNo → HTML 정규식 폴백). `collect_posts()` |
 
 ---
 
@@ -251,21 +251,19 @@
 
 | 파일 | 역할 |
 |------|------|
-| `개발/아키텍처/ARCHITECTURE.md` | **통합 아키텍처 문서** (블록도, 데이터 흐름, 파일 구조, DB 스키마, 실행법) | ✅ **신규** |
-| `00-project-overview.md` | 프로젝트 전체 개요 + 아키텍처 다이어그램 (→ ARCHITECTURE.md로 통합) |
-| `IMPLEMENTATION_STATUS.md` | **구현 현황 — Phase별 완료도 및 상세 상태** | ✅ **신규** |
-| `phase1-ai-comment.md` | Phase 1 설계 문서 |
-| `phase2-publisher.md` | Phase 2 설계 문서 |
-| `phase3-n8n-telegram.md` | Phase 3 설계 문서 |
-| `phase4-feedback.md` | Phase 4 설계 문서 |
-| `COMMENT_BOT_SCENARIO.md` | 댓글 봇 시나리오 문서 |
-| `EDITOR_SELECTOR_STATUS.md` | 스마트에디터 셀렉터 검증 결과 |
-| `REQUIREMENTS_SUMMARY.md` | 요구사항 요약 |
-| `프로젝트/TASK.md` | 작업 현황 실시간 추적 |
-| `프로젝트/CODE_MAP.md` | 코드베이스 지도 (이 파일) |
-| `프로젝트/매뉴얼/coding-rules.md` | Python 코딩 규칙 |
-| `프로젝트/매뉴얼/workflow-rules.md` | 워크플로우 + 코드리뷰 규칙 |
-| `프로젝트/코드리뷰/REVIEW_LOG.md` | 코드리뷰 기록 |
+| `개발/아키텍처/ARCHITECTURE.md` | **시스템 설계서 (단일 진실 공급원)** — 블록도, 데이터 흐름, DB 스키마, 구현 현황, 이슈, 비용, 실행법 | ✅ v3.0 |
+| `프로젝트/TASK.md` | 작업 현황 실시간 추적 | ✅ |
+| `프로젝트/CODE_MAP.md` | 코드베이스 지도 (이 파일) | ✅ |
+| `프로젝트/매뉴얼/coding-rules.md` | Python 코딩 규칙 | ✅ |
+| `프로젝트/매뉴얼/workflow-rules.md` | 워크플로우 + 코드리뷰 규칙 | ✅ |
+| `프로젝트/코드리뷰/REVIEW_LOG.md` | 코드리뷰 기록 | ✅ |
+| `프로젝트/tasks/W*.md`, `P3-*.md` | 주차별 작업 상세 (설계 기록용, 수정 안 함) | 아카이브 |
+| `phase1~4-*.md` | Phase별 설계 문서 (설계 기록용, 수정 안 함) | 아카이브 |
+| `00-project-overview.md` | DEPRECATED → ARCHITECTURE.md로 통합 | 폐기 |
+| `IMPLEMENTATION_STATUS.md` | DEPRECATED → ARCHITECTURE.md 섹션 5로 통합 | 폐기 |
+| `COMMENT_BOT_SCENARIO.md` | DEPRECATED → ARCHITECTURE.md 섹션 3.4로 통합 | 폐기 |
+| `EDITOR_SELECTOR_STATUS.md` | DEPRECATED → ARCHITECTURE.md 섹션 7로 통합 | 폐기 |
+| `REQUIREMENTS_SUMMARY.md` | DEPRECATED → ARCHITECTURE.md로 통합 | 폐기 |
 
 ---
 
