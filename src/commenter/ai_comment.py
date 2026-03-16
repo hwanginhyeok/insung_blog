@@ -47,22 +47,29 @@ _INVALID_RESPONSE_PATTERNS = [
 
 # 게시물 작성 스타일과 통일된 규칙
 _BASE_RULES = """\
-말투와 스타일 (게시물과 동일한 결이):
+말투와 스타일:
 - 친근한 해요체 (~했어요, ~이에요, ~예요, ~네요)
-- 가볍고 일상적인 톤, 지나치게 격식체 금지
+- 가볍고 일상적인 톤, 센스있고 위트있게
 - 뻔한 인사("안녕하세요")나 광고성 표현 금지
+- 이모티콘/이모지 자연스럽게 섞기 (ㅎㅎ, ㅋㅋ, >,<, ❤️ 등)
 
 내용:
-- 확실하게 아는 것만 언급 (본문/사진에서 명확히 보이는 것)
-- 모륨면 언급하지 말 것 (추측, 추론 금지)
+- 본문에서 구체적 정보 2~3가지를 골라서 언급 (메뉴, 장소, 가격, 할인, 분위기 등)
+- 확실하게 보이는 것만 언급 (추측 금지)
+- 공감 + 나도 해보고 싶다는 느낌 + 감사 표현을 자연스럽게 섞기
 
-형식: 1문장, 짧게 (20~45자)
-출력: 댓글 텍스트만"""
+형식:
+- 3~6줄, 100~200자
+- 줄바꿈으로 호흡 나누기
+- 마지막 줄은 감사/응원으로 마무리
+출력: 댓글 텍스트만 (번호, 따옴표 없이)"""
 
 # 게시물 작성 스타일과 통일된 톤
 _SYSTEM_TONE = (
     "너는 네이버 블로그를 자주 보는 30대 직장인이야. "
-    "친근하고 가벼운 톤으로 글과 사진을 보고 느낀 점을 자연스럽게 남겨."
+    "글을 꼼꼼히 읽고, 본문 속 구체적인 정보 2~3가지를 골라 "
+    "센스있고 위트있게 공감 댓글을 남겨. "
+    "줄바꿈으로 호흡을 나누고, 이모티콘도 자연스럽게 써."
 )
 
 
@@ -148,7 +155,7 @@ def generate_comment(
 
             response = client.messages.create(
                 model=COMMENT_AI_MODEL,
-                max_tokens=100,
+                max_tokens=300,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_message}],
             )
@@ -164,8 +171,8 @@ def generate_comment(
                 comment = comment[1:-1]
 
             # 최대 길이 제한
-            if len(comment) > 50:
-                comment = comment[:47] + "..."
+            if len(comment) > 300:
+                comment = comment[:297] + "..."
 
             # 비정상 응답 체크
             if not _is_valid_comment(comment):
@@ -194,13 +201,16 @@ def _clean_comment(comment: str) -> str:
     """댓글 후처리: 따옴표 제거 + 길이 제한."""
     if comment.startswith('"') and comment.endswith('"'):
         comment = comment[1:-1]
-    if len(comment) > 50:
-        comment = comment[:47] + "..."
+    if len(comment) > 300:
+        comment = comment[:297] + "..."
     return comment
 
 
 def _parse_batch_response(text: str, count: int) -> list[str]:
-    """배치 응답 파싱. '1: 댓글내용' 또는 '1. 댓글내용' 형식."""
+    """
+    배치 응답 파싱. '1: 댓글내용' 또는 '1. 댓글내용' 형식.
+    댓글 내 \\n은 실제 줄바꿈으로 변환.
+    """
     comments: dict[int, str] = {}
     for line in text.strip().split("\n"):
         line = line.strip()
@@ -213,6 +223,8 @@ def _parse_batch_response(text: str, count: int) -> list[str]:
                     idx = int(parts[0].strip())
                     comment = parts[1].strip()
                     if comment and 1 <= idx <= count:
+                        # \n 리터럴을 실제 줄바꿈으로 변환
+                        comment = comment.replace("\\n", "\n")
                         comments[idx] = comment
                         break
                 except (ValueError, IndexError):
@@ -272,15 +284,18 @@ def generate_comments_batch(
     user_message = "\n\n---\n\n".join(user_parts)
     user_message += (
         f"\n\n위 {len(valid_indices)}개 게시물에 댓글을 1개씩 작성해. "
+        "각 댓글은 본문 속 정보 2~3가지를 활용해 3~6줄(100~200자)로 작성.\n"
         "서로 다른 표현을 써서 다양하게.\n"
-        "출력 형식 (번호: 댓글):\n1: 여기 분위기 너무 좋아요\n2: 사진 보니까 가보고 싶어요"
+        "출력 형식 (번호: 댓글, 줄바꿈은 \\n으로):\n"
+        "1: 와 20% 할인 받으셨군요! ㅎㅎ\\n저도 평일에 다녀와야겠어요\\n사진 보니까 분위기 대박이네요 ❤️\n"
+        "2: 크림소스 파스타 진짜 맛있어 보여요\\n가격도 괜찮고 분위기도 좋고\\n좋은 정보 감사합니다! ㅎㅎ"
     )
 
     for attempt in range(2):
         try:
             response = client.messages.create(
                 model=COMMENT_AI_MODEL,
-                max_tokens=300,
+                max_tokens=800,
                 system=_build_system_prompt(),
                 messages=[{"role": "user", "content": user_message}],
             )
