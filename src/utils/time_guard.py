@@ -4,6 +4,7 @@
 - 평일: 설정된 시간대 (기본 20~24시)
 - 주말: 설정된 시간대 (기본 13~18시)
 - Supabase 접속 실패 시 기본값 폴백
+- 다중 사용자: user_id별 시간대 설정 지원
 """
 from datetime import datetime
 
@@ -14,11 +15,11 @@ _DEFAULT_WEEKDAY = {"start": 20, "end": 24}
 _DEFAULT_WEEKEND = {"start": 13, "end": 18}
 
 
-def _load_hours() -> tuple[dict, dict]:
+def _load_hours(user_id: str | None = None) -> tuple[dict, dict]:
     """Supabase에서 시간대 설정 로드. 실패 시 기본값 반환."""
     try:
         from src.storage.supabase_client import get_bot_settings_sb
-        settings = get_bot_settings_sb()
+        settings = get_bot_settings_sb(user_id=user_id)
         return (
             settings.get("weekday_hours", _DEFAULT_WEEKDAY),
             settings.get("weekend_hours", _DEFAULT_WEEKEND),
@@ -28,10 +29,10 @@ def _load_hours() -> tuple[dict, dict]:
         return _DEFAULT_WEEKDAY, _DEFAULT_WEEKEND
 
 
-def is_allowed_time() -> bool:
+def is_allowed_time(user_id: str | None = None) -> bool:
     """현재 시각이 허용 시간대인지 확인 (평일/주말 구분)"""
     now = datetime.now()
-    weekday_hours, weekend_hours = _load_hours()
+    weekday_hours, weekend_hours = _load_hours(user_id)
 
     if now.weekday() >= 5:
         start, end = weekend_hours["start"], weekend_hours["end"]
@@ -41,11 +42,11 @@ def is_allowed_time() -> bool:
     return start <= now.hour < end
 
 
-def assert_allowed_time() -> None:
+def assert_allowed_time(user_id: str | None = None) -> None:
     """허용 시간대가 아닐 경우 RuntimeError 발생"""
-    if not is_allowed_time():
+    if not is_allowed_time(user_id):
         now = datetime.now()
-        weekday_hours, weekend_hours = _load_hours()
+        weekday_hours, weekend_hours = _load_hours(user_id)
 
         if now.weekday() >= 5:
             start, end = weekend_hours["start"], weekend_hours["end"]
@@ -60,10 +61,10 @@ def assert_allowed_time() -> None:
         )
 
 
-def get_current_time_range() -> tuple[int, int, str]:
+def get_current_time_range(user_id: str | None = None) -> tuple[int, int, str]:
     """현재 적용 중인 시간대 반환 (start, end, day_type)"""
     now = datetime.now()
-    weekday_hours, weekend_hours = _load_hours()
+    weekday_hours, weekend_hours = _load_hours(user_id)
 
     if now.weekday() >= 5:
         start, end = weekend_hours["start"], weekend_hours["end"]

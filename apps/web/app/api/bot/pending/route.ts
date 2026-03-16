@@ -50,6 +50,7 @@ export async function GET(req: NextRequest) {
     .select(
       "id, blog_id, post_url, post_title, comment_text, ai_generated, status, created_at, decided_by, decided_at"
     )
+    .eq("user_id", user.id)
     .eq("status", status)
     .order("created_at", { ascending: true });
 
@@ -94,6 +95,7 @@ export async function POST(req: NextRequest) {
       decided_at: new Date().toISOString(),
     })
     .eq("id", id)
+    .eq("user_id", user.id)
     .eq("status", "pending")
     .select("id, status")
     .single();

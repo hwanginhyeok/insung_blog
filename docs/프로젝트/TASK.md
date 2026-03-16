@@ -40,7 +40,45 @@ Supabase (공유 제어 평면)
 
 | # | 작업 | 중요도 | 상태 | 문서 |
 |---|------|--------|------|------|
+| MULTI-USER | 댓글 봇 다중 사용자 전환 | P1 | 검증 중 | — |
 | TEST | 기능별 통합 테스트 (아래 상세) | P0 | 대기 | — |
+
+### MULTI-USER 검증 현황 (2026-03-15)
+
+코드 구현 완료. 검증 진행 상태:
+
+| 항목 | 결과 | 비고 |
+|------|------|------|
+| Python 구문 검증 (67개) | ✅ 통과 | |
+| Next.js 빌드 | ✅ 통과 | 전 라우트 정상 |
+| SQL 마이그레이션 실행 | ✅ 완료 | Supabase SQL Editor에서 00017 실행 완료 |
+| Admin dry-run (`--run-once --dry-run`) | ✅ 통과 | .env 폴백 경로 정상, 35초 |
+| 다중 사용자 dry-run (`--all-users`) | ✅ 통과 | 활성 사용자 1명 조회, 쿠키 전용 로그인 성공, 73명 수집, pending 등록 정상 |
+| 유저별 쿠키 분리 | ✅ 확인 | `cookies/50c16052_naver.json` 생성됨 |
+| 데이터 이관 (`data/comments.db` → 유저별) | ⬜ 미진행 | 선택사항 |
+| 웹 UI 블로그 ID 설정 테스트 | ⬜ 미진행 | 브라우저 필요 |
+| 2번째 사용자 E2E 테스트 | ⬜ 미진행 | 가입 → 쿠키 → blog_id → 봇 실행 |
+
+---
+
+## MULTI-USER: 댓글 봇 다중 사용자 전환 (2026-03-15)
+
+> 봇 실행부(Python)를 다중 사용자로 전환. 회원가입한 모든 사용자가 각자의 댓글 봇을 운영.
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| MU-01 | DB 마이그레이션 (`bot_settings.naver_blog_id`) | ✅ 완료 | 00017_add_naver_blog_id.sql (SQL Editor 실행 필요) |
+| MU-02 | REQUIREMENTS.md 다중 사용자 요구사항 | ✅ 완료 | 2-D절 추가 |
+| MU-03 | API 보안 — user_id 필터 추가 (pending, status, command) | ✅ 완료 | 4개 route 수정 |
+| MU-04 | supabase_client.py 리팩토링 (user_id 파라미터화) | ✅ 완료 | 전 함수 + get_active_user_ids/get_user_bot_config 신규 |
+| MU-05 | database.py 유저별 DB 분리 | ✅ 완료 | _resolve_db_path + 전 함수 user_id 파라미터 |
+| MU-06 | naver_login.py 쿠키 전용 로그인 | ✅ 완료 | ensure_login_cookie_only() 신규 |
+| MU-07 | orchestrator.py 다중 사용자 | ✅ 완료 | run(user_id=) + cookie_only 분기 |
+| MU-08 | command_worker.py 연결 | ✅ 완료 | handler(user_id=) + Semaphore(2) |
+| MU-09 | main.py Cron 다중 사용자 | ✅ 완료 | --all-users + _run_all_users() |
+| MU-10 | 웹 UI 블로그 ID 설정 | ✅ 완료 | /bot naver_blog_id 입력 + settings API |
+| MU-11 | settings.py + time_guard.py 수정 | ✅ 완료 | get_db_path/get_cookies_path + user_id 파라미터 |
+| MU-12 | CODE_MAP.md 반영 | ✅ 완료 | — |
 
 ---
 

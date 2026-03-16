@@ -1,7 +1,7 @@
 # CODE_MAP — 코드베이스 지도
 
 > 파일 추가/삭제/이동/역할 변경 시 반드시 갱신.
-> 최종 갱신: 2026-03-09 (UX-08 카테고리별 프롬프트 + CAL-01 캘린더 클릭→글 보기)
+> 최종 갱신: 2026-03-15 (다중 사용자 전환 — user_id 파라미터화)
 
 ---
 
@@ -74,6 +74,7 @@
 | `supabase/migrations/00013_create_content_calendar.sql` | content_calendar 테이블 + RLS (콘텐츠 캘린더) | ✅ 실행됨 |
 | `supabase/migrations/00014_create_post_analytics.sql` | post_analytics 테이블 + user_post_stats 뷰 + RLS (성과 분석) | ✅ 실행됨 |
 | `supabase/migrations/00015_add_oauth_providers.sql` | users에 kakao_id, naver_id 컬럼 + 부분 유니크 인덱스 (OAuth) | ✅ 실행됨 |
+| `supabase/migrations/00017_add_naver_blog_id.sql` | bot_settings에 naver_blog_id 컬럼 추가 (다중 사용자) | 실행 필요 |
 | `package.json` | 의존성 (Next 14, Supabase, shadcn/ui, react-hook-form, zod) | ✅ |
 
 ### 작업 문서
@@ -104,7 +105,7 @@
 
 | 파일 | 역할 |
 |------|------|
-| `settings.py` | 모든 상수 중앙 관리 — URL, 한도, 딜레이, 타임아웃, AI 모델, 이미지 제약 |
+| `settings.py` | 모든 상수 중앙 관리 — URL, 한도, 딜레이, 타임아웃, AI 모델, 이미지 제약, `get_db_path(user_id)`, `get_cookies_path(user_id)` |
 
 ---
 
@@ -112,7 +113,7 @@
 
 | 파일 | 역할 |
 |------|------|
-| `naver_login.py` | 네이버 로그인 (쿠키 복원 → ID/PW 폭백). `ensure_login()` 메인 함수 |
+| `naver_login.py` | 네이버 로그인 (쿠키 복원 → ID/PW 폭백). `ensure_login()` 레거시, `ensure_login_cookie_only(user_id)` 다중 사용자 |
 | `session_manager.py` | 세션 관리 — 주기적 상태 체크, 자동 갱신, 실패 알림 | ✅ **신규**
 
 ---
@@ -158,8 +159,8 @@
 
 | 파일 | 역할 | 상태 |
 |------|------|------|
-| `database.py` | SQLite 레이어 — 운영 데이터 전용 (6개 테이블) + retry 데코레이터 | ✅ (W6-07 정리) |
-| `supabase_client.py` | Supabase 클라이언트 (service_role) — 생성 저장 + 봇 제어 평면 (pending/settings/run_log) | ✅ |
+| `database.py` | SQLite 레이어 — 운영 데이터 전용 (6개 테이블) + retry 데코레이터 + 유저별 DB 분리 (`user_id` 파라미터) | ✅ (다중 사용자) |
+| `supabase_client.py` | Supabase 클라이언트 (service_role) — 생성 저장 + 봇 제어 평면 + `get_active_user_ids()`, `get_user_bot_config(user_id)` | ✅ (다중 사용자) |
 
 ### SQLite 테이블 요약 (운영 데이터)
 
@@ -198,7 +199,7 @@
 | `logger.py` | RotatingFileHandler(10MB) + 콘솔 출력. `logger` 싱글톤 | ✅ |
 | `delay.py` | 봇 감지 회피 딜레이 4종 (comments, bloggers, typing, short) | ✅ |
 | `telegram_notifier.py` | 텔레그램 알림 유틸 — 로그인/캡차/세션 만료 긴급 알림 | ✅ **신규**
-| `time_guard.py` | 허용 시간대 체크 (평일 20-24시, 주말 13-18시). `is_allowed_time()` | ✅ (2026-03-04 주말 확장) |
+| `time_guard.py` | 허용 시간대 체크 (평일 20-24시, 주말 13-18시). `is_allowed_time(user_id=)` 다중 사용자 지원 | ✅ (다중 사용자) |
 | `browser.py` | Playwright 브라우저 공통 설정 (user-agent, viewport, args). `create_browser()` | ✅ |
 | `photo_marker.py` | 사진 마커 `[PHOTO_N]` 파싱/렌더링/제거. `split_body_by_markers()`, `render_html_segments()`, `strip_markers()` | ✅ |
 
@@ -208,7 +209,7 @@
 
 | 파일 | 역할 | 상태 |
 |------|------|------|
-| `orchestrator.py` | 댓글 봇 전체 흐름 조율 — 로그인 → 수집 → 댓글(auto)/대기등록(manual) → retry_queue 처리 → DB. `run()` + `_process_retry_queue()` | ✅ |
+| `orchestrator.py` | 댓글 봇 전체 흐름 조율 — 로그인 → 수집 → 댓글(auto)/대기등록(manual) → retry_queue → DB. `run(user_id=)` 다중 사용자 지원 | ✅ (다중 사용자) |
 
 ---
 

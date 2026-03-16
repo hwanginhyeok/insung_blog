@@ -21,6 +21,7 @@ from config.settings import (
     MAX_LOGIN_RETRIES,
     NAVER_LOGIN_URL,
     PAGE_LOAD_TIMEOUT,
+    get_cookies_path,
 )
 from src.utils.logger import logger
 
@@ -244,7 +245,7 @@ async def ensure_login(
     naver_pw: str,
 ) -> bool:
     """
-    로그인 상태를 보장하는 메인 함수.
+    로그인 상태를 보장하는 메인 함수 (디버그/개발용 — ID/PW 폴백 있음).
     - 쿠키로 복원 시도 → 유효하면 바로 반환
     - 쿠키 만료 or 없으면 ID/PW 로그인 → 최대 MAX_LOGIN_RETRIES회 시도
     """
@@ -272,4 +273,81 @@ async def ensure_login(
             await asyncio.sleep(3)
 
     logger.error("로그인 최대 재시도 횟수 초과")
+    return False
+
+
+# ── 다중 사용자 쿠키 전용 로그인 ──────────────────────────────────────────
+
+
+async def _load_cookies_for_user(context: BrowserContext, user_id: str) -> bool:
+    """
+    user_id 기반 쿠키 복원. Supabase 우선 → 로컬 파일 폴백.
+    """
+    # 1. Supabase에서 해당 사용자 쿠키 로드
+    try:
+        from src.storage.supabase_client import get_bot_cookies_sb
+        sb_cookies = get_bot_cookies_sb(user_id=user_id)
+        if sb_cookies:
+            normalized = _normalize_cookies(sb_cookies)
+            await context.add_cookies(normalized)
+            logger.info(f"쿠키 복원 완료 (Supabase, user={user_id[:8]}, {len(normalized)}개)")
+            return True
+    except Exception as e:
+        logger.debug(f"Supabase 쿠키 로드 실패 (user={user_id[:8]}): {e}")
+
+    # 2. 유저별 로컬 파일 폴백
+    user_cookies_path = get_cookies_path(user_id)
+    if user_cookies_path.exists():
+        with open(user_cookies_path, encoding="utf-8") as f:
+            cookies = json.load(f)
+        normalized = _normalize_cookies(cookies)
+        await context.add_cookies(normalized)
+        logger.info(f"쿠키 복원 완료 (로컬, user={user_id[:8]})")
+        return True
+
+    return False
+
+
+async def _save_cookies_for_user(context: BrowserContext, user_id: str) -> None:
+    """user_id 기반 쿠키 저장 (로컬 + Supabase)."""
+    user_cookies_path = get_cookies_path(user_id)
+    user_cookies_path.parent.mkdir(parents=True, exist_ok=True)
+    cookies = await context.cookies()
+    with open(user_cookies_path, "w", encoding="utf-8") as f:
+        json.dump(cookies, f, ensure_ascii=False, indent=2)
+    os.chmod(user_cookies_path, 0o600)
+    logger.info(f"쿠키 저장 완료: {user_cookies_path}")
+
+    # Supabase 동기화
+    try:
+        from src.storage.supabase_client import save_bot_cookies_sb
+        save_bot_cookies_sb(cookies, user_id=user_id)
+    except Exception as e:
+        logger.warning(f"쿠키 Supabase 동기화 실패 (user={user_id[:8]}): {e}")
+
+
+async def ensure_login_cookie_only(
+    context: BrowserContext,
+    page: Page,
+    user_id: str,
+) -> bool:
+    """
+    다중 사용자용 쿠키 전용 로그인.
+    ID/PW 폴백 없음 — 쿠키가 없거나 만료되면 False 반환.
+    """
+    cookie_loaded = await _load_cookies_for_user(context, user_id)
+    if not cookie_loaded:
+        logger.warning(f"사용자 {user_id[:8]} 쿠키 없음 — 웹에서 쿠키 업로드 필요")
+        return False
+
+    if await _is_logged_in(page):
+        logger.info(f"쿠키 로그인 확인 (user={user_id[:8]})")
+        # 성공한 쿠키 업데이트 (만료 연장)
+        await _save_cookies_for_user(context, user_id)
+        return True
+
+    logger.warning(f"사용자 {user_id[:8]} 쿠키 만료 — 웹에서 재업로드 필요")
+    # 만료된 로컬 쿠키 삭제
+    user_cookies_path = get_cookies_path(user_id)
+    user_cookies_path.unlink(missing_ok=True)
     return False

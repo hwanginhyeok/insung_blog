@@ -43,6 +43,7 @@ interface BotSettings {
   weekend_hours: { start: number; end: number };
   max_comments_per_day: number;
   max_bloggers_per_day: number;
+  naver_blog_id: string | null;
 }
 
 interface TodayStats {
@@ -81,6 +82,7 @@ const defaultSettings: BotSettings = {
   weekend_hours: { start: 13, end: 18 },
   max_comments_per_day: 30,
   max_bloggers_per_day: 10,
+  naver_blog_id: null,
 };
 
 // ── 유틸 ──────────────────────────────────────────────────────
@@ -406,7 +408,7 @@ export default function BotPage() {
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={() => sendCommand("run")}
-              disabled={sendingCommand || !!activeCommand}
+              disabled={sendingCommand || !!activeCommand || !settings.naver_blog_id}
             >
               {sendingCommand ? "전송 중..." : "봇 실행"}
             </Button>
@@ -602,7 +604,34 @@ export default function BotPage() {
           <CardTitle>설정</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* 블로그 ID 미설정 안내 */}
+          {!settingsDraft.naver_blog_id && (
+            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
+              봇을 실행하려면 먼저 &quot;내 네이버 블로그 ID&quot;를 설정해야 합니다.
+            </div>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="text-sm font-medium">
+                내 네이버 블로그 ID
+              </label>
+              <Input
+                placeholder="예: youyoubear0517"
+                value={settingsDraft.naver_blog_id || ""}
+                onChange={(e) =>
+                  setSettingsDraft((s) => ({
+                    ...s,
+                    naver_blog_id: e.target.value || null,
+                  }))
+                }
+                className="mt-1 w-64"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                blog.naver.com/<strong>여기ID</strong> 형식의 블로그 주소에서 확인
+              </p>
+            </div>
+
             <div>
               <label className="text-sm font-medium">모드</label>
               <select

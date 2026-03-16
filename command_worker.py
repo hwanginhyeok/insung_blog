@@ -4,6 +4,9 @@
 웹 /bot 페이지에서 버튼 클릭 → bot_commands INSERT →
 이 워커가 감지 → 실행 → 결과 UPDATE → 웹에서 폴링으로 상태 표시.
 
+다중 사용자: bot_commands.user_id로 어떤 사용자의 봇을 실행할지 결정.
+Playwright 동시 실행: asyncio.Semaphore(2)로 제한 (WSL2 메모리 보호).
+
 실행:
   source .venv/bin/activate
   python command_worker.py
@@ -31,6 +34,9 @@ from src.utils.logger import setup_logger
 logger = setup_logger("command_worker")
 
 POLL_INTERVAL = 10  # 초
+
+# Playwright 동시 실행 제한 (WSL2 메모리 보호)
+_browser_semaphore = asyncio.Semaphore(2)
 
 # 종료 시그널 처리
 _shutdown = False
@@ -153,21 +159,23 @@ def claim_command() -> dict | None:
 # ── 명령 실행 핸들러 ──────────────────────────────────────────────────────
 
 
-async def handle_run() -> dict:
+async def handle_run(user_id: str | None = None) -> dict:
     """봇 1회 실행 (orchestrator.run)."""
     from src.orchestrator import run
 
-    logger.info("▶ 봇 실행 시작")
-    await run(dry_run=False)
-    logger.info("✓ 봇 실행 완료")
+    uid_label = user_id[:8] if user_id else "admin"
+    logger.info(f"▶ 봇 실행 시작 (user={uid_label})")
+    async with _browser_semaphore:
+        await run(dry_run=False, user_id=user_id)
+    logger.info(f"✓ 봇 실행 완료 (user={uid_label})")
     return {"message": "봇 실행 완료"}
 
 
-async def handle_execute() -> dict:
+async def handle_execute(user_id: str | None = None) -> dict:
     """승인된 댓글 일괄 게시."""
     from playwright.async_api import async_playwright
 
-    from src.auth.naver_login import ensure_login
+    from src.auth.naver_login import ensure_login, ensure_login_cookie_only
     from src.commenter.comment_writer import write_comment
     from src.storage.database import add_to_retry_queue
     from src.storage.supabase_client import (
@@ -176,66 +184,77 @@ async def handle_execute() -> dict:
     )
     from src.utils.browser import create_browser
 
-    approved = get_pending_comments_sb("approved")
+    approved = get_pending_comments_sb("approved", user_id=user_id)
     if not approved:
         return {"message": "승인된 댓글 없음", "total": 0, "success": 0, "failed": 0}
-
-    naver_id = os.environ.get("NAVER_ID", "")
-    naver_pw = os.environ.get("NAVER_PW", "")
-
-    if not all([naver_id, naver_pw]):
-        raise RuntimeError(".env 인증 정보 누락 (NAVER_ID, NAVER_PW)")
 
     total = len(approved)
     success_count = 0
     failed_count = 0
 
-    logger.info(f"▶ 댓글 게시 시작: 총 {total}개")
+    uid_label = user_id[:8] if user_id else "admin"
+    logger.info(f"▶ 댓글 게시 시작: 총 {total}개 (user={uid_label})")
 
-    async with async_playwright() as pw:
-        browser, context, page = await create_browser(pw, headless=True)
+    async with _browser_semaphore:
+        async with async_playwright() as pw:
+            browser, context, page = await create_browser(pw, headless=True)
 
-        try:
-            logged_in = await ensure_login(context, page, naver_id, naver_pw)
-            if not logged_in:
-                raise RuntimeError("네이버 로그인 실패")
+            try:
+                # 로그인
+                if user_id:
+                    logged_in = await ensure_login_cookie_only(context, page, user_id)
+                else:
+                    naver_id = os.environ.get("NAVER_ID", "")
+                    naver_pw = os.environ.get("NAVER_PW", "")
+                    if not all([naver_id, naver_pw]):
+                        raise RuntimeError(".env 인증 정보 누락 (NAVER_ID, NAVER_PW)")
+                    logged_in = await ensure_login(context, page, naver_id, naver_pw)
 
-            for i, comment in enumerate(approved, 1):
-                comment_id = comment["id"]
-                blog_id = comment["blog_id"]
-                post_url = comment["post_url"]
-                post_title = comment["post_title"]
-                comment_text = comment["comment_text"]
+                if not logged_in:
+                    raise RuntimeError("네이버 로그인 실패")
 
-                logger.info(f"▶ [{i}/{total}] {blog_id} 댓글 작성 중...")
+                for i, comment in enumerate(approved, 1):
+                    comment_id = comment["id"]
+                    blog_id = comment["blog_id"]
+                    post_url = comment["post_url"]
+                    post_title = comment["post_title"]
+                    comment_text = comment["comment_text"]
 
-                try:
-                    ok, _ = await write_comment(
-                        page=page,
-                        post_url=post_url,
-                        post_title=post_title,
-                        dry_run=False,
-                        comment_text=comment_text,
-                    )
-                    if ok:
-                        update_pending_status_sb(comment_id, "posted", decided_by="worker")
-                        success_count += 1
-                        logger.info(f"✓ [{i}/{total}] 성공: {blog_id}")
-                    else:
+                    logger.info(f"▶ [{i}/{total}] {blog_id} 댓글 작성 중...")
+
+                    try:
+                        ok, _ = await write_comment(
+                            page=page,
+                            post_url=post_url,
+                            post_title=post_title,
+                            dry_run=False,
+                            comment_text=comment_text,
+                        )
+                        if ok:
+                            update_pending_status_sb(comment_id, "posted", decided_by="worker")
+                            success_count += 1
+                            logger.info(f"✓ [{i}/{total}] 성공: {blog_id}")
+                        else:
+                            update_pending_status_sb(comment_id, "failed", decided_by="worker")
+                            add_to_retry_queue(
+                                blog_id, post_url, post_title, "댓글 작성 실패",
+                                user_id=user_id,
+                            )
+                            failed_count += 1
+                            logger.warning(f"✗ [{i}/{total}] 실패: {blog_id}")
+                    except Exception as e:
                         update_pending_status_sb(comment_id, "failed", decided_by="worker")
-                        add_to_retry_queue(blog_id, post_url, post_title, "댓글 작성 실패")
+                        add_to_retry_queue(
+                            blog_id, post_url, post_title, str(e)[:100],
+                            user_id=user_id,
+                        )
                         failed_count += 1
-                        logger.warning(f"✗ [{i}/{total}] 실패: {blog_id}")
-                except Exception as e:
-                    update_pending_status_sb(comment_id, "failed", decided_by="worker")
-                    add_to_retry_queue(blog_id, post_url, post_title, str(e)[:100])
-                    failed_count += 1
-                    logger.error(f"✗ [{i}/{total}] 예외: {e}")
+                        logger.error(f"✗ [{i}/{total}] 예외: {e}")
 
-                if i < total:
-                    await asyncio.sleep(3)
-        finally:
-            await browser.close()
+                    if i < total:
+                        await asyncio.sleep(3)
+            finally:
+                await browser.close()
 
     return {
         "message": f"댓글 게시 완료: 성공 {success_count} / 실패 {failed_count}",
@@ -245,11 +264,11 @@ async def handle_execute() -> dict:
     }
 
 
-async def handle_retry() -> dict:
+async def handle_retry(user_id: str | None = None) -> dict:
     """재시도 큐 처리."""
     from playwright.async_api import async_playwright
 
-    from src.auth.naver_login import ensure_login
+    from src.auth.naver_login import ensure_login, ensure_login_cookie_only
     from src.commenter.comment_writer import write_comment
     from src.storage.database import (
         add_to_retry_queue,
@@ -259,70 +278,78 @@ async def handle_retry() -> dict:
     )
     from src.utils.browser import create_browser
 
-    targets = get_retry_targets()
+    targets = get_retry_targets(user_id=user_id)
     if not targets:
         return {"message": "재시도 대상 없음", "total": 0, "success": 0, "failed": 0}
-
-    naver_id = os.environ.get("NAVER_ID", "")
-    naver_pw = os.environ.get("NAVER_PW", "")
-
-    if not all([naver_id, naver_pw]):
-        raise RuntimeError(".env 인증 정보 누락 (NAVER_ID, NAVER_PW)")
 
     total = len(targets)
     success_count = 0
     failed_count = 0
 
-    logger.info(f"▶ 재시도 실행 시작: 총 {total}건")
+    uid_label = user_id[:8] if user_id else "admin"
+    logger.info(f"▶ 재시도 실행 시작: 총 {total}건 (user={uid_label})")
 
-    async with async_playwright() as pw:
-        browser, context, page = await create_browser(pw, headless=True)
+    async with _browser_semaphore:
+        async with async_playwright() as pw:
+            browser, context, page = await create_browser(pw, headless=True)
 
-        try:
-            logged_in = await ensure_login(context, page, naver_id, naver_pw)
-            if not logged_in:
-                raise RuntimeError("네이버 로그인 실패")
+            try:
+                # 로그인
+                if user_id:
+                    logged_in = await ensure_login_cookie_only(context, page, user_id)
+                else:
+                    naver_id = os.environ.get("NAVER_ID", "")
+                    naver_pw = os.environ.get("NAVER_PW", "")
+                    if not all([naver_id, naver_pw]):
+                        raise RuntimeError(".env 인증 정보 누락 (NAVER_ID, NAVER_PW)")
+                    logged_in = await ensure_login(context, page, naver_id, naver_pw)
 
-            for i, target in enumerate(targets, 1):
-                logger.info(f"▶ 재시도 [{i}/{total}] {target['blog_id']}")
-                try:
-                    ok, _ = await write_comment(
-                        page=page,
-                        post_url=target["post_url"],
-                        post_title=target["post_title"],
-                        dry_run=False,
-                        comment_text=None,
-                        context=context,
-                        naver_id=naver_id,
-                        naver_pw=naver_pw,
-                    )
-                    if ok:
-                        remove_from_retry_queue(target["post_url"])
-                        record_comment(
-                            target["post_url"], target["blog_id"],
-                            target["post_title"], "", True,
+                if not logged_in:
+                    raise RuntimeError("네이버 로그인 실패")
+
+                for i, target in enumerate(targets, 1):
+                    logger.info(f"▶ 재시도 [{i}/{total}] {target['blog_id']}")
+                    try:
+                        ok, _ = await write_comment(
+                            page=page,
+                            post_url=target["post_url"],
+                            post_title=target["post_title"],
+                            dry_run=False,
+                            comment_text=None,
+                            context=context,
+                            naver_id="" if user_id else os.environ.get("NAVER_ID", ""),
+                            naver_pw="" if user_id else os.environ.get("NAVER_PW", ""),
                         )
-                        success_count += 1
-                        logger.info(f"✓ 재시도 [{i}/{total}] 성공")
-                    else:
+                        if ok:
+                            remove_from_retry_queue(target["post_url"], user_id=user_id)
+                            record_comment(
+                                target["post_url"], target["blog_id"],
+                                target["post_title"], "", True,
+                                user_id=user_id,
+                            )
+                            success_count += 1
+                            logger.info(f"✓ 재시도 [{i}/{total}] 성공")
+                        else:
+                            add_to_retry_queue(
+                                target["blog_id"], target["post_url"],
+                                target["post_title"], "재시도 실패",
+                                user_id=user_id,
+                            )
+                            failed_count += 1
+                            logger.warning(f"✗ 재시도 [{i}/{total}] 실패")
+                    except Exception as e:
                         add_to_retry_queue(
                             target["blog_id"], target["post_url"],
-                            target["post_title"], "재시도 실패",
+                            target["post_title"], str(e)[:100],
+                            user_id=user_id,
                         )
                         failed_count += 1
-                        logger.warning(f"✗ 재시도 [{i}/{total}] 실패")
-                except Exception as e:
-                    add_to_retry_queue(
-                        target["blog_id"], target["post_url"],
-                        target["post_title"], str(e)[:100],
-                    )
-                    failed_count += 1
-                    logger.error(f"✗ 재시도 [{i}/{total}] 예외: {e}")
+                        logger.error(f"✗ 재시도 [{i}/{total}] 예외: {e}")
 
-                if i < total:
-                    await asyncio.sleep(3)
-        finally:
-            await browser.close()
+                    if i < total:
+                        await asyncio.sleep(3)
+            finally:
+                await browser.close()
 
     return {
         "message": f"재시도 완료: 성공 {success_count} / 실패 {failed_count}",
@@ -349,16 +376,18 @@ async def process_command(cmd: dict) -> None:
     """명령 1개를 실행하고 결과를 DB에 기록. (claim_command()에서 이미 running 상태)"""
     command_id = cmd["id"]
     command_type = cmd["command"]
+    cmd_user_id = cmd.get("user_id")
     handler = _HANDLERS.get(command_type)
 
     if not handler:
         mark_failed(command_id, f"알 수 없는 명령: {command_type}")
         return
 
-    logger.info(f"━━━ 명령 실행: {command_type} (id={command_id[:8]}...) ━━━")
+    uid_label = cmd_user_id[:8] if cmd_user_id else "admin"
+    logger.info(f"━━━ 명령 실행: {command_type} (id={command_id[:8]}..., user={uid_label}) ━━━")
 
     try:
-        result = await handler()
+        result = await handler(user_id=cmd_user_id)
         mark_completed(command_id, result)
         logger.info(f"━━━ 명령 완료: {command_type} → {result.get('message', '')} ━━━")
     except Exception as e:

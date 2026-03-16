@@ -8,6 +8,7 @@ service_role 키 사용 (RLS 우회). 서버 사이드 전용.
   2. pending_comments CRUD (댓글 승인/거부 — 웹·텔레그램 공유)
   3. bot_settings 조회/수정 (봇 설정)
   4. bot_run_log 기록/조회 (실행 이력)
+  5. 다중 사용자 지원 (user_id 파라미터 — None이면 admin 폴백)
 """
 
 import os
@@ -41,6 +42,7 @@ def get_admin_user_id() -> str:
     """
     관리자(인성이) user_id 조회 + 캐싱.
     users 테이블에서 role='admin'인 첫 번째 사용자 반환.
+    (deprecated — 새 코드는 user_id를 명시적으로 전달할 것)
     """
     global _user_id_cache
     if _user_id_cache:
@@ -57,6 +59,100 @@ def get_admin_user_id() -> str:
     return _user_id_cache
 
 
+def _resolve_user_id(user_id: str | None) -> str:
+    """user_id가 None이면 admin 폴백. 하위 호환용."""
+    if user_id:
+        return user_id
+    return get_admin_user_id()
+
+
+# ── 다중 사용자 조회 ──────────────────────────────────────────────────────
+
+
+def get_active_user_ids() -> list[str]:
+    """
+    봇 활성 사용자 목록 조회.
+    조건: is_active=True AND naver_blog_id NOT NULL
+    반환: user_id 리스트
+    """
+    try:
+        sb = get_supabase()
+        result = (
+            sb.table("bot_settings")
+            .select("user_id")
+            .eq("is_active", True)
+            .not_.is_("naver_blog_id", "null")
+            .execute()
+        )
+        user_ids = [row["user_id"] for row in (result.data or [])]
+        logger.info(f"활성 사용자 {len(user_ids)}명 조회")
+        return user_ids
+
+    except Exception as e:
+        logger.error(f"활성 사용자 조회 실패: {e}")
+        return []
+
+
+def get_user_bot_config(user_id: str) -> dict | None:
+    """
+    사용자의 봇 설정 + 쿠키 + blog_id를 한번에 로드.
+    반환: {user_id, naver_blog_id, cookies, settings} 또는 None
+    """
+    try:
+        sb = get_supabase()
+
+        # 설정 조회
+        settings_result = (
+            sb.table("bot_settings")
+            .select("*")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not settings_result.data:
+            logger.warning(f"사용자 {user_id[:8]} 봇 설정 없음")
+            return None
+
+        settings_row = settings_result.data[0]
+        naver_blog_id = settings_row.get("naver_blog_id")
+        if not naver_blog_id:
+            logger.warning(f"사용자 {user_id[:8]} 블로그 ID 미설정")
+            return None
+
+        # 쿠키 조회
+        cookies_result = (
+            sb.table("bot_cookies")
+            .select("cookie_data")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        cookies = None
+        if cookies_result.data and cookies_result.data[0].get("cookie_data"):
+            cookies = cookies_result.data[0]["cookie_data"]
+
+        return {
+            "user_id": user_id,
+            "naver_blog_id": naver_blog_id,
+            "cookies": cookies,
+            "settings": {
+                "approval_mode": settings_row["approval_mode"],
+                "is_active": settings_row["is_active"],
+                "weekday_hours": settings_row["weekday_hours"],
+                "weekend_hours": settings_row["weekend_hours"],
+                "max_comments_per_day": settings_row["max_comments_per_day"],
+                "max_bloggers_per_day": settings_row["max_bloggers_per_day"],
+            },
+        }
+
+    except Exception as e:
+        logger.error(f"사용자 {user_id[:8]} 봇 설정 로드 실패: {e}")
+        return None
+
+
+# ── generation_queue ──────────────────────────────────────────────────────
+
+
 def save_generation(
     *,
     title: str,
@@ -67,6 +163,7 @@ def save_generation(
     photo_paths: list[str] | None = None,
     html: str | None = None,
     source: str = "telegram",
+    user_id: str | None = None,
 ) -> str | None:
     """
     generation_queue에 완료된 생성 결과 저장.
@@ -74,10 +171,10 @@ def save_generation(
     """
     try:
         sb = get_supabase()
-        user_id = get_admin_user_id()
+        uid = _resolve_user_id(user_id)
 
         row = {
-            "user_id": user_id,
+            "user_id": uid,
             "input_photos": photo_paths or [],
             "input_memo": memo,
             "input_category": category,
@@ -111,6 +208,7 @@ def add_pending_comment_sb(
     post_title: str,
     comment_text: str,
     ai_generated: bool = True,
+    user_id: str | None = None,
 ) -> str | None:
     """
     승인 대기 댓글 추가 (봇 → Supabase).
@@ -118,10 +216,10 @@ def add_pending_comment_sb(
     """
     try:
         sb = get_supabase()
-        user_id = get_admin_user_id()
+        uid = _resolve_user_id(user_id)
 
         row = {
-            "user_id": user_id,
+            "user_id": uid,
             "blog_id": blog_id,
             "post_url": post_url,
             "post_title": post_title,
@@ -143,19 +241,22 @@ def add_pending_comment_sb(
     return None
 
 
-def get_pending_comments_sb(status: str = "pending") -> list[dict]:
+def get_pending_comments_sb(
+    status: str = "pending",
+    user_id: str | None = None,
+) -> list[dict]:
     """
     승인 대기 댓글 목록 조회.
     status: pending, approved, rejected, posted, failed
     """
     try:
         sb = get_supabase()
-        user_id = get_admin_user_id()
+        uid = _resolve_user_id(user_id)
 
         result = (
             sb.table("pending_comments")
             .select("id, blog_id, post_url, post_title, comment_text, ai_generated, status, created_at")
-            .eq("user_id", user_id)
+            .eq("user_id", uid)
             .eq("status", status)
             .order("created_at")
             .execute()
@@ -211,16 +312,16 @@ def update_pending_status_sb(
     return False
 
 
-def get_pending_count_sb() -> int:
+def get_pending_count_sb(user_id: str | None = None) -> int:
     """현재 pending 상태 댓글 수 반환."""
     try:
         sb = get_supabase()
-        user_id = get_admin_user_id()
+        uid = _resolve_user_id(user_id)
 
         result = (
             sb.table("pending_comments")
             .select("id", count="exact")
-            .eq("user_id", user_id)
+            .eq("user_id", uid)
             .eq("status", "pending")
             .execute()
         )
@@ -235,14 +336,17 @@ def get_pending_count_sb() -> int:
 # ── bot_cookies (쿠키 업로드) ─────────────────────────────────────────────
 
 
-def save_bot_cookies_sb(cookies: list[dict]) -> bool:
+def save_bot_cookies_sb(
+    cookies: list[dict],
+    user_id: str | None = None,
+) -> bool:
     """로컬 로그인 성공 시 쿠키를 Supabase에 업로드 (양방향 동기화)."""
     try:
         sb = get_supabase()
-        user_id = get_admin_user_id()
+        uid = _resolve_user_id(user_id)
         sb.table("bot_cookies").upsert(
             {
-                "user_id": user_id,
+                "user_id": uid,
                 "cookie_data": cookies,
                 "uploaded_at": datetime.now(timezone.utc).isoformat(),
             },
@@ -255,19 +359,19 @@ def save_bot_cookies_sb(cookies: list[dict]) -> bool:
         return False
 
 
-def get_bot_cookies_sb() -> list[dict] | None:
+def get_bot_cookies_sb(user_id: str | None = None) -> list[dict] | None:
     """
     Supabase에서 업로드된 네이버 쿠키 조회.
     반환: 쿠키 딕셔너리 리스트 (없으면 None).
     """
     try:
         sb = get_supabase()
-        user_id = get_admin_user_id()
+        uid = _resolve_user_id(user_id)
 
         result = (
             sb.table("bot_cookies")
             .select("cookie_data")
-            .eq("user_id", user_id)
+            .eq("user_id", uid)
             .limit(1)
             .execute()
         )
@@ -296,19 +400,19 @@ _DEFAULT_SETTINGS = {
 }
 
 
-def get_bot_settings_sb() -> dict:
+def get_bot_settings_sb(user_id: str | None = None) -> dict:
     """
     봇 설정 조회. 없으면 기본값 반환.
     반환: {approval_mode, is_active, weekday_hours, weekend_hours, max_comments_per_day, max_bloggers_per_day}
     """
     try:
         sb = get_supabase()
-        user_id = get_admin_user_id()
+        uid = _resolve_user_id(user_id)
 
         result = (
             sb.table("bot_settings")
             .select("*")
-            .eq("user_id", user_id)
+            .eq("user_id", uid)
             .limit(1)
             .execute()
         )
@@ -330,7 +434,7 @@ def get_bot_settings_sb() -> dict:
     return dict(_DEFAULT_SETTINGS)
 
 
-def update_bot_settings_sb(**kwargs) -> bool:
+def update_bot_settings_sb(user_id: str | None = None, **kwargs) -> bool:
     """
     봇 설정 변경 (upsert).
     지원 키: approval_mode, is_active, weekday_hours, weekend_hours,
@@ -348,9 +452,9 @@ def update_bot_settings_sb(**kwargs) -> bool:
 
     try:
         sb = get_supabase()
-        user_id = get_admin_user_id()
+        uid = _resolve_user_id(user_id)
 
-        update_data["user_id"] = user_id
+        update_data["user_id"] = uid
         update_data["updated_at"] = datetime.now().isoformat()
 
         result = (
@@ -379,14 +483,15 @@ def record_run_sb(
     pending_count: int = 0,
     error_message: str | None = None,
     duration_seconds: int | None = None,
+    user_id: str | None = None,
 ) -> None:
     """봇 실행 결과를 Supabase에 기록."""
     try:
         sb = get_supabase()
-        user_id = get_admin_user_id()
+        uid = _resolve_user_id(user_id)
 
         row = {
-            "user_id": user_id,
+            "user_id": uid,
             "bloggers_visited": bloggers_visited,
             "comments_written": comments_written,
             "comments_failed": comments_failed,
@@ -405,16 +510,19 @@ def record_run_sb(
         logger.error(f"실행 이력 기록 실패: {e}")
 
 
-def get_recent_runs_sb(limit: int = 10) -> list[dict]:
+def get_recent_runs_sb(
+    limit: int = 10,
+    user_id: str | None = None,
+) -> list[dict]:
     """최근 실행 이력 조회."""
     try:
         sb = get_supabase()
-        user_id = get_admin_user_id()
+        uid = _resolve_user_id(user_id)
 
         result = (
             sb.table("bot_run_log")
             .select("id, run_at, bloggers_visited, comments_written, comments_failed, pending_count, error_message, duration_seconds")
-            .eq("user_id", user_id)
+            .eq("user_id", uid)
             .order("run_at", desc=True)
             .limit(limit)
             .execute()

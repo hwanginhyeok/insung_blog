@@ -14,6 +14,16 @@ COOKIES_DIR = PROJECT_ROOT / "cookies"
 DB_PATH = DATA_DIR / "comments.db"
 COOKIES_PATH = COOKIES_DIR / "naver_cookies.json"
 
+
+def get_db_path(user_id: str) -> Path:
+    """유저별 SQLite DB 경로 반환. data/{user_id[:8]}/comments.db"""
+    return DATA_DIR / user_id[:8] / "comments.db"
+
+
+def get_cookies_path(user_id: str) -> Path:
+    """유저별 쿠키 파일 경로 반환. cookies/{user_id[:8]}_naver.json"""
+    return COOKIES_DIR / f"{user_id[:8]}_naver.json"
+
 # 모듈별 로그 경로
 LOG_PATH = LOGS_DIR / "commenter.log"
 LOG_PATH_COMMENTER = LOGS_DIR / "commenter.log"

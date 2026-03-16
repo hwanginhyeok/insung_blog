@@ -41,10 +41,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 중복 방지: pending 또는 running 상태 명령이 있으면 거부
+  // 중복 방지: 해당 사용자의 pending 또는 running 상태 명령이 있으면 거부
   const { data: active } = await supabase
     .from("bot_commands")
     .select("id, command, status")
+    .eq("user_id", user.id)
     .in("status", ["pending", "running"])
     .limit(1)
     .single();
@@ -96,6 +97,7 @@ export async function GET() {
   const { data: commands } = await supabase
     .from("bot_commands")
     .select("*")
+    .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(5);
 

@@ -29,17 +29,19 @@ export async function GET() {
     return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 });
   }
 
-  // 병렬 조회: 최근 실행 이력 + 설정 + 대기 댓글 수
+  // 병렬 조회: 최근 실행 이력 + 설정 + 대기 댓글 수 (user_id 필터)
   const [runsResult, settingsResult, pendingResult] = await Promise.all([
     supabase
       .from("bot_run_log")
       .select("*")
+      .eq("user_id", user.id)
       .order("run_at", { ascending: false })
       .limit(10),
-    supabase.from("bot_settings").select("*").single(),
+    supabase.from("bot_settings").select("*").eq("user_id", user.id).single(),
     supabase
       .from("pending_comments")
       .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
       .eq("status", "pending"),
   ]);
 

@@ -111,6 +111,18 @@ python -c "import py_compile; py_compile.compile('파일.py', doraise=True)"
 
 ---
 
+## 스킬 (반복 작업 시 참조)
+
+> 스킬은 반복적인 작업 절차를 정의한 파일. 해당 작업 수행 시 반드시 읽고 절차를 따른다.
+
+| 파일 | 내용 | 트리거 |
+|------|------|--------|
+| `.claude/skills/bot-health-check.md` | 댓글 봇 상태 점검 (tmux/로그/DB/쿠키) | "봇 상태", "봇 확인", 세션 시작 시 운영 점검 |
+| `.claude/skills/selector-debug.md` | 네이버 DOM 변경 대응 (디버그→분석→셀렉터 업데이트) | "셀렉터 확인", "댓글 안 달림", "DOM 분석" |
+| `.claude/skills/cookie-refresh.md` | 네이버 쿠키 갱신 + Supabase 양방향 동기화 | "쿠키 갱신", "로그인 만료", 쿠키 만료 감지 시 |
+
+---
+
 ## 상세 규칙 (트리거 기반 — 해당 작업 시만 Read)
 
 > **해당 트리거에 해당하는 작업을 할 때만** 아래 매뉴얼을 읽는다.
