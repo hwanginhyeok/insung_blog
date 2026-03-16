@@ -42,7 +42,9 @@ Supabase (공유 제어 평면)
 |---|------|--------|------|------|
 | MULTI-USER | 댓글 봇 다중 사용자 전환 | P1 | 검증 중 | — |
 | TEST | 기능별 통합 테스트 (아래 상세) | P0 | 대기 | — |
-| PUBLISH | 웹 네이버 발행 기능 (G1+G3+G4) | P0 | 구현 완료, SQL 실행 필요 | REQUIREMENTS.md §6 |
+| PUBLISH | 웹 네이버 발행 기능 (G1+G3+G4) | P0 | ✅ 구현+배포 완료 | REQUIREMENTS.md §6 |
+| COMMENT-UX | 댓글 프롬프트 개선 + 웹 수정 기능 | P1 | ✅ 완료 | — |
+| VERCEL-PROD | dev→master 머지 Production 배포 | P0 | ✅ 완료 (bc1fccc) | — |
 
 ### PUBLISH: 웹 네이버 발행 (2026-03-16)
 
@@ -59,6 +61,9 @@ Supabase (공유 제어 평면)
 | PUB-06 | G4: 발행 완료 알림 (웹 UI + 텔레그램) | ✅ 완료 | publishResult UI + _send_publish_notification |
 | PUB-07 | SQL 마이그레이션 실행 (00018) | ✅ 완료 | 2026-03-16 SQL Editor 실행 |
 | PUB-08 | E2E 테스트 (저장→발행→URL 확인) | ⬜ 미진행 | 워커+브라우저 필요 |
+| PUB-09 | 댓글 프롬프트 개선 (100~200자, 위트, 정보 2~3개) | ✅ 완료 | ai_comment.py |
+| PUB-10 | 웹 댓글 수정 기능 (PATCH API + 인라인 편집) | ✅ 완료 | pending/route.ts + bot/page.tsx |
+| PUB-11 | dev→master 머지 + Vercel Production 배포 | ✅ 완료 | bc1fccc |
 
 ### COOKIE-AUTO: 쿠키 업로드 시 블로그 ID 자동 추출 (2026-03-16 발견)
 
