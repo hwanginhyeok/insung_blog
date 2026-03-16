@@ -38,32 +38,44 @@ def get_supabase() -> Client:
     return create_client(url, key)
 
 
-def get_admin_user_id() -> str:
+def get_admin_user_id() -> str | None:
     """
     관리자(인성이) user_id 조회 + 캐싱.
     users 테이블에서 role='admin'인 첫 번째 사용자 반환.
+    admin이 없으면 None 반환 (크래시 방지).
     (deprecated — 새 코드는 user_id를 명시적으로 전달할 것)
     """
     global _user_id_cache
     if _user_id_cache:
         return _user_id_cache
 
-    sb = get_supabase()
-    result = sb.table("users").select("id").eq("role", "admin").limit(1).execute()
+    try:
+        sb = get_supabase()
+        result = sb.table("users").select("id").eq("role", "admin").limit(1).execute()
 
-    if not result.data:
-        raise RuntimeError("users 테이블에 admin 사용자가 없습니다")
+        if not result.data:
+            logger.warning("users 테이블에 admin 사용자가 없습니다")
+            return None
 
-    _user_id_cache = result.data[0]["id"]
-    logger.info(f"관리자 user_id 캐싱: {_user_id_cache[:8]}...")
-    return _user_id_cache
+        _user_id_cache = result.data[0]["id"]
+        logger.info(f"관리자 user_id 캐싱: {_user_id_cache[:8]}...")
+        return _user_id_cache
+    except Exception as e:
+        logger.error(f"admin user_id 조회 실패: {e}")
+        return None
 
 
 def _resolve_user_id(user_id: str | None) -> str:
     """user_id가 None이면 admin 폴백. 하위 호환용."""
     if user_id:
         return user_id
-    return get_admin_user_id()
+    admin_id = get_admin_user_id()
+    if not admin_id:
+        raise ValueError(
+            "user_id가 전달되지 않았고, admin 사용자도 조회할 수 없습니다. "
+            "user_id를 명시적으로 전달하세요."
+        )
+    return admin_id
 
 
 # ── 다중 사용자 조회 ──────────────────────────────────────────────────────
@@ -286,11 +298,11 @@ def update_pending_status_sb(
         update_data: dict = {
             "status": status,
             "decided_by": decided_by,
-            "decided_at": datetime.now().isoformat(),
+            "decided_at": datetime.now(timezone.utc).isoformat(),
         }
 
         if status == "posted":
-            update_data["posted_at"] = datetime.now().isoformat()
+            update_data["posted_at"] = datetime.now(timezone.utc).isoformat()
 
         if fail_reason:
             update_data["fail_reason"] = fail_reason
@@ -455,7 +467,7 @@ def update_bot_settings_sb(user_id: str | None = None, **kwargs) -> bool:
         uid = _resolve_user_id(user_id)
 
         update_data["user_id"] = uid
-        update_data["updated_at"] = datetime.now().isoformat()
+        update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
         result = (
             sb.table("bot_settings")

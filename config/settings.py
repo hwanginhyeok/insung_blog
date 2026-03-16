@@ -92,6 +92,7 @@ BLOG_WRITE_URL = "https://blog.naver.com/{blog_id}/postwrite"
 # AI 모델
 CONTENT_AI_MODEL = "claude-haiku-4-5-20251001"    # Vision + 초안 생성 (Sonnet 접근 불가하여 Haiku 사용)
 HASHTAG_AI_MODEL = "claude-haiku-4-5-20251001"    # 해시태그 생성
+COMMENT_AI_MODEL = "claude-haiku-4-5-20251001"    # 댓글 생성
 
 # 이미지 제약
 MAX_IMAGES = 10

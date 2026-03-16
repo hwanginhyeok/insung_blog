@@ -85,6 +85,8 @@ class PublishRequest(BaseModel):
     image_paths: list[str] = []
     category: str | None = None
     dry_run: bool = False
+    user_id: str | None = None  # 다중 사용자: Supabase 쿠키/blog_id 사용
+    chat_id: int | None = None  # 텔레그램 발행 완료 알림용
 
 
 class PublishResponse(BaseModel):
@@ -168,19 +170,43 @@ async def generate_content(req: GenerateRequest, _=Depends(_verify_token)):
 
 @app.post("/publish", response_model=PublishResponse)
 async def publish_post_endpoint(req: PublishRequest, _=Depends(_verify_token)):
-    """승인된 초안을 네이버 블로그에 게시"""
+    """
+    승인된 초안을 네이버 블로그에 게시.
+
+    다중 사용자:
+      - user_id 있으면 → Supabase에서 쿠키/blog_id 로드 (쿠키 전용)
+      - user_id 없으면 → .env NAVER_ID/PW/MY_BLOG_ID 폴백
+    """
     from playwright.async_api import async_playwright
 
-    from src.auth.naver_login import ensure_login
     from src.publisher.blog_publisher import publish_post
     from src.utils.browser import create_browser
 
-    naver_id = os.environ.get("NAVER_ID", "")
-    naver_pw = os.environ.get("NAVER_PW", "")
-    blog_id = os.environ.get("MY_BLOG_ID", "")
+    # ── 인증 정보 결정 ──
+    use_cookie_only = False
+    naver_id = ""
+    naver_pw = ""
+    blog_id = ""
+    user_id = req.user_id
 
-    if not all([naver_id, naver_pw, blog_id]):
-        raise HTTPException(status_code=500, detail=".env 인증 정보 누락")
+    if user_id:
+        # 다중 사용자: Supabase에서 설정 로드
+        from src.storage.supabase_client import get_user_bot_config
+        config = get_user_bot_config(user_id)
+        if not config:
+            raise HTTPException(
+                status_code=400,
+                detail="봇 설정이 없거나 블로그 ID가 미설정입니다. /bot 페이지에서 설정하세요.",
+            )
+        blog_id = config["naver_blog_id"]
+        use_cookie_only = True
+    else:
+        # 단일 사용자: .env 폴백
+        naver_id = os.environ.get("NAVER_ID", "")
+        naver_pw = os.environ.get("NAVER_PW", "")
+        blog_id = os.environ.get("MY_BLOG_ID", "")
+        if not all([naver_id, naver_pw, blog_id]):
+            raise HTTPException(status_code=500, detail=".env 인증 정보 누락")
 
     try:
         safe_image_paths = _validate_image_paths(req.image_paths)
@@ -198,12 +224,24 @@ async def publish_post_endpoint(req: PublishRequest, _=Depends(_verify_token)):
             browser, context, page = await create_browser(pw, headless=True)
 
             try:
-                logged_in = await ensure_login(context, page, naver_id, naver_pw)
-                if not logged_in:
-                    update_post_status(post_id, "failed")
-                    return PublishResponse(
-                        success=False, post_id=post_id, message="로그인 실패"
-                    )
+                # 로그인 분기
+                if use_cookie_only:
+                    from src.auth.naver_login import ensure_login_cookie_only
+                    logged_in = await ensure_login_cookie_only(context, page, user_id)
+                    if not logged_in:
+                        update_post_status(post_id, "failed")
+                        return PublishResponse(
+                            success=False, post_id=post_id,
+                            message="쿠키 만료 또는 미등록. 웹에서 네이버 쿠키를 재업로드하세요.",
+                        )
+                else:
+                    from src.auth.naver_login import ensure_login
+                    logged_in = await ensure_login(context, page, naver_id, naver_pw)
+                    if not logged_in:
+                        update_post_status(post_id, "failed")
+                        return PublishResponse(
+                            success=False, post_id=post_id, message="로그인 실패"
+                        )
 
                 post_url = await publish_post(
                     page=page,
@@ -220,6 +258,11 @@ async def publish_post_endpoint(req: PublishRequest, _=Depends(_verify_token)):
         if post_url:
             status = "dry-run" if req.dry_run else "published"
             update_post_status(post_id, status, post_url if not req.dry_run else None)
+
+            # 발행 완료 텔레그램 알림 (chat_id 제공 시)
+            if req.chat_id and not req.dry_run:
+                await _send_publish_notification(req.chat_id, req.title, post_url)
+
             return PublishResponse(
                 success=True, post_url=post_url, post_id=post_id, message="발행 완료"
             )
@@ -572,6 +615,42 @@ async def execute_pending_comments(
         message=message,
         details=details,
     )
+
+
+async def _send_publish_notification(
+    chat_id: int,
+    title: str,
+    post_url: str,
+) -> None:
+    """게시물 발행 완료 텔레그램 알림."""
+    import httpx
+
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    if not bot_token:
+        logger.warning("TELEGRAM_BOT_TOKEN 미설정, 발행 알림 스킵")
+        return
+
+    message = (
+        f"✅ <b>게시물 발행 완료</b>\n\n"
+        f"📝 <b>제목:</b> {title}\n"
+        f"🔗 <a href=\"{post_url}\">블로그에서 보기</a>"
+    )
+
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                json={
+                    "chat_id": chat_id,
+                    "text": message,
+                    "parse_mode": "HTML",
+                    "disable_web_page_preview": False,
+                },
+                timeout=10,
+            )
+        logger.info(f"✓ 발행 알림 발송 완료 (chat_id: {chat_id})")
+    except Exception as e:
+        logger.warning(f"발행 알림 발송 실패: {e}")
 
 
 async def _send_telegram_notification(

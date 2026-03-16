@@ -11,7 +11,7 @@ function getSupabase() {
   );
 }
 
-const VALID_COMMANDS = ["run", "execute", "retry"] as const;
+const VALID_COMMANDS = ["run", "execute", "retry", "publish"] as const;
 type BotCommand = (typeof VALID_COMMANDS)[number];
 
 /**
@@ -32,11 +32,19 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { command } = body as { command: string };
+  const { command, payload } = body as { command: string; payload?: Record<string, unknown> };
 
   if (!command || !VALID_COMMANDS.includes(command as BotCommand)) {
     return NextResponse.json(
       { error: `유효하지 않은 명령: ${command}. 허용: ${VALID_COMMANDS.join(", ")}` },
+      { status: 400 }
+    );
+  }
+
+  // publish 명령은 payload 필수
+  if (command === "publish" && (!payload || !payload.title || !payload.body)) {
+    return NextResponse.json(
+      { error: "publish 명령에는 payload(title, body)가 필요합니다" },
       { status: 400 }
     );
   }
@@ -60,13 +68,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const insertData: Record<string, any> = {
+    user_id: user.id,
+    command,
+    status: "pending",
+  };
+  if (payload) {
+    insertData.payload = payload;
+  }
+
   const { data, error } = await supabase
     .from("bot_commands")
-    .insert({
-      user_id: user.id,
-      command,
-      status: "pending",
-    })
+    .insert(insertData)
     .select()
     .single();
 

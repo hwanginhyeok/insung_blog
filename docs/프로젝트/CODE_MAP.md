@@ -17,7 +17,7 @@
 | `app/(auth)/login/page.tsx` | 로그인/회원가입 (Supabase Auth + **카카오/네이버 소셜 로그인 버튼**) | ✅ (P3 확장) |
 | `app/(dashboard)/layout.tsx` | 대시보드 공유 레이아웃 (Header) | ✅ |
 | `app/(dashboard)/dashboard/page.tsx` | 내 글 목록 (Supabase 연동, TG 뱃지, 상태 표시, **완료 글 클릭→write 이동**) | ✅ |
-| `app/(dashboard)/write/page.tsx` | AI 글쓰기 에디터 (사진+메모+초안+재생성+저장+복사, 이탈 경고, ?id= 불러오기, **페르소나 선택**, **?calendar_id= 캘린더 연동**) | ✅ (P3 확장) |
+| `app/(dashboard)/write/page.tsx` | AI 글쓰기 에디터 (사진+메모+초안+재생성+저장+복사, 이탈 경고, ?id= 불러오기, **페르소나 선택**, **?calendar_id= 캘린더 연동**, **네이버 발행 버튼**) | ✅ (발행 확장) |
 | `app/(dashboard)/persona/page.tsx` | 페르소나 관리 UI — **목록 뷰** (그리드 카드 + 새 페르소나 추가 + 기본 설정) | ✅ (P3 개편) |
 | `app/(dashboard)/persona/[id]/page.tsx` | 개별 페르소나 상세 — 7카테고리 아코디언 + 항목 토글/삭제/추가 + **카테고리별 글쓰기 가이드** + 피드백 규칙 + 이름 편집 + 삭제 | ✅ (UX-08 추가) |
 | `app/(dashboard)/calendar/page.tsx` | 콘텐츠 캘린더 — 월별 7열 그리드 + 이벤트 배지 + 생성/수정/삭제 모달 + 글쓰기 연동 + **완료 글 클릭→write 이동** | ✅ (CAL-01 추가) |
@@ -43,6 +43,7 @@
 | `app/api/persona/crawl/route.ts` | 블로그 크롤링 API Route (POST, blogUrl → crawl → HTML 메타데이터 반환) | ✅ **신규** |
 | `app/api/persona/analyze/route.ts` | AI 페르소나 분석 API Route (POST, 2-pass Sonnet → persona_items INSERT) | ✅ **신규** |
 | `app/api/persona/feedback/route.ts` | 피드백 규칙 API Route — GET: 대기 규칙 + 히스토리 조회, POST: 규칙 승인/거절 | ✅ **신규** |
+| `app/api/bot/command/route.ts` | 봇 명령 큐 API Route — POST: 명령 등록(run/execute/retry/**publish**+payload), GET: 최근 5개 조회(폴링) | ✅ (publish 확장) |
 | `app/api/bot/cookies/route.ts` | 쿠키 업로드 API Route — GET: 상태, POST: 업로드(upsert), DELETE: 삭제 | ✅ **신규** |
 | `app/api/posts/route.ts` | 글 관리 API Route — DELETE: 삭제(Storage 동시 정리), PATCH: 제목/본문/해시태그/버전 수정 | ✅ **신규** |
 | `app/api/persona/list/route.ts` | 페르소나 목록 API Route (GET: 사용자 전체 페르소나) | ✅ **신규** |
@@ -74,7 +75,8 @@
 | `supabase/migrations/00013_create_content_calendar.sql` | content_calendar 테이블 + RLS (콘텐츠 캘린더) | ✅ 실행됨 |
 | `supabase/migrations/00014_create_post_analytics.sql` | post_analytics 테이블 + user_post_stats 뷰 + RLS (성과 분석) | ✅ 실행됨 |
 | `supabase/migrations/00015_add_oauth_providers.sql` | users에 kakao_id, naver_id 컬럼 + 부분 유니크 인덱스 (OAuth) | ✅ 실행됨 |
-| `supabase/migrations/00017_add_naver_blog_id.sql` | bot_settings에 naver_blog_id 컬럼 추가 (다중 사용자) | 실행 필요 |
+| `supabase/migrations/00017_add_naver_blog_id.sql` | bot_settings에 naver_blog_id 컬럼 추가 (다중 사용자) | ✅ 실행 완료 |
+| `supabase/migrations/00018_publish_command.sql` | bot_commands에 'publish' 명령 + payload JSONB 컬럼 추가 | 실행 필요 |
 | `package.json` | 의존성 (Next 14, Supabase, shadcn/ui, react-hook-form, zod) | ✅ |
 
 ### 작업 문서
@@ -94,7 +96,8 @@
 |------|------|-------|------|
 | `main.py` | 댓글 봇 스케줄러 진입점 (argparse + schedule) | 1 | ✅ |
 | `publisher_main.py` | 게시물 발행 CLI 진입점 (--photos, --memo, --dry-run, --no-ai) | 2 | ⚠️ (셀렉터 이슈) |
-| `api_server.py` | FastAPI 웹훅 서버 — 8개 엔드포인트 (generate, publish, status, comment/run, comment/execute, comment/retry, feedback, health) | 3 | ✅ |
+| `api_server.py` | FastAPI 웹훅 서버 — 8개 엔드포인트 (generate, **publish(다중사용자+알림)**, status, comment/run, comment/execute, comment/retry, feedback, health) | 3 | ✅ (publish 확장) |
+| `command_worker.py` | 명령 큐 워커 — Supabase bot_commands 10초 폴링, run/execute/retry/**publish** 핸들러, Semaphore(2) | 2 | ✅ (publish 확장) |
 | `telegram_bot.py` | 텔레그램 봇 (사진 수신 → AI 초안) | 3 | ✅ |
 | `telegram_bot_simple.py` | 텔레그램 봇 (댓글 승인 워크플로) — `/status`, `/pending`, `/execute`, `/retry`, `/retry_now` | 3 | ✅ |
 | `debug_publisher.py` | 스마트에디터 DOM 분석 도구 (headless=False, 셀렉터 탐색, `--validate` 셀렉터 검증) | 2 | ✅ |

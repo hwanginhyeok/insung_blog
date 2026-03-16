@@ -359,6 +359,109 @@ async def handle_retry(user_id: str | None = None) -> dict:
     }
 
 
+async def handle_publish(user_id: str | None = None, payload: dict | None = None) -> dict:
+    """
+    게시물 네이버 발행.
+
+    payload 필수 키:
+      - title, body, hashtags, image_paths, queue_id
+    선택 키:
+      - category, dry_run
+    """
+    if not payload:
+        raise ValueError("publish 명령에 payload가 필요합니다")
+
+    title = payload.get("title", "")
+    body = payload.get("body", "")
+    hashtags = payload.get("hashtags", [])
+    image_paths = payload.get("image_paths", [])
+    queue_id = payload.get("queue_id")
+    category = payload.get("category")
+    dry_run = payload.get("dry_run", False)
+
+    if not title or not body:
+        raise ValueError("title과 body는 필수입니다")
+
+    from playwright.async_api import async_playwright
+
+    from src.auth.naver_login import ensure_login, ensure_login_cookie_only
+    from src.publisher.blog_publisher import publish_post
+    from src.utils.browser import create_browser
+
+    # 블로그 ID 결정
+    if user_id:
+        from src.storage.supabase_client import get_user_bot_config
+        config = get_user_bot_config(user_id)
+        if not config:
+            raise RuntimeError("봇 설정 없음 — /bot에서 블로그 ID 설정 필요")
+        blog_id = config["naver_blog_id"]
+    else:
+        blog_id = os.environ.get("MY_BLOG_ID", "")
+        if not blog_id:
+            raise RuntimeError(".env MY_BLOG_ID 미설정")
+
+    # generation_queue 상태 → publishing
+    sb = get_supabase()
+    if queue_id:
+        sb.table("generation_queue").update({"status": "publishing"}).eq("id", queue_id).execute()
+
+    uid_label = user_id[:8] if user_id else "admin"
+    logger.info(f"▶ 게시물 발행 시작: '{title[:30]}...' (user={uid_label})")
+
+    try:
+        async with _browser_semaphore:
+            async with async_playwright() as pw:
+                browser, context, page = await create_browser(pw, headless=True)
+
+                try:
+                    # 로그인
+                    if user_id:
+                        logged_in = await ensure_login_cookie_only(context, page, user_id)
+                    else:
+                        naver_id = os.environ.get("NAVER_ID", "")
+                        naver_pw = os.environ.get("NAVER_PW", "")
+                        if not all([naver_id, naver_pw]):
+                            raise RuntimeError(".env 인증 정보 누락")
+                        logged_in = await ensure_login(context, page, naver_id, naver_pw)
+
+                    if not logged_in:
+                        raise RuntimeError("네이버 로그인 실패 — 쿠키 재업로드 필요")
+
+                    post_url = await publish_post(
+                        page=page,
+                        blog_id=blog_id,
+                        title=title,
+                        body=body,
+                        image_paths=image_paths,
+                        hashtags=hashtags,
+                        dry_run=dry_run,
+                    )
+                finally:
+                    await browser.close()
+
+        if post_url:
+            status = "dry-run" if dry_run else "published"
+            # generation_queue 상태 업데이트
+            if queue_id:
+                update_data = {"status": status}
+                if not dry_run:
+                    update_data["post_url"] = post_url
+                sb.table("generation_queue").update(update_data).eq("id", queue_id).execute()
+
+            logger.info(f"✓ 게시물 발행 완료: {post_url}")
+            return {"message": "발행 완료", "post_url": post_url, "queue_id": queue_id}
+        else:
+            if queue_id:
+                sb.table("generation_queue").update({"status": "failed"}).eq("id", queue_id).execute()
+            raise RuntimeError("발행 실패 — publish_post()가 None 반환")
+
+    except Exception:
+        # 실패 시 generation_queue 상태 복원
+        if queue_id:
+            sb.table("generation_queue").update({"status": "completed"}).eq("id", queue_id).execute()
+        raise
+
+
 # ── 명령 핸들러 매핑 ──
 
 
@@ -366,6 +469,7 @@ _HANDLERS = {
     "run": handle_run,
     "execute": handle_execute,
     "retry": handle_retry,
+    "publish": handle_publish,
 }
 
 
@@ -387,7 +491,11 @@ async def process_command(cmd: dict) -> None:
     logger.info(f"━━━ 명령 실행: {command_type} (id={command_id[:8]}..., user={uid_label}) ━━━")
 
     try:
-        result = await handler(user_id=cmd_user_id)
+        # publish 명령은 payload도 전달
+        kwargs = {"user_id": cmd_user_id}
+        if command_type == "publish":
+            kwargs["payload"] = cmd.get("payload")
+        result = await handler(**kwargs)
         mark_completed(command_id, result)
         logger.info(f"━━━ 명령 완료: {command_type} → {result.get('message', '')} ━━━")
     except Exception as e:

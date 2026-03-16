@@ -42,6 +42,23 @@ Supabase (공유 제어 평면)
 |---|------|--------|------|------|
 | MULTI-USER | 댓글 봇 다중 사용자 전환 | P1 | 검증 중 | — |
 | TEST | 기능별 통합 테스트 (아래 상세) | P0 | 대기 | — |
+| PUBLISH | 웹 네이버 발행 기능 (G1+G3+G4) | P0 | 구현 완료, SQL 실행 필요 | REQUIREMENTS.md §6 |
+
+### PUBLISH: 웹 네이버 발행 (2026-03-16)
+
+> 저장된 글(웹/텔레그램 출처 무관)을 웹에서 네이버 블로그에 발행.
+> Command Queue 패턴: 웹 → bot_commands(publish) INSERT → command_worker → Playwright 발행
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| PUB-01 | REQUIREMENTS.md 전면 재작성 | ✅ 완료 | 갭 분석 포함 |
+| PUB-02 | G3: /publish API user_id 선택적 지원 | ✅ 완료 | api_server.py — .env 폴백 유지 |
+| PUB-03 | G1: command_worker publish 핸들러 | ✅ 완료 | handle_publish() + generation_queue 상태 전이 |
+| PUB-04 | G1: 웹 API bot/command에 publish 명령 추가 | ✅ 완료 | payload JSONB 전달 |
+| PUB-05 | G1: write/page.tsx 발행 버튼 + 폴링 | ✅ 완료 | 저장 후에만 활성, 5초 폴링 |
+| PUB-06 | G4: 발행 완료 알림 (웹 UI + 텔레그램) | ✅ 완료 | publishResult UI + _send_publish_notification |
+| PUB-07 | SQL 마이그레이션 실행 (00018) | ✅ 완료 | 2026-03-16 SQL Editor 실행 |
+| PUB-08 | E2E 테스트 (저장→발행→URL 확인) | ⬜ 미진행 | 워커+브라우저 필요 |
 
 ### MULTI-USER 검증 현황 (2026-03-15)
 

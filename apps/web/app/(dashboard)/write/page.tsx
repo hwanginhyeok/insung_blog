@@ -63,6 +63,12 @@ function WritePageContent() {
   const [currentVersion, setCurrentVersion] = useState<number>(0); // 0 = 최신 (draft)
   const [cachedFormatting, setCachedFormatting] = useState<FormattingItem[]>([]);
   const [cachedPhotoUrls, setCachedPhotoUrls] = useState<string[]>([]);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishResult, setPublishResult] = useState<{
+    success: boolean;
+    postUrl?: string;
+    message: string;
+  } | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [quota, setQuota] = useState<{
@@ -578,6 +584,79 @@ function WritePageContent() {
     }
   }
 
+  async function handlePublish() {
+    if (!draft || !savedId) return;
+    setIsPublishing(true);
+    setPublishResult(null);
+    setError(null);
+
+    try {
+      // 1. publish 명령을 bot_commands 큐에 등록
+      const res = await fetch("/api/bot/command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command: "publish",
+          payload: {
+            queue_id: savedId,
+            title: draft.title,
+            body: draft.body,
+            hashtags: draft.hashtags,
+            image_paths: [], // 로컬 이미지는 워커가 처리하지 않음 (스마트에디터에서 업로드)
+            category: category,
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "발행 명령 등록 실패");
+      }
+
+      // 2. 폴링으로 완료 대기 (최대 5분, 5초 간격)
+      const maxAttempts = 60;
+      for (let i = 0; i < maxAttempts; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+
+        const pollRes = await fetch("/api/bot/command");
+        if (!pollRes.ok) continue;
+
+        const pollData = await pollRes.json();
+        const publishCmd = (pollData.commands || []).find(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (c: any) => c.command === "publish" && c.payload?.queue_id === savedId
+        );
+
+        if (!publishCmd) continue;
+
+        if (publishCmd.status === "completed") {
+          const postUrl = publishCmd.result?.post_url;
+          setPublishResult({
+            success: true,
+            postUrl,
+            message: "네이버 블로그에 발행되었습니다!",
+          });
+          return;
+        }
+
+        if (publishCmd.status === "failed") {
+          throw new Error(publishCmd.error_message || "발행 실패");
+        }
+
+        // pending/running — 계속 대기
+      }
+
+      throw new Error("발행 시간 초과 (5분). 워커가 실행 중인지 확인하세요.");
+    } catch (e) {
+      setPublishResult({
+        success: false,
+        message: e instanceof Error ? e.message : "발행 중 오류가 발생했습니다",
+      });
+    } finally {
+      setIsPublishing(false);
+    }
+  }
+
   return (
     <div className={`space-y-6 ${draft ? "pb-24" : ""}`}>
       <div>
@@ -791,13 +870,28 @@ function WritePageContent() {
                         {htmlCopyLabel}
                       </Button>
                       {savedId ? (
-                        <Button
-                          size="sm"
-                          onClick={handleUpdate}
-                          disabled={isUpdating}
-                        >
-                          {isUpdating ? "저장 중..." : "수정 저장"}
-                        </Button>
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleUpdate}
+                            disabled={isUpdating}
+                          >
+                            {isUpdating ? "저장 중..." : "수정 저장"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={handlePublish}
+                            disabled={isPublishing || publishResult?.success === true}
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                          >
+                            {isPublishing
+                              ? "발행 중..."
+                              : publishResult?.success
+                                ? "발행 완료"
+                                : "네이버 발행"}
+                          </Button>
+                        </>
                       ) : (
                         <Button
                           size="sm"
@@ -934,6 +1028,47 @@ function WritePageContent() {
                       ))}
                     </div>
                   </div>
+
+                  {/* 발행 결과 */}
+                  {publishResult && (
+                    <div
+                      className={`rounded-lg p-4 ${
+                        publishResult.success
+                          ? "bg-green-50 border border-green-200"
+                          : "bg-red-50 border border-red-200"
+                      }`}
+                    >
+                      <p
+                        className={`text-sm font-medium ${
+                          publishResult.success ? "text-green-800" : "text-red-800"
+                        }`}
+                      >
+                        {publishResult.success ? "✅" : "❌"} {publishResult.message}
+                      </p>
+                      {publishResult.postUrl && (
+                        <a
+                          href={publishResult.postUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2 inline-block text-sm text-green-700 underline hover:text-green-900"
+                        >
+                          블로그에서 보기 →
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 발행 진행 중 표시 */}
+                  {isPublishing && (
+                    <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
+                      <p className="text-sm text-blue-800">
+                        ⏳ 네이버 블로그에 발행 중입니다... (최대 5분 소요)
+                      </p>
+                      <p className="mt-1 text-xs text-blue-600">
+                        로컬 워커가 Playwright로 스마트에디터를 조작하고 있습니다.
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 

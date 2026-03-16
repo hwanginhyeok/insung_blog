@@ -21,6 +21,7 @@ import json
 import sqlite3
 import time
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
 from typing import Callable, TypeVar
@@ -236,16 +237,17 @@ def get_recent_comments_for_blogger(
     특정 블로거에게 최근 N일간 단 댓글 목록 반환.
     AI 댓글 중복 방지에 사용.
     """
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     with _conn(user_id) as conn:
         rows = conn.execute(
             """
             SELECT comment_text FROM comment_history
             WHERE blog_id = ?
               AND success = 1
-              AND date(created_at) >= date('now', '-{} days')
+              AND date(created_at) >= ?
             ORDER BY created_at DESC
-            """.format(days),
-            (blog_id,),
+            """,
+            (blog_id, cutoff),
         ).fetchall()
     return [row["comment_text"] for row in rows]
 
@@ -321,6 +323,7 @@ def get_comment_quality_stats(days: int = 7, user_id: str | None = None) -> dict
     - 평균 길이
     - AI/phrases 사용 비율 (추정)
     """
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     with _conn(user_id) as conn:
         # 성공/실패 통계
         row = conn.execute(
@@ -330,8 +333,9 @@ def get_comment_quality_stats(days: int = 7, user_id: str | None = None) -> dict
                 SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as success,
                 SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as failed
             FROM comment_history
-            WHERE date(created_at) >= date('now', '-{} days')
-            """.format(days)
+            WHERE date(created_at) >= ?
+            """,
+            (cutoff,),
         ).fetchone()
 
         # 길이 통계
@@ -343,8 +347,9 @@ def get_comment_quality_stats(days: int = 7, user_id: str | None = None) -> dict
                 MAX(LENGTH(comment_text)) as max_len
             FROM comment_history
             WHERE success = 1
-              AND date(created_at) >= date('now', '-{} days')
-            """.format(days)
+              AND date(created_at) >= ?
+            """,
+            (cutoff,),
         ).fetchone()
 
         # 품질 이상 댓글 (너무 짧거나 긴 것)
@@ -353,9 +358,10 @@ def get_comment_quality_stats(days: int = 7, user_id: str | None = None) -> dict
             SELECT COUNT(*) as count
             FROM comment_history
             WHERE success = 1
-              AND date(created_at) >= date('now', '-{} days')
+              AND date(created_at) >= ?
               AND (LENGTH(comment_text) < 10 OR LENGTH(comment_text) > 100)
-            """.format(days)
+            """,
+            (cutoff,),
         ).fetchone()
 
     total = row["total"] if row else 0
@@ -382,6 +388,7 @@ def get_low_quality_comments(
     user_id: str | None = None,
 ) -> list[dict]:
     """품질 이상 의심 댓글 목록 (짧거나 긴 것)"""
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     with _conn(user_id) as conn:
         rows = conn.execute(
             """
@@ -394,11 +401,12 @@ def get_low_quality_comments(
                 created_at
             FROM comment_history
             WHERE success = 1
-              AND date(created_at) >= date('now', '-{} days')
+              AND date(created_at) >= ?
               AND (LENGTH(comment_text) < 15 OR LENGTH(comment_text) > 80)
             ORDER BY created_at DESC
-            LIMIT {}
-            """.format(days, limit),
+            LIMIT ?
+            """,
+            (cutoff, limit),
         ).fetchall()
 
     return [
@@ -689,6 +697,7 @@ def should_skip_blogger(
 @_retry_on_db_lock(max_retries=3)
 def get_blogger_behavior_stats(days: int = 30, user_id: str | None = None) -> list[dict]:
     """오토 블로거 추적 통계 조회"""
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     with _conn(user_id) as conn:
         rows = conn.execute(
             """
@@ -701,10 +710,11 @@ def get_blogger_behavior_stats(days: int = 30, user_id: str | None = None) -> li
                 last_reply_at,
                 first_detected_at
             FROM blogger_behavior
-            WHERE first_detected_at >= date('now', '-{} days')
-               OR last_reply_at >= date('now', '-{} days')
+            WHERE first_detected_at >= ?
+               OR last_reply_at >= ?
             ORDER BY pattern_score DESC, fast_reply_count DESC
-            """.format(days, days),
+            """,
+            (cutoff, cutoff),
         ).fetchall()
 
     return [

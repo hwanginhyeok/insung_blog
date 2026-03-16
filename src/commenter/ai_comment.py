@@ -23,6 +23,7 @@ from difflib import SequenceMatcher
 
 from anthropic import Anthropic
 
+from config.settings import COMMENT_AI_MODEL
 from src.commenter.phrases import pick_phrase
 from src.utils.logger import logger
 
@@ -146,7 +147,7 @@ def generate_comment(
             user_message = f"[제목] {post_title}\n\n[본문]\n{body}"
 
             response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model=COMMENT_AI_MODEL,
                 max_tokens=100,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_message}],
@@ -278,7 +279,7 @@ def generate_comments_batch(
     for attempt in range(2):
         try:
             response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model=COMMENT_AI_MODEL,
                 max_tokens=300,
                 system=_build_system_prompt(),
                 messages=[{"role": "user", "content": user_message}],
