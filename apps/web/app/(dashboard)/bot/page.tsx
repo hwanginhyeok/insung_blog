@@ -122,6 +122,8 @@ export default function BotPage() {
   const [loading, setLoading] = useState(true);
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
   const [bulkApproving, setBulkApproving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<BotSettings>(defaultSettings);
   const [cookieStatus, setCookieStatus] = useState<CookieStatus | null>(null);
@@ -267,6 +269,34 @@ export default function BotPage() {
       }
     } finally {
       setBulkApproving(false);
+    }
+  }
+
+  // 댓글 수정 저장
+  async function handleEditSave(id: string) {
+    if (!editText.trim()) return;
+    setProcessingIds((prev) => new Set(prev).add(id));
+    try {
+      const res = await fetch("/api/bot/pending", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, comment_text: editText }),
+      });
+      if (res.ok) {
+        setPending((prev) =>
+          prev.map((c) =>
+            c.id === id ? { ...c, comment_text: editText.trim() } : c
+          )
+        );
+        setEditingId(null);
+        setEditText("");
+      }
+    } finally {
+      setProcessingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   }
 
@@ -559,38 +589,80 @@ export default function BotPage() {
               {pending.map((c) => (
                 <div
                   key={c.id}
-                  className="flex items-start justify-between gap-4 rounded-lg border p-3"
+                  className="rounded-lg border p-3 space-y-2"
                 >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">
-                      [{c.blog_id}]{" "}
-                      <span className="text-muted-foreground">
-                        {c.post_title || "제목 없음"}
-                      </span>
-                    </p>
-                    <p className="mt-1 text-sm">&ldquo;{c.comment_text}&rdquo;</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {timeAgo(c.created_at)}
-                    </p>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">
+                        [{c.blog_id}]{" "}
+                        <span className="text-muted-foreground">
+                          {c.post_title || "제목 없음"}
+                        </span>
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {timeAgo(c.created_at)} · {c.comment_text.length}자
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleAction(c.id, "approve")}
+                        disabled={processingIds.has(c.id)}
+                      >
+                        승인
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          if (editingId === c.id) {
+                            setEditingId(null);
+                            setEditText("");
+                          } else {
+                            setEditingId(c.id);
+                            setEditText(c.comment_text);
+                          }
+                        }}
+                      >
+                        {editingId === c.id ? "취소" : "수정"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground"
+                        onClick={() => handleAction(c.id, "reject")}
+                        disabled={processingIds.has(c.id)}
+                      >
+                        거부
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex shrink-0 gap-1.5">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleAction(c.id, "approve")}
-                      disabled={processingIds.has(c.id)}
-                    >
-                      승인
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleAction(c.id, "reject")}
-                      disabled={processingIds.has(c.id)}
-                    >
-                      거부
-                    </Button>
-                  </div>
+
+                  {editingId === c.id ? (
+                    <div className="space-y-2">
+                      <Textarea
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        rows={5}
+                        className="text-sm"
+                      />
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleEditSave(c.id)}
+                          disabled={processingIds.has(c.id) || !editText.trim()}
+                        >
+                          저장
+                        </Button>
+                        <span className="text-xs text-muted-foreground">
+                          {editText.length}자
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">&ldquo;{c.comment_text}&rdquo;</p>
+                  )}
                 </div>
               ))}
             </div>

@@ -113,3 +113,48 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ success: true, comment: data });
 }
+
+/**
+ * PATCH /api/bot/pending
+ * Body: { id: string, comment_text: string }
+ * 대기 중인 댓글 텍스트 수정
+ */
+export async function PATCH(req: NextRequest) {
+  const supabase = await getSupabase();
+  const user = await authenticate(supabase);
+  if (!user) {
+    return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 });
+  }
+
+  const body = await req.json();
+  const { id, comment_text } = body as { id?: string; comment_text?: string };
+
+  if (!id || !comment_text?.trim()) {
+    return NextResponse.json(
+      { error: "id와 comment_text가 필요합니다" },
+      { status: 400 }
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("pending_comments")
+    .update({ comment_text: comment_text.trim() })
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .eq("status", "pending")
+    .select("id, comment_text")
+    .single();
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (!data) {
+    return NextResponse.json(
+      { error: "해당 댓글을 찾을 수 없거나 이미 처리되었습니다" },
+      { status: 404 }
+    );
+  }
+
+  return NextResponse.json({ success: true, comment: data });
+}
