@@ -60,6 +60,17 @@ Supabase (공유 제어 평면)
 | PUB-07 | SQL 마이그레이션 실행 (00018) | ✅ 완료 | 2026-03-16 SQL Editor 실행 |
 | PUB-08 | E2E 테스트 (저장→발행→URL 확인) | ⬜ 미진행 | 워커+브라우저 필요 |
 
+### COOKIE-AUTO: 쿠키 업로드 시 블로그 ID 자동 추출 (2026-03-16 발견)
+
+> 현재: 쿠키 업로드 후 사용자가 `/bot`에서 수동으로 blog_id 입력해야 함.
+> 목표: 쿠키 업로드 시 네이버에 로그인 → 내 블로그 ID 자동 추출 → `bot_settings.naver_blog_id` 자동 저장.
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| CA-01 | 쿠키로 네이버 로그인 → 블로그 ID 추출 로직 | ⬜ | Playwright or API (`https://blog.naver.com/NVisitorg498498.nhn` 등) |
+| CA-02 | 쿠키 업로드 API (`/api/bot/cookies` POST) 후 자동 추출 호출 | ⬜ | 업로드 성공 시 → blog_id 추출 → bot_settings UPDATE |
+| CA-03 | 웹 UI에 자동 감지된 blog_id 표시 | ⬜ | `/bot` 페이지에서 "자동 감지: youyoubear0517" 표시 |
+
 ### MULTI-USER 검증 현황 (2026-03-15)
 
 코드 구현 완료. 검증 진행 상태:
