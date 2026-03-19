@@ -347,7 +347,64 @@ async def ensure_login_cookie_only(
         return True
 
     logger.warning(f"사용자 {user_id[:8]} 쿠키 만료 — 웹에서 재업로드 필요")
+    # 만료 이벤트를 bot_run_log에 기록
+    try:
+        from src.storage.supabase_client import record_cookie_expiry
+        record_cookie_expiry(user_id)
+    except Exception:
+        pass
     # 만료된 로컬 쿠키 삭제
     user_cookies_path = get_cookies_path(user_id)
     user_cookies_path.unlink(missing_ok=True)
     return False
+
+
+# ── 블로그 ID 자동 추출 ────────────────────────────────────────────────────
+
+
+async def extract_blog_id(context: BrowserContext, page: Page) -> str | None:
+    """
+    로그인된 상태에서 네이버 블로그 ID를 자동 추출.
+    방법 1: blog.naver.com/MyBlog.naver → 리다이렉트 URL에서 ID 파싱
+    방법 2(폴백): 네이버 메인의 블로그 링크에서 ID 파싱
+    """
+    import re
+
+    # 방법 1: MyBlog.naver 리다이렉트
+    try:
+        response = await page.goto(
+            "https://blog.naver.com/MyBlog.naver",
+            timeout=PAGE_LOAD_TIMEOUT,
+            wait_until="domcontentloaded",
+        )
+        final_url = page.url
+        # 리다이렉트 후 URL: https://blog.naver.com/{blog_id} 또는 https://blog.naver.com/{blog_id}?...
+        match = re.search(r"blog\.naver\.com/([A-Za-z0-9_]+)", final_url)
+        if match:
+            blog_id = match.group(1)
+            # MyBlog, LogIn 등 네이버 내부 페이지는 제외
+            if blog_id not in ("MyBlog", "LogIn", "NologinBlog"):
+                logger.info(f"블로그 ID 추출 (MyBlog 리다이렉트): {blog_id}")
+                return blog_id
+    except Exception as e:
+        logger.debug(f"MyBlog 리다이렉트 실패: {e}")
+
+    # 방법 2: 네이버 메인에서 블로그 링크 탐색
+    try:
+        await page.goto("https://www.naver.com", timeout=PAGE_LOAD_TIMEOUT)
+        await page.wait_for_load_state("domcontentloaded", timeout=PAGE_LOAD_TIMEOUT)
+        # 네이버 메인의 "블로그" 링크 또는 프로필 영역에서 blog URL 추출
+        blog_link = await page.query_selector("a[href*='blog.naver.com/']")
+        if blog_link:
+            href = await blog_link.get_attribute("href") or ""
+            match = re.search(r"blog\.naver\.com/([A-Za-z0-9_]+)", href)
+            if match:
+                blog_id = match.group(1)
+                if blog_id not in ("MyBlog", "LogIn", "NologinBlog"):
+                    logger.info(f"블로그 ID 추출 (네이버 메인 링크): {blog_id}")
+                    return blog_id
+    except Exception as e:
+        logger.debug(f"네이버 메인 블로그 링크 탐색 실패: {e}")
+
+    logger.warning("블로그 ID 추출 실패 — 모든 방법 소진")
+    return None

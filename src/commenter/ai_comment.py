@@ -73,9 +73,10 @@ _SYSTEM_TONE = (
 )
 
 
-def _build_system_prompt() -> str:
-    """시스템 프롬프트 조합 (일관된 톤)."""
-    return f"{_SYSTEM_TONE}\n{_BASE_RULES}"
+def _build_system_prompt(custom_rules: str | None = None) -> str:
+    """시스템 프롬프트 조합. custom_rules가 있으면 _BASE_RULES 대신 사용."""
+    rules = custom_rules if custom_rules else _BASE_RULES
+    return f"{_SYSTEM_TONE}\n{rules}"
 
 
 def _get_client() -> Anthropic | None:
@@ -118,6 +119,7 @@ def generate_comment(
     post_text: str,
     post_title: str,
     recent_comments: list[str] | None = None,
+    custom_prompt: str | None = None,
 ) -> str:
     """
     게시물 본문+제목을 바탕으로 AI 댓글 생성.
@@ -150,7 +152,7 @@ def generate_comment(
     # 최대 3번 시도 (중복 시 재생성)
     for attempt in range(3):
         try:
-            system_prompt = _build_system_prompt()
+            system_prompt = _build_system_prompt(custom_rules=custom_prompt)
             user_message = f"[제목] {post_title}\n\n[본문]\n{body}"
 
             response = client.messages.create(
@@ -235,6 +237,7 @@ def _parse_batch_response(text: str, count: int) -> list[str]:
 def generate_comments_batch(
     posts: list[dict],
     recent_comments: list[str] | None = None,
+    custom_prompt: str | None = None,
 ) -> list[str]:
     """
     여러 게시물의 댓글을 한 번의 API 호출로 배치 생성.
@@ -255,7 +258,8 @@ def generate_comments_batch(
     # 1건이면 기존 단건 함수 위임
     if len(posts) == 1:
         comment = generate_comment(
-            posts[0]["body"], posts[0]["title"], recent_comments
+            posts[0]["body"], posts[0]["title"], recent_comments,
+            custom_prompt=custom_prompt,
         )
         return [comment]
 
@@ -296,7 +300,7 @@ def generate_comments_batch(
             response = client.messages.create(
                 model=COMMENT_AI_MODEL,
                 max_tokens=800,
-                system=_build_system_prompt(),
+                system=_build_system_prompt(custom_rules=custom_prompt),
                 messages=[{"role": "user", "content": user_message}],
             )
             result_text = response.content[0].text.strip()

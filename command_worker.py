@@ -382,6 +382,9 @@ async def handle_publish(user_id: str | None = None, payload: dict | None = None
     if not title or not body:
         raise ValueError("title과 body는 필수입니다")
 
+    if not queue_id:
+        raise ValueError("queue_id는 필수입니다 (generation_queue 추적용)")
+
     from playwright.async_api import async_playwright
 
     from src.auth.naver_login import ensure_login, ensure_login_cookie_only
@@ -456,10 +459,48 @@ async def handle_publish(user_id: str | None = None, payload: dict | None = None
             raise RuntimeError("발행 실패 — publish_post()가 None 반환")
 
     except Exception:
-        # 실패 시 generation_queue 상태 복원
+        # 실패 시 generation_queue 상태를 failed로 변경
         if queue_id:
-            sb.table("generation_queue").update({"status": "completed"}).eq("id", queue_id).execute()
+            sb.table("generation_queue").update({"status": "failed"}).eq("id", queue_id).execute()
         raise
+
+
+async def handle_extract_blog_id(user_id: str | None = None) -> dict:
+    """쿠키로 네이버 로그인 후 블로그 ID를 자동 추출하여 bot_settings에 저장."""
+    if not user_id:
+        raise ValueError("extract_blog_id는 user_id가 필수입니다")
+
+    from playwright.async_api import async_playwright
+
+    from src.auth.naver_login import ensure_login_cookie_only, extract_blog_id
+    from src.utils.browser import create_browser
+
+    uid_label = user_id[:8]
+    logger.info(f"▶ 블로그 ID 추출 시작 (user={uid_label})")
+
+    async with _browser_semaphore:
+        async with async_playwright() as pw:
+            browser, context, page = await create_browser(pw, headless=True)
+
+            try:
+                logged_in = await ensure_login_cookie_only(context, page, user_id)
+                if not logged_in:
+                    raise RuntimeError("네이버 로그인 실패 — 쿠키 재업로드 필요")
+
+                blog_id = await extract_blog_id(context, page)
+                if not blog_id:
+                    raise RuntimeError("블로그 ID 추출 실패 — 블로그가 없거나 접근 불가")
+
+                # bot_settings에 naver_blog_id만 업데이트
+                sb = get_supabase()
+                sb.table("bot_settings").update(
+                    {"naver_blog_id": blog_id}
+                ).eq("user_id", user_id).execute()
+
+                logger.info(f"✓ 블로그 ID 추출 완료: {blog_id} (user={uid_label})")
+                return {"message": f"블로그 ID 감지: {blog_id}", "blog_id": blog_id}
+            finally:
+                await browser.close()
 
 
 # ── 명령 핸들러 매핑 ──
@@ -470,10 +511,34 @@ _HANDLERS = {
     "execute": handle_execute,
     "retry": handle_retry,
     "publish": handle_publish,
+    "extract_blog_id": handle_extract_blog_id,
 }
 
 
 # ── 메인 폴링 루프 ────────────────────────────────────────────────────────
+
+
+def _cleanup_stale_commands() -> int:
+    """워커 재시작 시 running 상태로 남은 명령을 failed로 일괄 변경. 반환: 정리 건수."""
+    try:
+        sb = get_supabase()
+        result = (
+            sb.table("bot_commands")
+            .update({
+                "status": "failed",
+                "error_message": "워커 재시작으로 중단됨",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("status", "running")
+            .execute()
+        )
+        count = len(result.data) if result.data else 0
+        if count:
+            logger.warning(f"stale 명령 {count}건 정리 (running → failed)")
+        return count
+    except Exception as e:
+        logger.error(f"stale 명령 정리 실패: {e}")
+        return 0
 
 
 async def process_command(cmd: dict) -> None:
@@ -491,8 +556,8 @@ async def process_command(cmd: dict) -> None:
     logger.info(f"━━━ 명령 실행: {command_type} (id={command_id[:8]}..., user={uid_label}) ━━━")
 
     try:
+        kwargs: dict = {"user_id": cmd_user_id}
         # publish 명령은 payload도 전달
-        kwargs = {"user_id": cmd_user_id}
         if command_type == "publish":
             kwargs["payload"] = cmd.get("payload")
         result = await handler(**kwargs)
@@ -506,6 +571,9 @@ async def process_command(cmd: dict) -> None:
 async def main_loop() -> None:
     """10초 간격 폴링 루프."""
     _lock_fd = _acquire_lock()  # noqa: F841 — 변수 유지해야 잠금 유지
+
+    # 워커 재시작 시 이전 크래시로 남은 stale 명령 정리
+    _cleanup_stale_commands()
 
     logger.info("╔════════════════════════════════════════════╗")
     logger.info("║   명령 큐 워커 시작 (10초 간격 폴링)        ║")

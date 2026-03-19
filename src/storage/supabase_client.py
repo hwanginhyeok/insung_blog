@@ -147,6 +147,7 @@ def get_user_bot_config(user_id: str) -> dict | None:
             "user_id": user_id,
             "naver_blog_id": naver_blog_id,
             "cookies": cookies,
+            "has_cookies": cookies is not None,
             "settings": {
                 "approval_mode": settings_row["approval_mode"],
                 "is_active": settings_row["is_active"],
@@ -154,6 +155,7 @@ def get_user_bot_config(user_id: str) -> dict | None:
                 "weekend_hours": settings_row["weekend_hours"],
                 "max_comments_per_day": settings_row["max_comments_per_day"],
                 "max_bloggers_per_day": settings_row["max_bloggers_per_day"],
+                "comment_prompt": settings_row.get("comment_prompt"),
             },
         }
 
@@ -438,6 +440,7 @@ def get_bot_settings_sb(user_id: str | None = None) -> dict:
                 "weekend_hours": row["weekend_hours"],
                 "max_comments_per_day": row["max_comments_per_day"],
                 "max_bloggers_per_day": row["max_bloggers_per_day"],
+                "comment_prompt": row.get("comment_prompt"),
             }
 
     except Exception as e:
@@ -454,7 +457,7 @@ def update_bot_settings_sb(user_id: str | None = None, **kwargs) -> bool:
     """
     allowed_keys = {
         "approval_mode", "is_active", "weekday_hours", "weekend_hours",
-        "max_comments_per_day", "max_bloggers_per_day",
+        "max_comments_per_day", "max_bloggers_per_day", "comment_prompt",
     }
     update_data = {k: v for k, v in kwargs.items() if k in allowed_keys}
 
@@ -545,3 +548,19 @@ def get_recent_runs_sb(
     except Exception as e:
         logger.error(f"실행 이력 조회 실패: {e}")
         return []
+
+
+def record_cookie_expiry(user_id: str) -> None:
+    """쿠키 만료 이벤트를 bot_run_log에 에러로 기록."""
+    try:
+        sb = get_supabase()
+        sb.table("bot_run_log").insert({
+            "user_id": user_id,
+            "bloggers_visited": 0,
+            "comments_written": 0,
+            "comments_failed": 0,
+            "error_message": "쿠키 만료 — 웹에서 재업로드 필요",
+        }).execute()
+        logger.info(f"쿠키 만료 기록 완료 (user={user_id[:8]})")
+    except Exception as e:
+        logger.error(f"쿠키 만료 기록 실패: {e}")

@@ -101,6 +101,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "쿠키 저장 실패" }, { status: 500 });
   }
 
+  // 쿠키 업로드 성공 → extract_blog_id 명령 자동 등록 (중복 방지)
+  const { data: existingCmd } = await supabase
+    .from("bot_commands")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("command", "extract_blog_id")
+    .in("status", ["pending", "running"])
+    .limit(1)
+    .maybeSingle();
+
+  if (!existingCmd) {
+    await supabase.from("bot_commands").insert({
+      user_id: user.id,
+      command: "extract_blog_id",
+      status: "pending",
+    });
+  }
+
   return NextResponse.json({
     success: true,
     cookieCount: naverCookies.length,

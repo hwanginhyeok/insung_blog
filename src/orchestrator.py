@@ -108,12 +108,14 @@ async def run(
 
         settings = config["settings"]
         my_blog_id = config["naver_blog_id"]
+        comment_prompt = settings.get("comment_prompt")
         use_cookie_only = True
         naver_id = ""
         naver_pw = ""
     else:
         # 레거시: .env 기반
         settings = _load_settings()
+        comment_prompt = None
         naver_id = os.environ.get("NAVER_ID", "")
         naver_pw = os.environ.get("NAVER_PW", "")
         my_blog_id = os.environ.get("MY_BLOG_ID", "")
@@ -282,6 +284,7 @@ async def run(
                     # ── 2단계: 배치 AI 댓글 생성 (API 1회) ──
                     ai_comments = generate_comments_batch(
                         [{"body": d["body"], "title": d["title"]} for d in batch_data],
+                        custom_prompt=comment_prompt,
                     )
                     logger.info(
                         f"배치 처리: {len(batch_data)}개 게시물 → "

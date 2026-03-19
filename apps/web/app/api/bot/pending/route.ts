@@ -44,15 +44,30 @@ export async function GET(req: NextRequest) {
   }
 
   const status = req.nextUrl.searchParams.get("status") || "pending";
+  const limit = Math.min(
+    Number(req.nextUrl.searchParams.get("limit")) || 50,
+    200
+  );
+  const descending = req.nextUrl.searchParams.get("order") === "desc";
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("pending_comments")
     .select(
       "id, blog_id, post_url, post_title, comment_text, ai_generated, status, created_at, decided_by, decided_at"
     )
-    .eq("user_id", user.id)
-    .eq("status", status)
-    .order("created_at", { ascending: true });
+    .eq("user_id", user.id);
+
+  if (status === "all") {
+    query = query.in("status", ["approved", "posted", "rejected", "failed"]);
+  } else {
+    query = query.eq("status", status);
+  }
+
+  query = query
+    .order("created_at", { ascending: !descending })
+    .limit(limit);
+
+  const { data, error } = await query;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

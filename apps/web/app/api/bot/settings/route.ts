@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
     "max_comments_per_day",
     "max_bloggers_per_day",
     "naver_blog_id",
+    "comment_prompt",
   ] as const;
 
   const updateData: Record<string, unknown> = {};
