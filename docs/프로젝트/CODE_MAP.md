@@ -1,7 +1,7 @@
 # CODE_MAP — 코드베이스 지도
 
 > 파일 추가/삭제/이동/역할 변경 시 반드시 갱신.
-> 최종 갱신: 2026-03-15 (다중 사용자 전환 — user_id 파라미터화)
+> 최종 갱신: 2026-03-17 (COOKIE-AUTO + PUBLISH 버그 수정 + MULTI-USER 보완)
 
 ---
 
@@ -43,8 +43,8 @@
 | `app/api/persona/crawl/route.ts` | 블로그 크롤링 API Route (POST, blogUrl → crawl → HTML 메타데이터 반환) | ✅ **신규** |
 | `app/api/persona/analyze/route.ts` | AI 페르소나 분석 API Route (POST, 2-pass Sonnet → persona_items INSERT) | ✅ **신규** |
 | `app/api/persona/feedback/route.ts` | 피드백 규칙 API Route — GET: 대기 규칙 + 히스토리 조회, POST: 규칙 승인/거절 | ✅ **신규** |
-| `app/api/bot/command/route.ts` | 봇 명령 큐 API Route — POST: 명령 등록(run/execute/retry/**publish**+payload), GET: 최근 5개 조회(폴링) | ✅ (publish 확장) |
-| `app/api/bot/cookies/route.ts` | 쿠키 업로드 API Route — GET: 상태, POST: 업로드(upsert), DELETE: 삭제 | ✅ **신규** |
+| `app/api/bot/command/route.ts` | 봇 명령 큐 API Route — POST: 명령 등록(run/execute/retry/publish/**extract_blog_id**+payload), GET: 최근 5개 조회(폴링) | ✅ (extract_blog_id 확장) |
+| `app/api/bot/cookies/route.ts` | 쿠키 업로드 API Route — GET: 상태, POST: 업로드(upsert)+**extract_blog_id 자동 트리거**, DELETE: 삭제 | ✅ (자동 추출 확장) |
 | `app/api/posts/route.ts` | 글 관리 API Route — DELETE: 삭제(Storage 동시 정리), PATCH: 제목/본문/해시태그/버전 수정 | ✅ **신규** |
 | `app/api/persona/list/route.ts` | 페르소나 목록 API Route (GET: 사용자 전체 페르소나) | ✅ **신규** |
 | `app/api/persona/default/route.ts` | 기본 페르소나 지정 API Route (POST: is_default 토글) | ✅ **신규** |
@@ -77,6 +77,7 @@
 | `supabase/migrations/00015_add_oauth_providers.sql` | users에 kakao_id, naver_id 컬럼 + 부분 유니크 인덱스 (OAuth) | ✅ 실행됨 |
 | `supabase/migrations/00017_add_naver_blog_id.sql` | bot_settings에 naver_blog_id 컬럼 추가 (다중 사용자) | ✅ 실행 완료 |
 | `supabase/migrations/00018_publish_command.sql` | bot_commands에 'publish' 명령 + payload JSONB 컬럼 추가 | 실행 필요 |
+| `supabase/migrations/00019_add_comment_prompt.sql` | bot_settings에 comment_prompt TEXT 컬럼 추가 (개인 댓글 스타일) | 실행 필요 |
 | `package.json` | 의존성 (Next 14, Supabase, shadcn/ui, react-hook-form, zod) | ✅ |
 
 ### 작업 문서
@@ -97,7 +98,7 @@
 | `main.py` | 댓글 봇 스케줄러 진입점 (argparse + schedule) | 1 | ✅ |
 | `publisher_main.py` | 게시물 발행 CLI 진입점 (--photos, --memo, --dry-run, --no-ai) | 2 | ⚠️ (셀렉터 이슈) |
 | `api_server.py` | FastAPI 웹훅 서버 — 8개 엔드포인트 (generate, **publish(다중사용자+알림)**, status, comment/run, comment/execute, comment/retry, feedback, health) | 3 | ✅ (publish 확장) |
-| `command_worker.py` | 명령 큐 워커 — Supabase bot_commands 10초 폴링, run/execute/retry/**publish** 핸들러, Semaphore(2) | 2 | ✅ (publish 확장) |
+| `command_worker.py` | 명령 큐 워커 — Supabase bot_commands 10초 폴링, run/execute/retry/publish/**extract_blog_id** 핸들러, Semaphore(2), stale 명령 정리 | 2 | ✅ (extract_blog_id 확장) |
 | `telegram_bot.py` | 텔레그램 봇 (사진 수신 → AI 초안) | 3 | ✅ |
 | `telegram_bot_simple.py` | 텔레그램 봇 (댓글 승인 워크플로) — `/status`, `/pending`, `/execute`, `/retry`, `/retry_now` | 3 | ✅ |
 | `debug_publisher.py` | 스마트에디터 DOM 분석 도구 (headless=False, 셀렉터 탐색, `--validate` 셀렉터 검증) | 2 | ✅ |
@@ -116,7 +117,7 @@
 
 | 파일 | 역할 |
 |------|------|
-| `naver_login.py` | 네이버 로그인 (쿠키 복원 → ID/PW 폭백). `ensure_login()` 레거시, `ensure_login_cookie_only(user_id)` 다중 사용자 |
+| `naver_login.py` | 네이버 로그인 (쿠키 복원 → ID/PW 폴백). `ensure_login()` 레거시, `ensure_login_cookie_only(user_id)` 다중 사용자, `extract_blog_id()` 블로그 ID 자동 추출 |
 | `session_manager.py` | 세션 관리 — 주기적 상태 체크, 자동 갱신, 실패 알림 | ✅ **신규**
 
 ---
@@ -163,7 +164,7 @@
 | 파일 | 역할 | 상태 |
 |------|------|------|
 | `database.py` | SQLite 레이어 — 운영 데이터 전용 (6개 테이블) + retry 데코레이터 + 유저별 DB 분리 (`user_id` 파라미터) | ✅ (다중 사용자) |
-| `supabase_client.py` | Supabase 클라이언트 (service_role) — 생성 저장 + 봇 제어 평면 + `get_active_user_ids()`, `get_user_bot_config(user_id)` | ✅ (다중 사용자) |
+| `supabase_client.py` | Supabase 클라이언트 (service_role) — 생성 저장 + 봇 제어 평면 + `get_active_user_ids()`, `get_user_bot_config(user_id)` (has_cookies 포함), `record_cookie_expiry(user_id)` | ✅ (다중 사용자 보완) |
 
 ### SQLite 테이블 요약 (운영 데이터)
 

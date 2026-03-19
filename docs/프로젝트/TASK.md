@@ -38,80 +38,106 @@ Supabase (공유 제어 평면)
 
 ## 현재 진행 중
 
-| # | 작업 | 중요도 | 상태 | 문서 |
+| # | 작업 | 중요도 | 상태 | 비고 |
 |---|------|--------|------|------|
-| MULTI-USER | 댓글 봇 다중 사용자 전환 | P1 | 검증 중 | — |
-| TEST | 기능별 통합 테스트 (아래 상세) | P0 | 대기 | — |
-| PUBLISH | 웹 네이버 발행 기능 (G1+G3+G4) | P0 | ✅ 구현+배포 완료 | REQUIREMENTS.md §6 |
-| COMMENT-UX | 댓글 프롬프트 개선 + 웹 수정 기능 | P1 | ✅ 완료 | — |
-| VERCEL-PROD | dev→master 머지 Production 배포 | P0 | ✅ 완료 (bc1fccc) | — |
+| COMMENT-HIST | 댓글 내역 + 개인 프롬프트 — 잔여 작업 | P1 | 진행 | 코드 완료, 아래 검증 항목 남음 |
+| TEST | 기능별 통합 테스트 (아래 상세) | P0 | 대기 | 브라우저 필요 — 코드 건강 점검 완료, 실행 테스트 미진행 |
 
-### PUBLISH: 웹 네이버 발행 (2026-03-16)
+> **COMMENT-HIST 잔여 (내일 이어서)**
+> 1. Supabase SQL Editor에서 `00019_add_comment_prompt.sql` 실행
+> 2. `localhost:3000/bot` 댓글 내역 탭 동작 확인 (전체/승인/게시완료/거부/실패)
+> 3. 프롬프트 textarea 입력 → 설정 저장 → 새로고침 후 유지 확인
+> 4. Vercel 배포 (dev→master 머지 또는 dev 브랜치 배포)
 
-> 저장된 글(웹/텔레그램 출처 무관)을 웹에서 네이버 블로그에 발행.
-> Command Queue 패턴: 웹 → bot_commands(publish) INSERT → command_worker → Playwright 발행
-
-| # | 작업 | 상태 | 비고 |
-|---|------|------|------|
-| PUB-01 | REQUIREMENTS.md 전면 재작성 | ✅ 완료 | 갭 분석 포함 |
-| PUB-02 | G3: /publish API user_id 선택적 지원 | ✅ 완료 | api_server.py — .env 폴백 유지 |
-| PUB-03 | G1: command_worker publish 핸들러 | ✅ 완료 | handle_publish() + generation_queue 상태 전이 |
-| PUB-04 | G1: 웹 API bot/command에 publish 명령 추가 | ✅ 완료 | payload JSONB 전달 |
-| PUB-05 | G1: write/page.tsx 발행 버튼 + 폴링 | ✅ 완료 | 저장 후에만 활성, 5초 폴링 |
-| PUB-06 | G4: 발행 완료 알림 (웹 UI + 텔레그램) | ✅ 완료 | publishResult UI + _send_publish_notification |
-| PUB-07 | SQL 마이그레이션 실행 (00018) | ✅ 완료 | 2026-03-16 SQL Editor 실행 |
-| PUB-08 | E2E 테스트 (저장→발행→URL 확인) | ⬜ 미진행 | 워커+브라우저 필요 |
-| PUB-09 | 댓글 프롬프트 개선 (100~200자, 위트, 정보 2~3개) | ✅ 완료 | ai_comment.py |
-| PUB-10 | 웹 댓글 수정 기능 (PATCH API + 인라인 편집) | ✅ 완료 | pending/route.ts + bot/page.tsx |
-| PUB-11 | dev→master 머지 + Vercel Production 배포 | ✅ 완료 | bc1fccc |
-
-### COOKIE-AUTO: 쿠키 업로드 시 블로그 ID 자동 추출 (2026-03-16 발견)
-
-> 현재: 쿠키 업로드 후 사용자가 `/bot`에서 수동으로 blog_id 입력해야 함.
-> 목표: 쿠키 업로드 시 네이버에 로그인 → 내 블로그 ID 자동 추출 → `bot_settings.naver_blog_id` 자동 저장.
-
-| # | 작업 | 상태 | 비고 |
-|---|------|------|------|
-| CA-01 | 쿠키로 네이버 로그인 → 블로그 ID 추출 로직 | ⬜ | Playwright or API (`https://blog.naver.com/NVisitorg498498.nhn` 등) |
-| CA-02 | 쿠키 업로드 API (`/api/bot/cookies` POST) 후 자동 추출 호출 | ⬜ | 업로드 성공 시 → blog_id 추출 → bot_settings UPDATE |
-| CA-03 | 웹 UI에 자동 감지된 blog_id 표시 | ⬜ | `/bot` 페이지에서 "자동 감지: youyoubear0517" 표시 |
-
-### MULTI-USER 검증 현황 (2026-03-15)
-
-코드 구현 완료. 검증 진행 상태:
-
-| 항목 | 결과 | 비고 |
-|------|------|------|
-| Python 구문 검증 (67개) | ✅ 통과 | |
-| Next.js 빌드 | ✅ 통과 | 전 라우트 정상 |
-| SQL 마이그레이션 실행 | ✅ 완료 | Supabase SQL Editor에서 00017 실행 완료 |
-| Admin dry-run (`--run-once --dry-run`) | ✅ 통과 | .env 폴백 경로 정상, 35초 |
-| 다중 사용자 dry-run (`--all-users`) | ✅ 통과 | 활성 사용자 1명 조회, 쿠키 전용 로그인 성공, 73명 수집, pending 등록 정상 |
-| 유저별 쿠키 분리 | ✅ 확인 | `cookies/50c16052_naver.json` 생성됨 |
-| 데이터 이관 (`data/comments.db` → 유저별) | ⬜ 미진행 | 선택사항 |
-| 웹 UI 블로그 ID 설정 테스트 | ⬜ 미진행 | 브라우저 필요 |
-| 2번째 사용자 E2E 테스트 | ⬜ 미진행 | 가입 → 쿠키 → blog_id → 봇 실행 |
+> **잔여 E2E 항목** (TEST 섹션에 통합)
+> - PUB-08: 저장→발행→URL E2E (워커+브라우저)
+> - MULTI-USER: 2번째 사용자 E2E (가입→쿠키→blog_id 자동 감지→봇 실행)
+> - MULTI-USER: 웹 UI 블로그 ID 설정 테스트 (브라우저)
+> - MULTI-USER: 데이터 이관 (선택사항)
 
 ---
 
-## MULTI-USER: 댓글 봇 다중 사용자 전환 (2026-03-15)
+## COMMENT-HIST: 댓글 내역 조회 + 개인 프롬프트 — 코드 완료, 검증 대기 (2026-03-17)
 
-> 봇 실행부(Python)를 다중 사용자로 전환. 회원가입한 모든 사용자가 각자의 댓글 봇을 운영.
+> 봇 페이지에 상태별 댓글 내역 조회 + 사용자별 댓글 스타일 프롬프트 커스텀 기능 추가.
 
 | # | 작업 | 상태 | 비고 |
 |---|------|------|------|
-| MU-01 | DB 마이그레이션 (`bot_settings.naver_blog_id`) | ✅ 완료 | 00017_add_naver_blog_id.sql (SQL Editor 실행 필요) |
+| CH-01 | DB 마이그레이션 (`bot_settings.comment_prompt`) | ✅ | 00019_add_comment_prompt.sql |
+| CH-02 | API `pending/route.ts` — status=all, limit, order=desc 지원 | ✅ | 내역 조회용 |
+| CH-03 | API `settings/route.ts` — comment_prompt allowedKeys 추가 | ✅ | — |
+| CH-04 | Python `supabase_client.py` — comment_prompt 필드 전달 | ✅ | get_user_bot_config + get_bot_settings_sb + update |
+| CH-05 | Python `ai_comment.py` — custom_prompt 파라미터 | ✅ | _build_system_prompt(custom_rules=) |
+| CH-06 | Python `orchestrator.py` — comment_prompt 전달 | ✅ | generate_comments_batch(custom_prompt=) |
+| CH-07 | 웹 UI — 댓글 내역 카드 (상태별 탭 필터) | ✅ | /bot 페이지 |
+| CH-08 | 웹 UI — 프롬프트 textarea + 기본값 복원 | ✅ | 설정 카드 내 |
+| CH-09 | REQUIREMENTS.md 갱신 | ✅ | 2-2절 |
+
+## MULTI-USER: 댓글 봇 다중 사용자 전환 — ✅ 완료 (2026-03-15~17)
+
+> 봇 실행부(Python)를 다중 사용자로 전환. 회원가입한 모든 사용자가 각자의 댓글 봇을 운영.
+> 03-17 보완: 쿠키 만료 알림(`record_cookie_expiry`) + `has_cookies` 필드 + COOKIE-AUTO 연동
+
+<details>
+<summary>MU-01 ~ MU-12 전체 완료 (클릭해서 펼치기)</summary>
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| MU-01 | DB 마이그레이션 (`bot_settings.naver_blog_id`) | ✅ 완료 | 00017_add_naver_blog_id.sql |
 | MU-02 | REQUIREMENTS.md 다중 사용자 요구사항 | ✅ 완료 | 2-D절 추가 |
-| MU-03 | API 보안 — user_id 필터 추가 (pending, status, command) | ✅ 완료 | 4개 route 수정 |
-| MU-04 | supabase_client.py 리팩토링 (user_id 파라미터화) | ✅ 완료 | 전 함수 + get_active_user_ids/get_user_bot_config 신규 |
-| MU-05 | database.py 유저별 DB 분리 | ✅ 완료 | _resolve_db_path + 전 함수 user_id 파라미터 |
-| MU-06 | naver_login.py 쿠키 전용 로그인 | ✅ 완료 | ensure_login_cookie_only() 신규 |
-| MU-07 | orchestrator.py 다중 사용자 | ✅ 완료 | run(user_id=) + cookie_only 분기 |
+| MU-03 | API 보안 — user_id 필터 추가 | ✅ 완료 | 4개 route 수정 |
+| MU-04 | supabase_client.py 리팩토링 | ✅ 완료 | 전 함수 user_id 파라미터화 |
+| MU-05 | database.py 유저별 DB 분리 | ✅ 완료 | _resolve_db_path |
+| MU-06 | naver_login.py 쿠키 전용 로그인 | ✅ 완료 | ensure_login_cookie_only() |
+| MU-07 | orchestrator.py 다중 사용자 | ✅ 완료 | run(user_id=) |
 | MU-08 | command_worker.py 연결 | ✅ 완료 | handler(user_id=) + Semaphore(2) |
-| MU-09 | main.py Cron 다중 사용자 | ✅ 완료 | --all-users + _run_all_users() |
-| MU-10 | 웹 UI 블로그 ID 설정 | ✅ 완료 | /bot naver_blog_id 입력 + settings API |
-| MU-11 | settings.py + time_guard.py 수정 | ✅ 완료 | get_db_path/get_cookies_path + user_id 파라미터 |
+| MU-09 | main.py Cron 다중 사용자 | ✅ 완료 | --all-users |
+| MU-10 | 웹 UI 블로그 ID 설정 | ✅ 완료 | /bot naver_blog_id 입력 |
+| MU-11 | settings.py + time_guard.py 수정 | ✅ 완료 | get_db_path/get_cookies_path |
 | MU-12 | CODE_MAP.md 반영 | ✅ 완료 | — |
+
+</details>
+
+## PUBLISH: 웹 네이버 발행 — ✅ 완료 (2026-03-16~17)
+
+> Command Queue 패턴으로 웹에서 네이버 발행. 03-17 버그 수정 3건 (상태 복원, queue_id 검증, stale 정리).
+
+<details>
+<summary>PUB-01 ~ PUB-14 전체 완료 (클릭해서 펼치기)</summary>
+
+| # | 작업 | 상태 |
+|---|------|------|
+| PUB-01 | REQUIREMENTS.md 전면 재작성 | ✅ |
+| PUB-02 | /publish API user_id 선택적 지원 | ✅ |
+| PUB-03 | command_worker publish 핸들러 | ✅ |
+| PUB-04 | 웹 API bot/command에 publish 명령 추가 | ✅ |
+| PUB-05 | write/page.tsx 발행 버튼 + 폴링 | ✅ |
+| PUB-06 | 발행 완료 알림 (웹 UI + 텔레그램) | ✅ |
+| PUB-07 | SQL 마이그레이션 실행 (00018) | ✅ |
+| PUB-09 | 댓글 프롬프트 개선 | ✅ |
+| PUB-10 | 웹 댓글 수정 기능 | ✅ |
+| PUB-11 | dev→master 머지 + Production 배포 | ✅ |
+| PUB-12 | 예외 시 상태 "completed"→"failed" 버그 수정 | ✅ (P0) |
+| PUB-13 | queue_id 유효성 검증 추가 | ✅ |
+| PUB-14 | 워커 재시작 시 stale 명령 정리 | ✅ |
+
+</details>
+
+## COOKIE-AUTO: 쿠키→블로그 ID 자동 추출 — ✅ 완료 (2026-03-17)
+
+> 쿠키 업로드 → bot_commands(extract_blog_id) → command_worker → Playwright → bot_settings UPDATE
+
+<details>
+<summary>CA-01 ~ CA-04 전체 완료 (클릭해서 펼치기)</summary>
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| CA-01 | extract_blog_id() 함수 | ✅ | MyBlog.naver 리다이렉트 + 네이버 메인 폴백 |
+| CA-02 | cookies/route.ts POST 후 자동 트리거 | ✅ | 중복 방지 |
+| CA-03 | 웹 UI "✓ 자동 감지" 라벨 | ✅ | 15초 후 settings 재로딩 |
+| CA-04 | command_worker 핸들러 | ✅ | handle_extract_blog_id() |
+
+</details>
 
 ---
 
@@ -163,6 +189,14 @@ Supabase (공유 제어 평면)
 
 | # | 작업 | 중요도 | 완료일 |
 |---|------|--------|--------|
+| COMMENT-HIST | 댓글 내역 조회 + 개인 댓글 프롬프트 편집 | P1 | 03-17 |
+| COOKIE-AUTO | 쿠키 업로드 시 블로그 ID 자동 추출 (Command Queue 재활용) | P1 | 03-17 |
+| PUBLISH-FIX | 발행 버그 수정 3건 (상태 복원·queue_id 검증·stale 정리) | P0 | 03-17 |
+| MULTI-USER-보완 | 쿠키 만료 알림 + has_cookies 필드 + extract_blog_id 연동 | P1 | 03-17 |
+| COMMENT-UX | 댓글 프롬프트 개선 + 웹 수정 기능 | P1 | 03-16 |
+| VERCEL-PROD | dev→master 머지 Production 배포 | P0 | 03-16 |
+| PUBLISH | 웹 네이버 발행 기능 (Command Queue + Playwright) | P0 | 03-16 |
+| MULTI-USER | 댓글 봇 다중 사용자 전환 (12건) | P1 | 03-15 |
 | W7 | 웹 봇 제어 + 쿠키 양방향 동기화 (Command Queue 패턴) | P1 | 03-09 |
 | W6 | 댓글 봇 웹 통합 — 텔레그램+웹 이중 제어 | P1 | 03-08 |
 | W5 | 페르소나 학습 파이프라인 | P1 | 03-08 |
@@ -492,4 +526,4 @@ Supabase (공유 제어 평면)
 | DEPLOY-02 | 환경변수 6개 등록 | ✅ 완료 | NEXTAUTH_URL=insungblog.vercel.app |
 | DEPLOY-03 | Supabase Auth redirect URL 등록 | 수동 필요 | `insungblog.vercel.app/**` 추가 |
 
-*마지막 업데이트: 2026-03-11 (모바일 댓글 수집 전환 + Vercel 배포)*
+*마지막 업데이트: 2026-03-17 (COMMENT-HIST 댓글 내역 + 개인 프롬프트)*
