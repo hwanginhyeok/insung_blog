@@ -224,6 +224,7 @@ export default function BotPage() {
   const [cookieJson, setCookieJson] = useState("");
   const [cookieUploading, setCookieUploading] = useState(false);
   const [cookieMsg, setCookieMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [commentsCollapsed, setCommentsCollapsed] = useState(false);
 
   // 댓글 내역
   const [historyTab, setHistoryTab] = useState<string>("all");
@@ -740,11 +741,22 @@ export default function BotPage() {
               </span>
               댓글 승인 ({pending.length}건)
             </CardTitle>
-            {pending.length > 1 && (
-              <Button size="sm" onClick={handleBulkApprove} disabled={bulkApproving}>
-                {bulkApproving ? "승인 중..." : "일괄 승인"}
-              </Button>
-            )}
+            <div className="flex gap-1.5">
+              {pending.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCommentsCollapsed(!commentsCollapsed)}
+                >
+                  {commentsCollapsed ? "펼치기" : "접기"}
+                </Button>
+              )}
+              {pending.length > 1 && (
+                <Button size="sm" onClick={handleBulkApprove} disabled={bulkApproving}>
+                  {bulkApproving ? "승인 중..." : "일괄 승인"}
+                </Button>
+              )}
+            </div>
           </div>
           <CardDescription>
             AI가 생성한 댓글을 확인하고 승인/거부합니다
@@ -754,6 +766,10 @@ export default function BotPage() {
           {pending.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               대기 중인 댓글이 없습니다
+            </p>
+          ) : commentsCollapsed ? (
+            <p className="text-sm text-muted-foreground">
+              {pending.length}건의 댓글이 접혀 있습니다
             </p>
           ) : (
             <div className="space-y-3">
