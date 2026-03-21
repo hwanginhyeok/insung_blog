@@ -30,16 +30,8 @@ def _load_hours(user_id: str | None = None) -> tuple[dict, dict]:
 
 
 def is_allowed_time(user_id: str | None = None) -> bool:
-    """현재 시각이 허용 시간대인지 확인 (평일/주말 구분)"""
-    now = datetime.now()
-    weekday_hours, weekend_hours = _load_hours(user_id)
-
-    if now.weekday() >= 5:
-        start, end = weekend_hours["start"], weekend_hours["end"]
-    else:
-        start, end = weekday_hours["start"], weekday_hours["end"]
-
-    return start <= now.hour < end
+    """시간 제한 비활성화 — 항상 허용"""
+    return True
 
 
 def assert_allowed_time(user_id: str | None = None) -> None:
