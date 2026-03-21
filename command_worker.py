@@ -177,12 +177,15 @@ async def handle_execute(user_id: str | None = None) -> dict:
 
     from src.auth.naver_login import ensure_login, ensure_login_cookie_only
     from src.commenter.comment_writer import write_comment
-    from src.storage.database import add_to_retry_queue
+    from src.storage.database import add_to_retry_queue, init_db
     from src.storage.supabase_client import (
         get_pending_comments_sb,
         update_pending_status_sb,
     )
     from src.utils.browser import create_browser
+
+    # 사용자 DB 초기화 (테이블 없으면 생성)
+    init_db(user_id=user_id)
 
     approved = get_pending_comments_sb("approved", user_id=user_id)
     if not approved:

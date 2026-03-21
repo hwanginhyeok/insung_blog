@@ -10,7 +10,7 @@ if tmux has-session -t $SESSION 2>/dev/null; then
     exit 0
 fi
 
-PROJECT_DIR="/home/gint_pcd/projects/인성이프로젝트"
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # 세션 생성 + api_server (창 0)
 tmux new-session -d -s $SESSION -n "api" -c "$PROJECT_DIR"

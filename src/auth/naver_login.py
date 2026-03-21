@@ -340,6 +340,13 @@ async def ensure_login_cookie_only(
         logger.warning(f"사용자 {user_id[:8]} 쿠키 없음 — 웹에서 쿠키 업로드 필요")
         return False
 
+    # NID_AUT 사전 검증 — 없으면 댓글 영역에서 로그아웃 상태
+    all_cookies = await context.cookies()
+    has_nid_aut = any(c["name"] == "NID_AUT" for c in all_cookies)
+    if not has_nid_aut:
+        logger.warning(f"사용자 {user_id[:8]} 쿠키에 NID_AUT 없음 — 웹에서 재업로드 필요")
+        return False
+
     if await _is_logged_in(page):
         logger.info(f"쿠키 로그인 확인 (user={user_id[:8]})")
         # 성공한 쿠키 업데이트 (만료 연장)
