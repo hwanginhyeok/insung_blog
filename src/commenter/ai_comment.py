@@ -25,6 +25,7 @@ from anthropic import Anthropic
 
 from config.settings import COMMENT_AI_MODEL
 from src.commenter.phrases import pick_phrase
+from src.commenter.comment_post_processor import process as post_process
 from src.utils.logger import logger
 
 _client: Anthropic | None = None
@@ -43,7 +44,7 @@ _INVALID_RESPONSE_PATTERNS = [
     "invalid",
     "unable to",
     "cannot",
-]  
+]
 
 # 게시물 작성 스타일과 통일된 규칙
 _BASE_RULES = """\
@@ -72,11 +73,133 @@ _SYSTEM_TONE = (
     "줄바꿈으로 호흡을 나누고, 이모티콘도 자연스럽게 써."
 )
 
+# ── D-1: 톤 랜덤화 ────────────────────────────────────────────────────────────
 
-def _build_system_prompt(custom_rules: str | None = None) -> str:
-    """시스템 프롬프트 조합. custom_rules가 있으면 _BASE_RULES 대신 사용."""
+_TONE_POOLS: dict[str, list[str]] = {
+    "감탄형": ["와!", "대박!", "진짜"],
+    "공감형": ["맞아요", "저도", "완전"],
+    "정보감사형": ["좋은 정보", "유익하네요", "참고할게요"],
+}
+
+_TONE_HINTS: dict[str, str] = {
+    "감탄형": "감탄하는 느낌으로 시작하거나 중간에 감탄 표현을 자연스럽게 섞어.",
+    "공감형": "공감하는 느낌이 강하게 느껴지도록, 나도 그런 경험이 있다는 식으로 써.",
+    "정보감사형": "유용한 정보에 감사하는 느낌을 담아서, 덕분에 많이 배웠다는 식으로 써.",
+}
+
+
+def _pick_tone() -> tuple[str, str]:
+    """랜덤으로 톤 유형과 힌트를 선택. (tone_type, hint) 반환."""
+    tone_type = random.choice(list(_TONE_POOLS.keys()))
+    return tone_type, _TONE_HINTS[tone_type]
+
+
+# ── D-2: 카테고리 감지 ────────────────────────────────────────────────────────
+
+_CATEGORY_KEYWORDS: dict[str, list[str]] = {
+    "맛집": [
+        "맛집", "식당", "레스토랑", "카페", "메뉴", "음식", "맛있", "먹었",
+        "주문", "가격", "분위기", "인테리어", "웨이팅", "줄", "포장",
+        "배달", "반찬", "셰프", "디저트", "브런치",
+    ],
+    "여행": [
+        "여행", "관광", "여행지", "숙소", "호텔", "펜션", "게스트하우스",
+        "해외", "국내", "비행기", "기차", "버스", "렌트카", "코스",
+        "일정", "명소", "뷰", "풍경", "바다", "산", "공항",
+    ],
+    "일상": [
+        "일상", "오늘", "하루", "생각", "느낌", "감정", "기분", "힐링",
+        "일기", "소소", "행복", "일과", "근황", "요즘", "취미",
+    ],
+    "IT": [
+        "앱", "어플", "소프트웨어", "프로그램", "코딩", "개발", "AI",
+        "인공지능", "노트북", "컴퓨터", "스마트폰", "태블릿", "갤럭시",
+        "아이폰", "윈도우", "맥", "리눅스", "클라우드", "서버", "API",
+        "IT", "테크", "기술", "유튜브 알고리즘", "SEO", "블록체인",
+    ],
+    "뷰티": [
+        "화장품", "스킨케어", "메이크업", "뷰티", "로션", "크림", "세럼",
+        "마스크팩", "선크림", "립스틱", "파운데이션", "쿠션", "아이섀도",
+        "향수", "헤어", "네일", "피부", "성분", "보습", "미백",
+    ],
+    "육아": [
+        "아이", "육아", "어린이집", "유치원", "초등학교", "엄마", "아빠",
+        "출산", "임신", "신생아", "아기", "돌잔치", "이유식", "분유",
+        "기저귀", "장난감", "놀이", "성장", "교육", "학원",
+    ],
+    "재테크": [
+        "재테크", "투자", "주식", "펀드", "ETF", "부동산", "청약",
+        "저축", "예금", "적금", "금리", "수익", "배당", "연금",
+        "절세", "세금", "ISA", "IRP", "코인", "가상화폐", "경제",
+    ],
+    "리뷰": [
+        "리뷰", "후기", "사용기", "솔직", "장단점", "추천", "별점",
+        "구매", "제품", "상품", "구독", "서비스", "체험단", "협찬",
+    ],
+}
+
+_CATEGORY_PROMPT_HINTS: dict[str, str] = {
+    "맛집": "이 글은 맛집/음식 관련 글이야. 음식 맛, 분위기, 서비스, 가성비 등에 공감하는 댓글을 써.",
+    "여행": "이 글은 여행 관련 글이야. 여행지의 매력, 풍경, 여행 경험에 공감하고 나도 가보고 싶다는 느낌을 담아.",
+    "일상": "이 글은 일상 관련 글이야. 소소한 일상에 공감하고 따뜻하게 응원하는 댓글을 써.",
+    "IT": "이 글은 IT/테크 관련 글이야. 기술 정보나 제품 특징에 공감하고 유용한 정보에 감사하는 댓글을 써.",
+    "뷰티": "이 글은 뷰티/화장품 관련 글이야. 제품 효과, 발색, 사용감 등에 공감하고 나도 써보고 싶다는 느낌을 담아.",
+    "육아": "이 글은 육아 관련 글이야. 아이 키우는 경험에 공감하고 따뜻하게 응원하는 댓글을 써.",
+    "재테크": "이 글은 재테크/투자 관련 글이야. 유익한 금융 정보에 감사하고 나도 시도해봐야겠다는 느낌을 담아.",
+    "리뷰": "이 글은 제품/서비스 리뷰 글이야. 솔직한 후기에 감사하고 구매 결정에 도움이 됐다는 느낌을 담아.",
+}
+
+
+def _detect_category(title: str, body: str) -> str | None:
+    """
+    제목 + 본문 키워드로 카테고리 감지.
+    가장 많이 매칭된 카테고리 반환. 매칭 없으면 None.
+    """
+    combined = (title + " " + body).lower()
+    scores: dict[str, int] = {}
+    for cat, keywords in _CATEGORY_KEYWORDS.items():
+        count = sum(1 for kw in keywords if kw in combined)
+        if count > 0:
+            scores[cat] = count
+    if not scores:
+        return None
+    return max(scores, key=lambda c: scores[c])
+
+
+def _build_system_prompt(
+    custom_rules: str | None = None,
+    tone_hint: str | None = None,
+    avoid_starters: list[str] | None = None,
+    category_hint: str | None = None,
+) -> str:
+    """
+    시스템 프롬프트 조합.
+
+    Args:
+        custom_rules: 사용자 정의 규칙. 있으면 _BASE_RULES 대신 사용.
+        tone_hint: 톤 힌트 문자열 (D-1 랜덤 톤).
+        avoid_starters: 시작어 중복 방지 목록 (D-1 최근 댓글 시작어).
+        category_hint: 카테고리별 힌트 (D-2).
+
+    Returns:
+        완성된 시스템 프롬프트 문자열
+    """
     rules = custom_rules if custom_rules else _BASE_RULES
-    return f"{_SYSTEM_TONE}\n{rules}"
+    parts = [_SYSTEM_TONE, rules]
+
+    if category_hint:
+        parts.append(f"\n카테고리 힌트: {category_hint}")
+
+    if tone_hint:
+        parts.append(f"\n톤 힌트: {tone_hint}")
+
+    if avoid_starters:
+        starters_str = ", ".join(f'"{s}"' for s in avoid_starters)
+        parts.append(
+            f"\n시작어 금지: 아래 단어로 댓글을 시작하지 마. ({starters_str})"
+        )
+
+    return "\n".join(parts)
 
 
 def _get_client() -> Anthropic | None:
@@ -105,14 +228,34 @@ def _is_valid_comment(comment: str) -> bool:
     """AI 응답이 정상적인 댓글인지 검사"""
     if not comment or len(comment) < 5:
         return False
-    
+
     comment_lower = comment.lower()
     for pattern in _INVALID_RESPONSE_PATTERNS:
         if pattern.lower() in comment_lower:
             logger.warning(f"비정상 AI 응답 감지 ('{pattern}' 포함): {comment[:50]}...")
             return False
-    
+
     return True
+
+
+def _extract_starters(comments: list[str], count: int = 5) -> list[str]:
+    """
+    최근 댓글 목록에서 시작어(첫 단어 또는 첫 2~3자) 추출.
+    최대 count개 댓글에서 중복 제거 후 반환.
+    """
+    starters = []
+    seen: set[str] = set()
+    for comment in comments[-count:]:
+        stripped = comment.strip()
+        if not stripped:
+            continue
+        # 첫 토큰: 공백/줄바꿈 기준으로 분리, 최대 4자
+        first_token = stripped.split()[0] if stripped.split() else stripped[:4]
+        token = first_token[:4]
+        if token and token not in seen:
+            seen.add(token)
+            starters.append(token)
+    return starters
 
 
 def generate_comment(
@@ -134,14 +277,18 @@ def generate_comment(
         생성된 댓글 문자열. API 실패 시 phrases 폰백.
     """
     client = _get_client()
+
+    # 카테고리 감지 (D-2)
+    category = _detect_category(post_title, post_text)
+
     if client is None:
-        return pick_phrase(post_title)
+        return pick_phrase(post_title, category=category)
 
     # 본문이 비거나 너무 짧으면 폰백
     body = post_text.strip()
     if len(body) < 20:
         logger.debug("본문 너무 짧음 — phrases 폰백")
-        return pick_phrase(post_title)
+        return pick_phrase(post_title, category=category)
 
     # 본문 길이 제한 (토큰 절약)
     if len(body) > _MAX_BODY_CHARS:
@@ -149,10 +296,24 @@ def generate_comment(
 
     recent_comments = recent_comments or []
 
+    # D-1: 톤 랜덤화
+    _, tone_hint = _pick_tone()
+
+    # D-1: 시작어 중복 방지 (최근 5개 댓글의 시작어 추출)
+    avoid_starters = _extract_starters(recent_comments, count=5)
+
+    # D-2: 카테고리 힌트
+    category_hint = _CATEGORY_PROMPT_HINTS.get(category) if category else None
+
     # 최대 3번 시도 (중복 시 재생성)
     for attempt in range(3):
         try:
-            system_prompt = _build_system_prompt(custom_rules=custom_prompt)
+            system_prompt = _build_system_prompt(
+                custom_rules=custom_prompt,
+                tone_hint=tone_hint,
+                avoid_starters=avoid_starters,
+                category_hint=category_hint,
+            )
             user_message = f"[제목] {post_title}\n\n[본문]\n{body}"
 
             response = client.messages.create(
@@ -180,12 +341,17 @@ def generate_comment(
             if not _is_valid_comment(comment):
                 logger.warning(f"비정상 응답, 재시도 (시도 {attempt + 1}/3)")
                 continue
-            
+
             # 중복 체크
             is_duplicate = any(_is_similar(comment, rc) for rc in recent_comments)
             if is_duplicate:
                 logger.debug(f"중복 댓글 감지, 재생성 (시도 {attempt + 1}/3)")
+                # 재시도 시 새 톤으로 교체
+                _, tone_hint = _pick_tone()
                 continue
+
+            # D-3: 후처리 적용
+            comment = post_process(comment)
 
             logger.info(f"AI 댓글 생성 완료 ({len(comment)}자): {comment[:40]}...")
             return comment
@@ -196,7 +362,7 @@ def generate_comment(
 
     # 3번 모두 실패하면 phrases 폰백
     logger.warning("AI 댓글 3회 실패 — phrases 폰백")
-    return pick_phrase(post_title)
+    return pick_phrase(post_title, category=category)
 
 
 def _clean_comment(comment: str) -> str:
@@ -253,19 +419,25 @@ def generate_comments_batch(
     if not posts:
         return []
 
-    recent_comments = recent_comments or []
+    recent_comments_local = list(recent_comments or [])
 
     # 1건이면 기존 단건 함수 위임
     if len(posts) == 1:
         comment = generate_comment(
-            posts[0]["body"], posts[0]["title"], recent_comments,
+            posts[0]["body"], posts[0]["title"], recent_comments_local,
             custom_prompt=custom_prompt,
         )
         return [comment]
 
     client = _get_client()
+
+    # 배치 전체의 카테고리는 첫 번째 유효 게시물 기준으로 감지 (대표값)
+    first_title = posts[0].get("title", "")
+    first_body = posts[0].get("body", "")
+    category = _detect_category(first_title, first_body)
+
     if client is None:
-        return [pick_phrase(p["title"]) for p in posts]
+        return [pick_phrase(p["title"], category=_detect_category(p.get("title", ""), p.get("body", ""))) for p in posts]
 
     # 유효한 게시물만 배치 대상으로 분류
     valid_indices: list[int] = []
@@ -275,7 +447,14 @@ def generate_comments_batch(
             valid_indices.append(i)
 
     if not valid_indices:
-        return [pick_phrase(p["title"]) for p in posts]
+        return [pick_phrase(p["title"], category=_detect_category(p.get("title", ""), p.get("body", ""))) for p in posts]
+
+    # D-1: 톤 랜덤화 + 시작어 중복 방지
+    _, tone_hint = _pick_tone()
+    avoid_starters = _extract_starters(recent_comments_local, count=5)
+
+    # D-2: 배치 대표 카테고리 힌트
+    category_hint = _CATEGORY_PROMPT_HINTS.get(category) if category else None
 
     # 프롬프트 조합
     user_parts = []
@@ -298,24 +477,35 @@ def generate_comments_batch(
 
     for attempt in range(2):
         try:
+            system_prompt = _build_system_prompt(
+                custom_rules=custom_prompt,
+                tone_hint=tone_hint,
+                avoid_starters=avoid_starters,
+                category_hint=category_hint,
+            )
             response = client.messages.create(
                 model=COMMENT_AI_MODEL,
                 max_tokens=800,
-                system=_build_system_prompt(custom_rules=custom_prompt),
+                system=system_prompt,
                 messages=[{"role": "user", "content": user_message}],
             )
             result_text = response.content[0].text.strip()
             parsed = _parse_batch_response(result_text, len(valid_indices))
 
             # 결과를 원래 인덱스에 매핑
-            results: list[str] = [pick_phrase(p["title"]) for p in posts]
+            results: list[str] = [
+                pick_phrase(p["title"], category=_detect_category(p.get("title", ""), p.get("body", "")))
+                for p in posts
+            ]
             for seq, i in enumerate(valid_indices):
                 raw = parsed[seq]
                 if raw and _is_valid_comment(raw):
                     comment = _clean_comment(raw)
-                    if not any(_is_similar(comment, rc) for rc in recent_comments):
+                    if not any(_is_similar(comment, rc) for rc in recent_comments_local):
+                        # D-3: 후처리 적용
+                        comment = post_process(comment)
                         results[i] = comment
-                        recent_comments.append(comment)
+                        recent_comments_local.append(comment)
 
             logger.info(
                 f"배치 댓글 생성 완료: {len(valid_indices)}개 요청, "
@@ -328,4 +518,7 @@ def generate_comments_batch(
             continue
 
     logger.warning("배치 댓글 생성 실패 — phrases 폰백")
-    return [pick_phrase(p["title"]) for p in posts]
+    return [
+        pick_phrase(p["title"], category=_detect_category(p.get("title", ""), p.get("body", "")))
+        for p in posts
+    ]
