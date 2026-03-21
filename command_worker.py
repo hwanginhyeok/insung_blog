@@ -198,66 +198,103 @@ async def handle_execute(user_id: str | None = None) -> dict:
     uid_label = user_id[:8] if user_id else "admin"
     logger.info(f"▶ 댓글 게시 시작: 총 {total}개 (user={uid_label})")
 
+    BATCH_SIZE = 30  # 브라우저 재시작 간격
+    consecutive_failures = 0  # 연속 실패 카운터
+    MAX_CONSECUTIVE_FAILURES = 5  # 연속 실패 한도 — 초과 시 브라우저 크래시로 판단
+
+    async def _login(context, page):
+        if user_id:
+            return await ensure_login_cookie_only(context, page, user_id)
+        naver_id = os.environ.get("NAVER_ID", "")
+        naver_pw = os.environ.get("NAVER_PW", "")
+        if not all([naver_id, naver_pw]):
+            raise RuntimeError(".env 인증 정보 누락 (NAVER_ID, NAVER_PW)")
+        return await ensure_login(context, page, naver_id, naver_pw)
+
     async with _browser_semaphore:
-        async with async_playwright() as pw:
-            browser, context, page = await create_browser(pw, headless=True)
+        browser = None
+        context = None
+        page = None
+        pw_instance = None
 
-            try:
-                # 로그인
-                if user_id:
-                    logged_in = await ensure_login_cookie_only(context, page, user_id)
-                else:
-                    naver_id = os.environ.get("NAVER_ID", "")
-                    naver_pw = os.environ.get("NAVER_PW", "")
-                    if not all([naver_id, naver_pw]):
-                        raise RuntimeError(".env 인증 정보 누락 (NAVER_ID, NAVER_PW)")
-                    logged_in = await ensure_login(context, page, naver_id, naver_pw)
+        try:
+            pw_instance = await async_playwright().start()
 
-                if not logged_in:
-                    raise RuntimeError("네이버 로그인 실패")
+            for i, comment in enumerate(approved, 1):
+                # 브라우저 시작 또는 BATCH_SIZE마다 재시작
+                if browser is None or (i - 1) % BATCH_SIZE == 0 and i > 1:
+                    if browser:
+                        logger.info(f"▶ 브라우저 재시작 ({i - 1}개 처리 완료)")
+                        await browser.close()
+                        await asyncio.sleep(3)
+                    browser, context, page = await create_browser(pw_instance, headless=True)
+                    logged_in = await _login(context, page)
+                    if not logged_in:
+                        raise RuntimeError("네이버 로그인 실패")
+                    consecutive_failures = 0
 
-                for i, comment in enumerate(approved, 1):
-                    comment_id = comment["id"]
-                    blog_id = comment["blog_id"]
-                    post_url = comment["post_url"]
-                    post_title = comment["post_title"]
-                    comment_text = comment["comment_text"]
+                comment_id = comment["id"]
+                blog_id = comment["blog_id"]
+                post_url = comment["post_url"]
+                post_title = comment["post_title"]
+                comment_text = comment["comment_text"]
 
-                    logger.info(f"▶ [{i}/{total}] {blog_id} 댓글 작성 중...")
+                logger.info(f"▶ [{i}/{total}] {blog_id} 댓글 작성 중...")
 
-                    try:
-                        ok, _ = await write_comment(
-                            page=page,
-                            post_url=post_url,
-                            post_title=post_title,
-                            dry_run=False,
-                            comment_text=comment_text,
-                        )
-                        if ok:
-                            update_pending_status_sb(comment_id, "posted", decided_by="worker")
-                            success_count += 1
-                            logger.info(f"✓ [{i}/{total}] 성공: {blog_id}")
-                        else:
-                            update_pending_status_sb(comment_id, "failed", decided_by="worker")
-                            add_to_retry_queue(
-                                blog_id, post_url, post_title, "댓글 작성 실패",
-                                user_id=user_id,
-                            )
-                            failed_count += 1
-                            logger.warning(f"✗ [{i}/{total}] 실패: {blog_id}")
-                    except Exception as e:
+                try:
+                    ok, _ = await write_comment(
+                        page=page,
+                        post_url=post_url,
+                        post_title=post_title,
+                        dry_run=False,
+                        comment_text=comment_text,
+                    )
+                    if ok:
+                        update_pending_status_sb(comment_id, "posted", decided_by="worker")
+                        success_count += 1
+                        consecutive_failures = 0
+                        logger.info(f"✓ [{i}/{total}] 성공: {blog_id}")
+                    else:
                         update_pending_status_sb(comment_id, "failed", decided_by="worker")
                         add_to_retry_queue(
-                            blog_id, post_url, post_title, str(e)[:100],
+                            blog_id, post_url, post_title, "댓글 작성 실패",
                             user_id=user_id,
                         )
                         failed_count += 1
-                        logger.error(f"✗ [{i}/{total}] 예외: {e}")
+                        consecutive_failures += 1
+                        logger.warning(f"✗ [{i}/{total}] 실패: {blog_id}")
+                except Exception as e:
+                    update_pending_status_sb(comment_id, "failed", decided_by="worker")
+                    add_to_retry_queue(
+                        blog_id, post_url, post_title, str(e)[:100],
+                        user_id=user_id,
+                    )
+                    failed_count += 1
+                    consecutive_failures += 1
+                    logger.error(f"✗ [{i}/{total}] 예외: {e}")
 
-                    if i < total:
-                        await asyncio.sleep(3)
-            finally:
+                # 연속 실패 한도 초과 → 브라우저 크래시로 판단, 중단
+                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                    remaining = total - i
+                    logger.error(
+                        f"연속 {MAX_CONSECUTIVE_FAILURES}회 실패 — 브라우저 크래시 판단, "
+                        f"나머지 {remaining}개 중단"
+                    )
+                    # 남은 댓글을 failed 처리
+                    for remaining_comment in approved[i:]:
+                        update_pending_status_sb(
+                            remaining_comment["id"], "failed", decided_by="worker"
+                        )
+                        failed_count += 1
+                    break
+
+                if i < total:
+                    await asyncio.sleep(3)
+        finally:
+            if browser:
                 await browser.close()
+            if pw_instance:
+                await pw_instance.stop()
 
     return {
         "message": f"댓글 게시 완료: 성공 {success_count} / 실패 {failed_count}",
