@@ -15,6 +15,7 @@ const navItems = [
   { href: "/persona", label: "페르소나" },
   { href: "/analytics", label: "성과 분석" },
   { href: "/bot", label: "댓글 봇" },
+  { href: "/neighbor", label: "서로이웃" },
   { href: "/guide", label: "사용법" },
 ];
 
