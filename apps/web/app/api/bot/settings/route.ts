@@ -43,6 +43,9 @@ export async function POST(req: NextRequest) {
     "max_bloggers_per_day",
     "naver_blog_id",
     "comment_prompt",
+    "auto_neighbor_request",
+    "max_neighbor_requests_per_day",
+    "neighbor_request_message",
   ] as const;
 
   const updateData: Record<string, unknown> = {};
@@ -68,6 +71,41 @@ export async function POST(req: NextRequest) {
       { error: "approval_mode는 manual 또는 auto만 가능합니다" },
       { status: 400 }
     );
+  }
+
+  // 숫자 필드 범위 검증
+  const numericLimits: Record<string, [number, number]> = {
+    max_comments_per_day: [1, 100],
+    max_bloggers_per_day: [1, 50],
+    max_neighbor_requests_per_day: [1, 30],
+  };
+  for (const [key, [min, max]] of Object.entries(numericLimits)) {
+    if (key in updateData) {
+      const val = Number(updateData[key]);
+      if (!Number.isInteger(val) || val < min || val > max) {
+        return NextResponse.json(
+          { error: `${key}는 ${min}~${max} 범위의 정수만 가능합니다` },
+          { status: 400 }
+        );
+      }
+    }
+  }
+
+  // 시간대 필드 검증
+  for (const hourKey of ["weekday_hours", "weekend_hours"] as const) {
+    if (hourKey in updateData) {
+      const h = updateData[hourKey] as { start?: number; end?: number } | null;
+      if (h && typeof h === "object") {
+        const { start, end } = h;
+        if (typeof start !== "number" || typeof end !== "number" ||
+            start < 0 || start > 24 || end < 0 || end > 24 || start >= end) {
+          return NextResponse.json(
+            { error: `${hourKey}: 0~24 범위이고 start < end 이어야 합니다` },
+            { status: 400 }
+          );
+        }
+      }
+    }
   }
 
   // upsert (없으면 생성, 있으면 수정)

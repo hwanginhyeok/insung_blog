@@ -1,0 +1,358 @@
+"use client";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  BotCommandRecord,
+  BotSettings,
+  PendingComment,
+  COMMAND_LABELS,
+  formatElapsed,
+  timeAgo,
+} from "../_lib/bot-api";
+
+// ── 3단계 Stepper ───────────────────────────────────────────
+
+const STEPS = [
+  { num: 1, label: "봇 실행", desc: "댓글 수집" },
+  { num: 2, label: "댓글 승인", desc: "내용 확인" },
+  { num: 3, label: "댓글 게시", desc: "네이버 발행" },
+] as const;
+
+function Stepper({ currentStep }: { currentStep: number }) {
+  return (
+    <div className="flex items-center justify-center gap-0">
+      {STEPS.map((step, i) => (
+        <div key={step.num} className="flex items-center">
+          <div className="flex flex-col items-center gap-1">
+            <div
+              className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold transition-colors ${
+                step.num === currentStep
+                  ? "bg-primary text-primary-foreground"
+                  : step.num < currentStep
+                    ? "bg-primary/20 text-primary"
+                    : "bg-muted text-muted-foreground"
+              }`}
+            >
+              {step.num}
+            </div>
+            <div className="text-center">
+              <p
+                className={`text-xs font-medium ${
+                  step.num === currentStep
+                    ? "text-primary"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {step.label}
+              </p>
+              <p className="text-[10px] text-muted-foreground">{step.desc}</p>
+            </div>
+          </div>
+          {i < STEPS.length - 1 && (
+            <div
+              className={`mx-3 mt-[-18px] h-0.5 w-12 sm:w-20 ${
+                step.num < currentStep ? "bg-primary/40" : "bg-muted"
+              }`}
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Props ────────────────────────────────────────────────────
+
+interface BotControlPanelProps {
+  pending: PendingComment[];
+  approvedComments: PendingComment[];
+  settings: BotSettings;
+  activeCommand: BotCommandRecord | null;
+  botCommands: BotCommandRecord[];
+  sendingCommand: boolean;
+  commandError: string | null;
+  elapsed: number;
+  avgDuration: number | null;
+  showRunWarning: boolean;
+  onRunClick: () => void;
+  onSendCommand: (command: "run" | "execute" | "retry") => void;
+  onConfirmRun: () => void;
+  onCancelRunWarning: () => void;
+}
+
+export function BotControlPanel({
+  pending,
+  approvedComments,
+  settings,
+  activeCommand,
+  botCommands,
+  sendingCommand,
+  commandError,
+  elapsed,
+  avgDuration,
+  showRunWarning,
+  onRunClick,
+  onSendCommand,
+  onConfirmRun,
+  onCancelRunWarning,
+}: BotControlPanelProps) {
+  // 현재 단계 결정
+  function getCurrentStep(): number {
+    if (
+      activeCommand?.command === "run" &&
+      (activeCommand.status === "pending" || activeCommand.status === "running")
+    )
+      return 1;
+    if (
+      (activeCommand?.command === "execute" || activeCommand?.command === "retry") &&
+      (activeCommand.status === "pending" || activeCommand.status === "running")
+    )
+      return 3;
+    if (pending.length > 0) return 2;
+    if (approvedComments.length > 0) return 3;
+    return 1;
+  }
+
+  const currentStep = getCurrentStep();
+  const isRunCommand = activeCommand?.command === "run";
+  const isExecuteCommand =
+    activeCommand?.command === "execute" || activeCommand?.command === "retry";
+
+  return (
+    <>
+      {/* ── 3단계 플로우 Stepper ─────────────────── */}
+      <Card>
+        <CardContent className="pt-6 pb-4">
+          <Stepper currentStep={currentStep} />
+        </CardContent>
+      </Card>
+
+      {/* ── STEP 1: 봇 실행 ──────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+              1
+            </span>
+            봇 실행
+          </CardTitle>
+          <CardDescription>
+            블로거를 방문하고 AI 댓글을 수집합니다
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {/* 재실행 경고 */}
+          {showRunWarning && (
+            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 space-y-2">
+              <p className="text-sm text-yellow-800">
+                승인 대기 {pending.length}건, 게시 대기 {approvedComments.length}건이 있습니다.
+                <br />
+                봇을 다시 실행하면 새로운 댓글이 추가됩니다.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-yellow-300 text-yellow-800 hover:bg-yellow-100"
+                  onClick={onConfirmRun}
+                >
+                  그래도 실행
+                </Button>
+                <Button size="sm" variant="ghost" onClick={onCancelRunWarning}>
+                  취소
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={onRunClick}
+              disabled={sendingCommand || !!activeCommand || !settings.naver_blog_id}
+            >
+              {sendingCommand ? "전송 중..." : "봇 실행"}
+            </Button>
+            {!settings.naver_blog_id && (
+              <span className="text-sm text-muted-foreground">
+                블로그 ID를 먼저 설정하세요 (하단 설정)
+              </span>
+            )}
+          </div>
+
+          {commandError &&
+            activeCommand?.command !== "execute" &&
+            activeCommand?.command !== "retry" && (
+              <p className="text-sm text-red-500">{commandError}</p>
+            )}
+
+          {/* run 명령 진행 표시 */}
+          {isRunCommand && activeCommand && (
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
+              {activeCommand.status === "pending" && (
+                <p className="text-sm">
+                  <span className="mr-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-yellow-500" />
+                  대기 중: 봇 실행 명령 전송됨...
+                </p>
+              )}
+              {activeCommand.status === "running" && (
+                <>
+                  <p className="text-sm">
+                    <span className="mr-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-blue-500" />
+                    진행 중: 봇 실행...{" "}
+                    <span className="font-mono text-muted-foreground">
+                      ({formatElapsed(elapsed)}
+                      {avgDuration ? ` / 예상 ${formatElapsed(avgDuration)}` : ""})
+                    </span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    서버에서 실행 중 — 브라우저를 닫아도 작업이 계속됩니다
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── STEP 3: 댓글 게시 ────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+              3
+            </span>
+            댓글 게시 ({approvedComments.length}건)
+          </CardTitle>
+          <CardDescription>승인된 댓글을 네이버에 게시합니다</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {approvedComments.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              게시 대기 중인 댓글이 없습니다
+            </p>
+          ) : (
+            <>
+              <div className="space-y-2">
+                {approvedComments.map((c) => (
+                  <div key={c.id} className="rounded-lg border px-3 py-2 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium min-w-0 truncate">
+                        [{c.blog_id}]{" "}
+                        {c.post_url ? (
+                          <a
+                            href={c.post_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-muted-foreground hover:text-foreground hover:underline"
+                          >
+                            {c.post_title || "제목 없음"}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            {c.post_title || "제목 없음"}
+                          </span>
+                        )}
+                      </p>
+                      <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                        승인됨
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      &ldquo;{c.comment_text}&rdquo;
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={() => onSendCommand("execute")}
+                  disabled={sendingCommand || !!activeCommand}
+                >
+                  댓글 게시
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => onSendCommand("retry")}
+                  disabled={sendingCommand || !!activeCommand}
+                >
+                  재시도
+                </Button>
+              </div>
+            </>
+          )}
+
+          {commandError &&
+            (isExecuteCommand || (!activeCommand && !isRunCommand)) && (
+              <p className="text-sm text-red-500">{commandError}</p>
+            )}
+
+          {/* execute/retry 명령 진행 표시 */}
+          {isExecuteCommand && activeCommand && (
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
+              {activeCommand.status === "pending" && (
+                <p className="text-sm">
+                  <span className="mr-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-yellow-500" />
+                  대기 중: {COMMAND_LABELS[activeCommand.command]} 명령 전송됨...
+                </p>
+              )}
+              {activeCommand.status === "running" && (
+                <>
+                  <p className="text-sm">
+                    <span className="mr-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-blue-500" />
+                    진행 중: {COMMAND_LABELS[activeCommand.command]}...{" "}
+                    <span className="font-mono text-muted-foreground">
+                      ({formatElapsed(elapsed)})
+                    </span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    서버에서 실행 중 — 브라우저를 닫아도 작업이 계속됩니다
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* 최근 완료 명령 */}
+          {botCommands.filter(
+            (c) => c.status === "completed" || c.status === "failed"
+          ).length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-muted-foreground">최근 명령</p>
+              {botCommands
+                .filter((c) => c.status === "completed" || c.status === "failed")
+                .slice(0, 3)
+                .map((c) => (
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between rounded border px-3 py-1.5 text-sm"
+                  >
+                    <span className="text-muted-foreground">
+                      {timeAgo(c.created_at)}
+                    </span>
+                    <span>
+                      {c.status === "completed" ? (
+                        <span className="text-green-600">
+                          {COMMAND_LABELS[c.command]} 완료
+                        </span>
+                      ) : (
+                        <span className="text-red-500">
+                          {COMMAND_LABELS[c.command]} 실패
+                        </span>
+                      )}
+                    </span>
+                    <span className="max-w-[200px] truncate text-xs text-muted-foreground">
+                      {c.status === "completed" && c.result
+                        ? ((c.result as Record<string, unknown>).message as string) || ""
+                        : c.error_message || ""}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  );
+}
