@@ -146,8 +146,9 @@
 | 파일 | 역할 | 상태 |
 |------|------|------|
 | `comment_writer.py` | 댓글 작성 — iframe 탐색 + 인간적 타이핑. `write_comment()` | ✅ |
-| `ai_comment.py` | AI 댓글 생성 (Haiku). phrases 폭백 + 안전 필터 + 중복 체크. `generate_comment()` | ✅ (2026-03-04 개선) |
-| `phrases.py` | 고정 댓글 문구 풀 (AI 폭백용). `pick_phrase()` | ✅ |
+| `ai_comment.py` | AI 댓글 생성 (Haiku). 톤 랜덤화 + 카테고리 감지 + phrases 폭백 + 안전 필터 + 중복 체크. `generate_comment()` | ✅ (Phase D 개선) |
+| `phrases.py` | 고정 댓글 문구 풀 (AI 폭백용). 카테고리별 전용 문구(8종×20개) 추가. `pick_phrase(title, category=)` | ✅ (Phase D 개선) |
+| `comment_post_processor.py` | 댓글 후처리 — 이모지 최대 2개 제한, ㅎㅎ/ㅋㅋ 정규화, 마침표 스타일 통일. `process()` | ✅ **신규** |
 
 ---
 

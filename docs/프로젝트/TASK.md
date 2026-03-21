@@ -40,24 +40,89 @@ Supabase (공유 제어 평면)
 
 | # | 작업 | 중요도 | 상태 | 비고 |
 |---|------|--------|------|------|
-| COMMENT-HIST | 댓글 내역 + 개인 프롬프트 — 잔여 작업 | P1 | 진행 | 코드 완료, 아래 검증 항목 남음 |
+| NEIGHBOR-연동 | 이웃 시스템 미연동 항목 (추천 알고리즘, interaction 기록, 주기적 동기화) | P2 | 대기 | 코드 준비됨, 오케스트레이터 연동 필요 |
+| NEIGHBOR-DB | Supabase 마이그레이션 실행 (00020, 00021) | P1 | 대기 | SQL 아직 미실행 |
 | TEST | 기능별 통합 테스트 (아래 상세) | P0 | 대기 | 브라우저 필요 — 코드 건강 점검 완료, 실행 테스트 미진행 |
-
-> **COMMENT-HIST 잔여 (내일 이어서)**
-> 1. Supabase SQL Editor에서 `00019_add_comment_prompt.sql` 실행
-> 2. `localhost:3000/bot` 댓글 내역 탭 동작 확인 (전체/승인/게시완료/거부/실패)
-> 3. 프롬프트 textarea 입력 → 설정 저장 → 새로고침 후 유지 확인
-> 4. Vercel 배포 (dev→master 머지 또는 dev 브랜치 배포)
 
 > **잔여 E2E 항목** (TEST 섹션에 통합)
 > - PUB-08: 저장→발행→URL E2E (워커+브라우저)
 > - MULTI-USER: 2번째 사용자 E2E (가입→쿠키→blog_id 자동 감지→봇 실행)
-> - MULTI-USER: 웹 UI 블로그 ID 설정 테스트 (브라우저)
-> - MULTI-USER: 데이터 이관 (선택사항)
+> - NEIGHBOR: 서로이웃 신청 E2E (웹 폼 → 워커 실행 → DB 기록)
 
 ---
 
-## COMMENT-HIST: 댓글 내역 조회 + 개인 프롬프트 — 코드 완료, 검증 대기 (2026-03-17)
+## COMMENT-QUALITY: 댓글 고도화 — ✅ 완료 (2026-03-21)
+
+> AI 댓글 품질 향상: 톤 다양화, 카테고리별 맞춤, 후처리 필터 적용.
+> 요구사항: `docs/프로젝트/요구사항/댓글-고도화.md`
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| CQ-01 | 톤 랜덤화 (감탄/공감/정보감사 3종) | ✅ | ai_comment.py `_pick_tone()` |
+| CQ-02 | 카테고리 감지 (8종) + 카테고리별 프롬프트 | ✅ | `_detect_category()` + `_CATEGORY_PROMPT_HINTS` |
+| CQ-03 | 시작어 중복 방지 | ✅ | `_extract_starters()` + avoid_starters 파라미터 |
+| CQ-04 | 길이 균일화 (최소 80자, 최대 300자) | ✅ | generate_comment 내 검증 |
+| CQ-05 | 이모지 2개 제한 + ㅎㅎ/ㅋㅋ 정규화 + 마침표 통일 | ✅ | comment_post_processor.py (신규) |
+| CQ-06 | 카테고리별 폴백 문구 (8종 × 20개) | ✅ | phrases.py 확장 |
+
+## NEIGHBOR: 이웃 관리 시스템 — ✅ 코드 완료, DB 마이그레이션 대기 (2026-03-21)
+
+> 서로이웃 관리 + 교류 추적 + 신청 자동화. 웹 UI + API + Python 모듈 + 워커 핸들러.
+> 요구사항: `docs/프로젝트/요구사항/신규방문자-서로이웃.md`
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| NB-01 | DB 스키마 (neighbors, requests, interactions, recommendations) | ✅ | 00020_create_neighbor_tables.sql |
+| NB-02 | 봇 설정 확장 (auto_neighbor_request 등 3컬럼) | ✅ | 00021_add_neighbor_settings.sql |
+| NB-03 | 웹 UI (현황/교류/신청/추천 4탭) | ✅ | neighbor/page.tsx + 5 컴포넌트 + 훅 + API lib |
+| NB-04 | API Routes (stats/list/requests/interactions/recommendations) | ✅ | api/neighbor/* 5개 |
+| NB-05 | Python 이웃 체커 | ✅ | src/neighbor/neighbor_checker.py |
+| NB-06 | Python 이웃 신청 자동화 | ✅ | src/neighbor/neighbor_requester.py |
+| NB-07 | Python 이웃 DB 동기화 | ✅ | src/neighbor/neighbor_sync.py |
+| NB-08 | Python 교류 추적 | ✅ | src/neighbor/interaction_tracker.py |
+| NB-09 | 워커 핸들러 (neighbor_request) | ✅ | command_worker.py |
+| NB-10 | 네비게이션 + 관리자 API | ✅ | header.tsx + admin/users/[userId]/neighbors |
+
+> **미연동 (향후)**:
+> - 추천 알고리즘 (neighbor_recommendations 데이터 생성)
+> - 댓글 작성 시 interaction 자동 기록
+> - 이웃 상태 주기적 동기화
+> - auto_neighbor_request 자동화
+
+## BOT-REFACTOR: 봇 페이지 리팩토링 — ✅ 완료 (2026-03-21)
+
+> 봇 페이지를 컴포넌트/훅/lib으로 분리. 유지보수성 향상.
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| BR-01 | 컴포넌트 7개 분리 | ✅ | BotControlPanel, CommentApprovalPanel, BotSettingsPanel 등 |
+| BR-02 | 커스텀 훅 3개 | ✅ | useBotStatus, useBotSettings, useCommentHistory |
+| BR-03 | API/유틸 lib | ✅ | bot-api.ts (인터페이스 + 상수 + API 함수) |
+| BR-04 | 메인 페이지 리와이어 | ✅ | bot/page.tsx |
+
+## ADMIN-ENHANCE: 관리자 페이지 개선 — ✅ 완료 (2026-03-21)
+
+> 시스템 통계 대시보드 + 사용자 상세 조회 모달.
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| AE-01 | 시스템 통계 카드 (사용자/댓글/이웃/주간 실행) | ✅ | SystemStatsCard.tsx + api/admin/stats |
+| AE-02 | 사용자 상세 모달 (댓글/페르소나/이웃 3탭) | ✅ | UserDetailModal.tsx + api/admin/users/[userId]/* 3개 |
+
+## BOT-API: 봇 API 확장 — ✅ 완료 (2026-03-21)
+
+> 댓글 히스토리 페이지네이션, 봇 통계, 이웃 설정/커맨드 확장.
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| BA-01 | 댓글 히스토리 API (페이지네이션+필터+정렬) | ✅ | api/bot/comments/route.ts |
+| BA-02 | 봇 통계 API (일별/주별 집계) | ✅ | api/bot/stats/route.ts |
+| BA-03 | settings에 이웃 관련 필드 추가 | ✅ | api/bot/settings/route.ts |
+| BA-04 | command에 neighbor_request 타입 추가 | ✅ | api/bot/command/route.ts |
+
+---
+
+## COMMENT-HIST: 댓글 내역 조회 + 개인 프롬프트 — ✅ 완료 (2026-03-17)
 
 > 봇 페이지에 상태별 댓글 내역 조회 + 사용자별 댓글 스타일 프롬프트 커스텀 기능 추가.
 
@@ -189,6 +254,11 @@ Supabase (공유 제어 평면)
 
 | # | 작업 | 중요도 | 완료일 |
 |---|------|--------|--------|
+| NEIGHBOR | 이웃 관리 시스템 (DB 4테이블 + 웹 UI + API 5개 + Python 4모듈 + 워커 핸들러) | P1 | 03-21 |
+| COMMENT-QUALITY | 댓글 고도화 (톤 랜덤화 + 카테고리 감지 + 시작어 중복 방지 + 후처리 필터) | P1 | 03-21 |
+| BOT-REFACTOR | 봇 페이지 리팩토링 (컴포넌트 7 + 훅 3 + API lib 분리) | P2 | 03-21 |
+| ADMIN-ENHANCE | 관리자 페이지 개선 (시스템 통계 + 사용자 상세 모달 + API 4개) | P2 | 03-21 |
+| BOT-API | 봇 API 확장 (댓글 히스토리 + 통계 + 이웃 설정/커맨드) | P1 | 03-21 |
 | COMMENT-HIST | 댓글 내역 조회 + 개인 댓글 프롬프트 편집 | P1 | 03-17 |
 | COOKIE-AUTO | 쿠키 업로드 시 블로그 ID 자동 추출 (Command Queue 재활용) | P1 | 03-17 |
 | PUBLISH-FIX | 발행 버그 수정 3건 (상태 복원·queue_id 검증·stale 정리) | P0 | 03-17 |
@@ -526,4 +596,4 @@ Supabase (공유 제어 평면)
 | DEPLOY-02 | 환경변수 6개 등록 | ✅ 완료 | NEXTAUTH_URL=insungblog.vercel.app |
 | DEPLOY-03 | Supabase Auth redirect URL 등록 | 수동 필요 | `insungblog.vercel.app/**` 추가 |
 
-*마지막 업데이트: 2026-03-17 (COMMENT-HIST 댓글 내역 + 개인 프롬프트)*
+*마지막 업데이트: 2026-03-21 (COMMENT-QUALITY + NEIGHBOR + BOT-REFACTOR + ADMIN-ENHANCE + BOT-API)*

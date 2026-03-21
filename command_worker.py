@@ -222,7 +222,7 @@ async def handle_execute(user_id: str | None = None) -> dict:
 
             for i, comment in enumerate(approved, 1):
                 # 브라우저 시작 또는 BATCH_SIZE마다 재시작
-                if browser is None or (i - 1) % BATCH_SIZE == 0 and i > 1:
+                if browser is None or ((i - 1) % BATCH_SIZE == 0 and i > 1):
                     if browser:
                         logger.info(f"▶ 브라우저 재시작 ({i - 1}개 처리 완료)")
                         await browser.close()
@@ -313,10 +313,14 @@ async def handle_retry(user_id: str | None = None) -> dict:
     from src.storage.database import (
         add_to_retry_queue,
         get_retry_targets,
+        init_db,
         record_comment,
         remove_from_retry_queue,
     )
     from src.utils.browser import create_browser
+
+    # 사용자 DB 초기화 (테이블 없으면 생성)
+    init_db(user_id=user_id)
 
     targets = get_retry_targets(user_id=user_id)
     if not targets:
@@ -505,6 +509,63 @@ async def handle_publish(user_id: str | None = None, payload: dict | None = None
         raise
 
 
+async def handle_neighbor_request(user_id: str | None = None, payload: dict | None = None) -> dict:
+    """서로이웃 신청 실행."""
+    if not user_id:
+        raise ValueError("neighbor_request는 user_id가 필수입니다")
+    if not payload or not payload.get("target_blog_id"):
+        raise ValueError("target_blog_id가 필요합니다")
+
+    from playwright.async_api import async_playwright
+
+    from src.auth.naver_login import ensure_login_cookie_only
+    from src.neighbor.neighbor_requester import send_neighbor_request
+    from src.neighbor.neighbor_sync import save_neighbor_request
+    from src.storage.supabase_client import get_user_bot_config
+    from src.utils.browser import create_browser
+
+    target_blog_id = payload["target_blog_id"]
+    message = payload.get("message", "")
+
+    # 일일 한도 조회
+    config = get_user_bot_config(user_id)
+    max_per_day = (config or {}).get("max_neighbor_requests_per_day", 10)
+
+    uid_label = user_id[:8]
+    logger.info(f"▶ 서로이웃 신청 시작: {target_blog_id} (user={uid_label})")
+
+    async with _browser_semaphore:
+        async with async_playwright() as pw:
+            browser, context, page = await create_browser(pw, headless=True)
+
+            try:
+                logged_in = await ensure_login_cookie_only(context, page, user_id)
+                if not logged_in:
+                    raise RuntimeError("네이버 로그인 실패 — 쿠키 재업로드 필요")
+
+                result = await send_neighbor_request(
+                    page=page,
+                    blog_id=target_blog_id,
+                    message=message,
+                    max_per_day=max_per_day,
+                )
+
+                # 신청 이력 저장
+                status = "sent" if result["success"] else "cancelled"
+                save_neighbor_request(
+                    target_blog_id=target_blog_id,
+                    target_blog_name=payload.get("target_blog_name"),
+                    message=message,
+                    status=status,
+                    user_id=user_id,
+                )
+
+                logger.info(f"{'✓' if result['success'] else '✗'} 서로이웃 신청: {result['message']}")
+                return result
+            finally:
+                await browser.close()
+
+
 async def handle_extract_blog_id(user_id: str | None = None) -> dict:
     """쿠키로 네이버 로그인 후 블로그 ID를 자동 추출하여 bot_settings에 저장."""
     if not user_id:
@@ -552,6 +613,7 @@ _HANDLERS = {
     "retry": handle_retry,
     "publish": handle_publish,
     "extract_blog_id": handle_extract_blog_id,
+    "neighbor_request": handle_neighbor_request,
 }
 
 
@@ -597,8 +659,8 @@ async def process_command(cmd: dict) -> None:
 
     try:
         kwargs: dict = {"user_id": cmd_user_id}
-        # publish 명령은 payload도 전달
-        if command_type == "publish":
+        # publish/neighbor_request 명령은 payload도 전달
+        if command_type in ("publish", "neighbor_request"):
             kwargs["payload"] = cmd.get("payload")
         result = await handler(**kwargs)
         mark_completed(command_id, result)

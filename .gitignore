@@ -16,3 +16,4 @@ __pycache__/
 !requirements.txt
 output/
 .vercel
+.next/
