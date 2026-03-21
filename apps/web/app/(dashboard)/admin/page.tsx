@@ -3,6 +3,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { useUser } from "@/lib/hooks/use-user";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { SystemStatsCard } from "./_components/SystemStatsCard";
+import { UserDetailModal } from "./_components/UserDetailModal";
 
 type Tier = "free" | "basic" | "pro";
 
@@ -24,6 +27,28 @@ interface UserRow {
   created_at: string;
 }
 
+interface SystemStats {
+  users: {
+    total: number;
+    byTier: Record<string, number>;
+    byStatus: Record<string, number>;
+  };
+  comments: {
+    total: number;
+    byStatus: Record<string, number>;
+  };
+  neighbors: {
+    total: number;
+    byType: Record<string, number>;
+  };
+  weekly: {
+    bloggers: number;
+    comments: number;
+    failed: number;
+    runs: number;
+  };
+}
+
 const TIER_OPTIONS: { value: Tier; label: string }[] = [
   { value: "free", label: "무료" },
   { value: "basic", label: "베이직" },
@@ -36,18 +61,32 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
+  const [selectedUser, setSelectedUser] = useState<{ id: string; name: string } | null>(null);
 
   const fetchUsers = useCallback(async () => {
-    const res = await fetch("/api/admin/users");
-    if (!res.ok) {
+    try {
+      const res = await fetch("/api/admin/users");
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || "사용자 목록 조회 실패");
+        setLoading(false);
+        return;
+      }
       const data = await res.json();
-      setError(data.error || "사용자 목록 조회 실패");
+      setUsers(data.users);
+    } catch {
+      setError("네트워크 오류: 사용자 목록 조회 실패");
+    } finally {
       setLoading(false);
-      return;
     }
-    const data = await res.json();
-    setUsers(data.users);
-    setLoading(false);
+  }, []);
+
+  const fetchStats = useCallback(async () => {
+    const res = await fetch("/api/admin/stats");
+    if (res.ok) {
+      setSystemStats(await res.json());
+    }
   }, []);
 
   useEffect(() => {
@@ -57,7 +96,8 @@ export default function AdminPage() {
       return;
     }
     fetchUsers();
-  }, [authLoading, isAdmin, fetchUsers]);
+    fetchStats();
+  }, [authLoading, isAdmin, fetchUsers, fetchStats]);
 
   async function handleUpdate(
     userId: string,
@@ -79,7 +119,6 @@ export default function AdminPage() {
     setUpdating(null);
   }
 
-  // 현재 월 사용량 계산 (월 전환 시 0으로 표시)
   function getUsage(u: UserRow) {
     const currentMonth = new Date().toISOString().slice(0, 7);
     const used =
@@ -114,65 +153,18 @@ export default function AdminPage() {
     );
   }
 
-  // 통계 계산
-  const totalUsers = users.length;
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  const totalGenThisMonth = users.reduce((sum, u) => {
-    const used =
-      u.gen_count_reset_month === currentMonth ? u.monthly_gen_count : 0;
-    return sum + used;
-  }, 0);
-  const tierDist = users.reduce(
-    (acc, u) => {
-      acc[u.tier] = (acc[u.tier] || 0) + 1;
-      return acc;
-    },
-    {} as Record<string, number>
-  );
-
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">관리자</h1>
 
-      {/* 통계 카드 */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              전체 사용자
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{totalUsers}명</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              이번 달 생성
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{totalGenThisMonth}건</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              티어 분포
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg font-semibold">
-              F:{tierDist.free || 0} B:{tierDist.basic || 0} P:
-              {tierDist.pro || 0}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* 시스템 전체 통계 */}
+      <SystemStatsCard stats={systemStats} />
 
       {/* 사용자 테이블 */}
       <Card>
+        <CardHeader>
+          <CardTitle>사용자 목록</CardTitle>
+        </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -184,6 +176,7 @@ export default function AdminPage() {
                   <th className="px-4 py-3 font-medium">사용량</th>
                   <th className="px-4 py-3 font-medium">상태</th>
                   <th className="px-4 py-3 font-medium">가입일</th>
+                  <th className="px-4 py-3 font-medium">상세</th>
                 </tr>
               </thead>
               <tbody>
@@ -258,6 +251,20 @@ export default function AdminPage() {
                           day: "2-digit",
                         })}
                       </td>
+                      <td className="px-4 py-3">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            setSelectedUser({
+                              id: u.id,
+                              name: u.name || u.email,
+                            })
+                          }
+                        >
+                          상세
+                        </Button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -266,6 +273,15 @@ export default function AdminPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* 사용자 상세 모달 */}
+      {selectedUser && (
+        <UserDetailModal
+          userId={selectedUser.id}
+          userName={selectedUser.name}
+          onClose={() => setSelectedUser(null)}
+        />
+      )}
     </div>
   );
 }
