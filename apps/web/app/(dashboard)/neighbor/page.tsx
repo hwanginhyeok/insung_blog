@@ -9,9 +9,11 @@ import { NeighborRecommendations } from "./_components/NeighborRecommendations";
 import { RequestHistory } from "./_components/RequestHistory";
 import { NeighborRequestForm } from "./_components/NeighborRequestForm";
 import { NeighborActions } from "./_components/NeighborActions";
+import { VisitResults } from "./_components/VisitResults";
 
 const TABS = [
   { key: "overview", label: "현황" },
+  { key: "results", label: "결과" },
   { key: "interactions", label: "교류" },
   { key: "requests", label: "신청" },
   { key: "recommend", label: "추천" },
@@ -125,6 +127,8 @@ export default function NeighborPage() {
           </div>
         </div>
       )}
+
+      {activeTab === "results" && <VisitResults />}
 
       {activeTab === "interactions" && (
         <RecentInteractions interactions={interactions} />

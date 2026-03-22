@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     .eq("user_id", user.id)
     .in("status", ["pending", "running"])
     .limit(1)
-    .single();
+    .maybeSingle();
 
   if (active) {
     return NextResponse.json(

@@ -54,7 +54,18 @@ export function RecentInteractions({ interactions }: Props) {
                     <span className="font-medium">{i.blog_id}</span>
                     {i.content && (
                       <span className="truncate text-muted-foreground">
-                        {i.content.slice(0, 50)}
+                        {i.post_url ? (
+                          <a
+                            href={i.post_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:underline"
+                          >
+                            {i.content.slice(0, 50)}
+                          </a>
+                        ) : (
+                          i.content.slice(0, 50)
+                        )}
                       </span>
                     )}
                   </div>

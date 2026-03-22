@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     .eq("user_id", user.id)
     .in("status", ["pending", "running"])
     .limit(1)
-    .single();
+    .maybeSingle();
 
   if (active) {
     return NextResponse.json(
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
  * GET /api/bot/command
  * 최근 명령 5개 조회 (폴링용)
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const supabase = getSupabase();
 
   const {
@@ -108,12 +108,25 @@ export async function GET() {
     return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 });
   }
 
-  const { data: commands } = await supabase
+  const limit = Math.min(
+    Number(req.nextUrl.searchParams.get("limit")) || 5,
+    50
+  );
+  const commandFilter = req.nextUrl.searchParams.get("commands");
+
+  let query = supabase
     .from("bot_commands")
     .select("*")
     .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(5);
+    .order("created_at", { ascending: false });
+
+  if (commandFilter) {
+    query = query.in("command", commandFilter.split(","));
+  }
+
+  query = query.limit(limit);
+
+  const { data: commands } = await query;
 
   // 현재 활성 명령 (pending 또는 running)
   const activeCommand = (commands || []).find(

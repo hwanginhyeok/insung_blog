@@ -28,6 +28,7 @@ export function NeighborActions({ onComplete }: Props) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeCmd, setActiveCmd] = useState<BotCommandStatus | null>(null);
+  const [lastResult, setLastResult] = useState<string | null>(null);
 
   const [themes, setThemes] = useState<string[]>([]);
   const [editingThemes, setEditingThemes] = useState(false);
@@ -38,10 +39,18 @@ export function NeighborActions({ onComplete }: Props) {
   }, []);
 
   const pollStatus = useCallback(async () => {
-    const { activeCommand } = await fetchCommandStatus();
+    const res = await fetchCommandStatus();
+    const activeCommand = res.activeCommand;
     setActiveCmd(activeCommand);
     if (!activeCommand && sending) {
       setSending(false);
+      // 마지막 완료 명령 결과 표시
+      const commands = (res as { commands?: BotCommandStatus[] }).commands;
+      const last = commands?.find((c) => c.status === "completed" || c.status === "failed");
+      if (last?.result) {
+        const r = last.result as Record<string, unknown>;
+        setLastResult((r.message as string) || null);
+      }
       onComplete();
     }
   }, [sending, onComplete]);
@@ -56,6 +65,7 @@ export function NeighborActions({ onComplete }: Props) {
     fn: () => Promise<{ success: boolean; error?: string }>
   ) {
     setError(null);
+    setLastResult(null);
     setSending(true);
     const result = await fn();
     if (!result.success) {
@@ -244,6 +254,11 @@ export function NeighborActions({ onComplete }: Props) {
         {statusLabel && (
           <div className="rounded bg-blue-50 px-3 py-2 text-sm text-blue-700">
             {statusLabel}
+          </div>
+        )}
+        {lastResult && (
+          <div className="rounded bg-green-50 px-3 py-2 text-sm text-green-700">
+            {lastResult}
           </div>
         )}
         {error && (
