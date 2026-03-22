@@ -111,16 +111,52 @@ async def notify_command_result(
 
 
 async def notify_command_failure(
-    user_id: str, command: str, error: str
+    user_id: str, command: str, error: str,
+    command_id: str | None = None,
 ) -> bool:
-    """명령 실패 시 해당 사용자 텔레그램으로 실패 알림 전송."""
+    """명령 실패 시 해당 사용자 텔레그램으로 실패 알림 + 재시도 버튼 전송."""
     chat_id = _get_chat_id_for_user(user_id)
     if not chat_id:
         logger.debug(f"사용자 {user_id[:8]} chat_id 없음 — 알림 생략")
         return False
 
-    message = f"❌ `{command}` 실패\n{error[:300]}"
-    return await send_telegram_message(message, chat_id=chat_id)
+    message = f"❌ <b>{command}</b> 실패\n{error[:300]}"
+
+    # 재시도 버튼 포함 전송
+    reply_markup = None
+    if command_id:
+        reply_markup = {
+            "inline_keyboard": [[
+                {"text": "🔄 재시도", "callback_data": f"retry_cmd:{command_id}"},
+            ]]
+        }
+
+    return await _send_telegram_with_buttons(chat_id, message, reply_markup)
+
+
+async def _send_telegram_with_buttons(
+    chat_id: str, message: str, reply_markup: dict | None = None
+) -> bool:
+    """텔레그램 메시지 전송 (인라인 버튼 포함)."""
+    if not TELEGRAM_BOT_TOKEN or not chat_id:
+        return False
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": message,
+        "parse_mode": "HTML",
+    }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(url, json=payload)
+            return resp.status_code == 200
+    except Exception as e:
+        logger.error(f"텔레그램 버튼 메시지 전송 오류: {e}")
+        return False
 
 
 async def notify_login_failure(error_detail: str) -> None:

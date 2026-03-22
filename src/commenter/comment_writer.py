@@ -414,7 +414,37 @@ async def _fill_and_submit(
         pass
 
     logger.info("댓글 작성 완료")
+
+    # 공감 버튼 클릭 (댓글 작성 성공 후)
+    try:
+        await _click_like_button(frame)
+    except Exception as e:
+        logger.debug(f"공감 클릭 실패 (무시): {e}")
+
     return True
+
+
+async def _click_like_button(frame: Frame) -> None:
+    """게시물 공감(좋아요) 버튼 클릭. 이미 공감한 상태면 스킵."""
+    # 이미 공감한 상태 확인 (on 클래스)
+    on_btn = await frame.query_selector("a.u_likeit_list_button._button.on.double_heart")
+    if on_btn:
+        logger.debug("이미 공감한 게시물 — 스킵")
+        return
+
+    # 공감 버튼 찾기 (off 상태)
+    like_btn = await frame.query_selector("a.u_likeit_list_button._button.off.double_heart")
+    if not like_btn:
+        # 폴백: 첫 번째 off 버튼
+        like_btn = await frame.query_selector("a.u_likeit_list_button._button.off")
+    if not like_btn:
+        logger.debug("공감 버튼 없음")
+        return
+
+    # scrollIntoView 후 JS 클릭 (viewport 밖이면 일반 click 실패)
+    await like_btn.evaluate("e => { e.scrollIntoView({block: 'center'}); e.click(); }")
+    await asyncio.sleep(1)
+    logger.info("공감 클릭 완료")
 
 
 async def _is_captcha_present(page: Page) -> bool:

@@ -121,6 +121,8 @@ python -c "import py_compile; py_compile.compile('파일.py', doraise=True)"
 | `.claude/skills/selector-debug.md` | 네이버 DOM 변경 대응 (디버그→분석→셀렉터 업데이트) | "셀렉터 확인", "댓글 안 달림", "DOM 분석" |
 | `.claude/skills/cookie-refresh.md` | 네이버 쿠키 갱신 + Supabase 양방향 동기화 | "쿠키 갱신", "로그인 만료", 쿠키 만료 감지 시 |
 | `.claude/skills/service-test.md` | 서비스 시작(tmux 4창) + 로그 모니터링 + E2E 테스트 | "서비스 시작", "테스트 준비", "워커 띄워", "E2E 테스트" |
+| `.claude/skills/telegram-bot-deploy.md` | 텔레그램 봇 배포/교체 절차 (구문검증→중지→시작→확인→롤백) | "봇 배포", "봇 교체", "텔레그램 업데이트" |
+| `.claude/skills/telegram-bot-test.md` | 텔레그램 봇 E2E 테스트 체크리스트 | "텔레그램 테스트", "봇 E2E" |
 
 ---
 

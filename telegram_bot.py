@@ -140,6 +140,33 @@ def _download_photo(file_id: str) -> str | None:
         return None
 
 
+def _handle_retry_command(chat_id: int, command_id: str, query_id: str) -> None:
+    """실패한 명령을 pending으로 복구하여 재시도."""
+    _answer_callback(query_id, "재시도 중...")
+    try:
+        from src.storage.supabase_client import get_supabase
+        sb = get_supabase()
+        result = (
+            sb.table("bot_commands")
+            .update({
+                "status": "pending",
+                "error_message": None,
+                "started_at": None,
+                "completed_at": None,
+            })
+            .eq("id", command_id)
+            .eq("status", "failed")
+            .execute()
+        )
+        if result.data:
+            cmd_type = result.data[0].get("command", "?")
+            _send_message(chat_id, f"🔄 <b>{cmd_type}</b> 명령을 재시도합니다.")
+        else:
+            _send_message(chat_id, "⚠️ 이미 처리되었거나 재시도할 수 없는 명령입니다.")
+    except Exception as e:
+        _send_message(chat_id, f"❌ 재시도 실패: {e}")
+
+
 def _enqueue_command(user_id: str, command: str, payload: dict | None = None) -> bool:
     """bot_commands 큐에 명령 등록."""
     try:
@@ -899,6 +926,9 @@ def main():
                     elif data.startswith("edit:"):
                         comment_id = data.split(":", 1)[1]
                         _handle_approval(chat_id, comment_id, "edit", query_id)
+                    elif data.startswith("retry_cmd:"):
+                        cmd_id = data.split(":", 1)[1]
+                        _handle_retry_command(chat_id, cmd_id, query_id)
                     continue
 
                 # 일반 메시지 처리

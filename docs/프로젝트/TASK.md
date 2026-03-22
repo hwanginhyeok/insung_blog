@@ -40,13 +40,32 @@ Supabase (공유 제어 평면)
 
 | # | 작업 | 중요도 | 상태 | 비고 |
 |---|------|--------|------|------|
+| ADMIN-E2E | 관리자 계정 댓글/이웃 실동작 검증 | P0 | ✅ | 댓글 21/22 + 공감 + 이웃신청 성공. 모바일URL 1건 실패 |
 | NEIGHBOR-연동 | 이웃 시스템 미연동 항목 (추천 알고리즘, interaction 기록, 주기적 동기화, 테마 자동 분석) | P2 | 대기 | 코드 준비됨, 오케스트레이터 연동 필요 |
+| TG-MIGRATE | Supabase bot_settings에 telegram_chat_id 컬럼 추가 + 관리자 매핑 | P0 | ✅ | 완료 (2026-03-22) |
+| TG-E2E | 텔레그램 봇 통합 E2E 테스트 | P0 | 대기 | 텔레그램 앱에서 수동 테스트 필요 |
 | TEST | 기능별 통합 테스트 (아래 상세) | P0 | 대기 | 브라우저 필요 — 코드 건강 점검 완료, 실행 테스트 미진행 |
 
 > **잔여 E2E 항목** (TEST 섹션에 통합)
 > - PUB-08: 저장→발행→URL E2E (워커+브라우저)
 > - MULTI-USER: 2번째 사용자 E2E (가입→쿠키→blog_id 자동 감지→봇 실행)
 > - NEIGHBOR: 서로이웃 신청 E2E (웹 폼 → 워커 실행 → DB 기록)
+> - TG-E2E: 텔레그램 봇 통합 E2E (`.claude/skills/telegram-bot-test.md`)
+
+## TG-REFACTOR: 텔레그램 봇 리팩토링 — ✅ 완료 (2026-03-22)
+
+> 댓글봇+이웃관리+AI초안 통합, 멀티유저, 큐 명령, 완료 알림
+
+| # | 작업 | 상태 | 비고 |
+|---|------|------|------|
+| TG-01 | supabase_client.py — chat_id 매핑 함수 3개 추가 | ✅ | `get_user_by_chat_id`, `register_chat_id`, `get_chat_id_for_user` |
+| TG-02 | telegram_notifier.py — chat_id 파라미터 + 명령 결과/실패 알림 | ✅ | `notify_command_result`, `notify_command_failure` |
+| TG-03 | command_worker.py — process_command()에 알림 호출 추가 | ✅ | 성공/실패 시 텔레그램 알림 |
+| TG-04 | telegram_bot.py — 풀 리팩토링 (멀티유저+큐+이웃+/start) | ✅ | ALLOWED_CHAT_ID 제거, _resolve_user 기반 |
+| TG-05 | start_services.sh — telegram_bot.py로 변경 | ✅ | |
+| TG-06 | 스킬 파일 2개 작성 | ✅ | telegram-bot-deploy.md, telegram-bot-test.md |
+| TG-DB | Supabase telegram_chat_id 컬럼 추가 + 관리자 매핑 | ✅ | PostgREST로 실행 완료 |
+| TG-07 | stale 명령 자동 재시도 + 실패 시 재시도 버튼 | ✅ | running→pending 복구, retry_cmd 콜백 |
 
 ---
 

@@ -754,26 +754,59 @@ _HANDLERS = {
 
 
 def _cleanup_stale_commands() -> int:
-    """워커 재시작 시 running 상태로 남은 명령을 failed로 일괄 변경. 반환: 정리 건수."""
+    """워커 재시작 시 running 상태로 남은 명령을 pending으로 복구 (자동 재시도). 반환: 정리 건수."""
     try:
         sb = get_supabase()
         result = (
             sb.table("bot_commands")
             .update({
-                "status": "failed",
-                "error_message": "워커 재시작으로 중단됨",
-                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "status": "pending",
+                "error_message": None,
+                "started_at": None,
+                "completed_at": None,
             })
             .eq("status", "running")
             .execute()
         )
         count = len(result.data) if result.data else 0
         if count:
-            logger.warning(f"stale 명령 {count}건 정리 (running → failed)")
+            logger.warning(f"stale 명령 {count}건 자동 재시도 (running → pending)")
+            # 영향받은 사용자에게 알림
+            _notify_stale_recovery(result.data)
         return count
     except Exception as e:
         logger.error(f"stale 명령 정리 실패: {e}")
         return 0
+
+
+def _notify_stale_recovery(commands: list[dict]) -> None:
+    """워커 재시작으로 복구된 명령에 대해 사용자 알림 전송."""
+    import asyncio
+    from src.utils.telegram_notifier import send_telegram_message
+    from src.storage.supabase_client import get_chat_id_for_user
+
+    # 사용자별로 묶기
+    user_cmds: dict[str, list[str]] = {}
+    for cmd in commands:
+        uid = cmd.get("user_id")
+        if uid:
+            user_cmds.setdefault(uid, []).append(cmd.get("command", "?"))
+
+    async def _send_all():
+        for uid, cmd_list in user_cmds.items():
+            chat_id = get_chat_id_for_user(uid)
+            if not chat_id:
+                continue
+            cmds_str = ", ".join(cmd_list)
+            await send_telegram_message(
+                f"⚠️ 워커 재시작으로 중단된 명령을 자동 재시도합니다.\n명령: {cmds_str}",
+                chat_id=chat_id,
+            )
+
+    try:
+        asyncio.run(_send_all())
+    except Exception as e:
+        logger.warning(f"stale 복구 알림 실패: {e}")
 
 
 async def process_command(cmd: dict) -> None:
@@ -811,11 +844,13 @@ async def process_command(cmd: dict) -> None:
         logger.error(f"━━━ 명령 실패: {command_type} → {e} ━━━", exc_info=True)
         mark_failed(command_id, str(e)[:500])
 
-        # 실패 알림
+        # 실패 알림 (재시도 버튼 포함)
         if cmd_user_id:
             try:
                 from src.utils.telegram_notifier import notify_command_failure
-                await notify_command_failure(cmd_user_id, command_type, str(e))
+                await notify_command_failure(
+                    cmd_user_id, command_type, str(e), command_id=command_id,
+                )
             except Exception as notify_err:
                 logger.warning(f"실패 알림 전송 실패: {notify_err}")
 
