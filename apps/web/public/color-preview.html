@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>사이드바 컬러 시안 비교</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f1f5f9; padding: 32px; }
+  h1 { text-align: center; margin-bottom: 8px; color: #1e293b; font-size: 24px; }
+  .subtitle { text-align: center; margin-bottom: 40px; color: #64748b; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 40px; max-width: 900px; margin: 0 auto; }
+
+  /* 각 시안 카드 */
+  .scheme { border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.12); }
+  .scheme-title {
+    padding: 16px 24px;
+    font-size: 16px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .scheme-title .badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-weight: 600;
+  }
+
+  /* 대시보드 프리뷰 */
+  .preview { display: flex; height: 360px; }
+
+  /* 사이드바 */
+  .sidebar {
+    width: 192px;
+    flex-shrink: 0;
+    padding: 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .sidebar .logo {
+    font-weight: 700;
+    font-size: 16px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+  }
+  .sidebar a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.15s;
+  }
+  .sidebar a svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+  /* 콘텐츠 영역 */
+  .content {
+    flex: 1;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .content h2 { font-size: 18px; font-weight: 700; }
+  .content .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .content .card {
+    border-radius: 10px;
+    padding: 16px;
+    height: 100px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .content .card .label { font-size: 12px; font-weight: 500; }
+  .content .card .value { font-size: 22px; font-weight: 700; }
+  .content .bar {
+    border-radius: 8px;
+    height: 8px;
+    margin-top: 4px;
+  }
+  .content .table-mock {
+    border-radius: 10px;
+    flex: 1;
+    padding: 16px;
+  }
+  .content .table-row {
+    display: flex;
+    align-items: center;
+    padding: 8px 0;
+    font-size: 13px;
+    gap: 12px;
+  }
+  .content .table-row + .table-row { border-top: 1px solid; }
+  .content .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* 컬러 팔레트 표시 */
+  .palette {
+    display: flex;
+    padding: 12px 24px 16px;
+    gap: 8px;
+  }
+  .palette .swatch {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+  }
+  .palette .swatch .color {
+    width: 100%;
+    height: 32px;
+    border-radius: 6px;
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+  .palette .swatch .name { font-size: 10px; color: #64748b; }
+  .palette .swatch .hex { font-size: 10px; font-weight: 600; color: #334155; }
+
+  /* ===== 시안 A: Modern Blurple ===== */
+  .scheme-a .scheme-title { background: #6366f1; color: #fff; }
+  .scheme-a .badge { background: rgba(255,255,255,0.2); color: #fff; }
+  .scheme-a .sidebar { background: #f8fafc; border-right: 1px solid #e2e8f0; }
+  .scheme-a .sidebar .logo { color: #1e293b; }
+  .scheme-a .sidebar a { color: #64748b; }
+  .scheme-a .sidebar a:hover { background: #f1f5f9; color: #334155; }
+  .scheme-a .sidebar a.active {
+    background: rgba(99,102,241,0.1);
+    color: #6366f1;
+    font-weight: 600;
+    border-left: 3px solid #6366f1;
+    padding-left: 9px;
+  }
+  .scheme-a .sidebar a.active svg { color: #6366f1; }
+  .scheme-a .content { background: #ffffff; }
+  .scheme-a .content h2 { color: #1e293b; }
+  .scheme-a .content .card { background: #f8fafc; border: 1px solid #e2e8f0; }
+  .scheme-a .content .card .label { color: #64748b; }
+  .scheme-a .content .card .value { color: #1e293b; }
+  .scheme-a .content .bar { background: linear-gradient(90deg, #6366f1, #818cf8); }
+  .scheme-a .content .table-mock { background: #f8fafc; border: 1px solid #e2e8f0; }
+  .scheme-a .content .table-row { color: #334155; border-color: #e2e8f0; }
+  .scheme-a .content .dot { background: #6366f1; }
+
+  /* ===== 시안 B: Vercel Clean ===== */
+  .scheme-b .scheme-title { background: #0070f3; color: #fff; }
+  .scheme-b .badge { background: rgba(255,255,255,0.2); color: #fff; }
+  .scheme-b .sidebar { background: #fafafa; border-right: 1px solid #eaeaea; }
+  .scheme-b .sidebar .logo { color: #000; }
+  .scheme-b .sidebar a { color: #666; }
+  .scheme-b .sidebar a:hover { background: #f5f5f5; color: #000; }
+  .scheme-b .sidebar a.active {
+    background: #fff;
+    color: #0070f3;
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .scheme-b .sidebar a.active svg { color: #0070f3; }
+  .scheme-b .content { background: #fff; }
+  .scheme-b .content h2 { color: #000; }
+  .scheme-b .content .card { background: #fafafa; border: 1px solid #eaeaea; }
+  .scheme-b .content .card .label { color: #666; }
+  .scheme-b .content .card .value { color: #000; }
+  .scheme-b .content .bar { background: linear-gradient(90deg, #0070f3, #3291ff); }
+  .scheme-b .content .table-mock { background: #fafafa; border: 1px solid #eaeaea; }
+  .scheme-b .content .table-row { color: #333; border-color: #eaeaea; }
+  .scheme-b .content .dot { background: #0070f3; }
+
+  /* ===== 시안 C: Soft Emerald ===== */
+  .scheme-c .scheme-title { background: #16a34a; color: #fff; }
+  .scheme-c .badge { background: rgba(255,255,255,0.2); color: #fff; }
+  .scheme-c .sidebar { background: #f0fdf4; border-right: 1px solid #dcfce7; }
+  .scheme-c .sidebar .logo { color: #14532d; }
+  .scheme-c .sidebar a { color: #6b7280; }
+  .scheme-c .sidebar a:hover { background: #dcfce7; color: #166534; }
+  .scheme-c .sidebar a.active {
+    background: rgba(22,163,74,0.12);
+    color: #16a34a;
+    font-weight: 600;
+    border-left: 3px solid #16a34a;
+    padding-left: 9px;
+  }
+  .scheme-c .sidebar a.active svg { color: #16a34a; }
+  .scheme-c .content { background: #fff; }
+  .scheme-c .content h2 { color: #14532d; }
+  .scheme-c .content .card { background: #f0fdf4; border: 1px solid #dcfce7; }
+  .scheme-c .content .card .label { color: #6b7280; }
+  .scheme-c .content .card .value { color: #14532d; }
+  .scheme-c .content .bar { background: linear-gradient(90deg, #16a34a, #4ade80); }
+  .scheme-c .content .table-mock { background: #f0fdf4; border: 1px solid #dcfce7; }
+  .scheme-c .content .table-row { color: #374151; border-color: #dcfce7; }
+  .scheme-c .content .dot { background: #16a34a; }
+
+  /* SVG 아이콘 인라인 */
+  .icon-file { }
+</style>
+</head>
+<body>
+
+<h1>사이드바 컬러 시안 비교</h1>
+<p class="subtitle">인성이 대시보드 — 어떤 스타일이 마음에 드시나요?</p>
+
+<div class="grid">
+
+  <!-- ===== 시안 A: Modern Blurple ===== -->
+  <div class="scheme scheme-a">
+    <div class="scheme-title">
+      A. Modern Blurple
+      <span class="badge">Linear / Stripe 스타일</span>
+    </div>
+    <div class="preview">
+      <div class="sidebar">
+        <div class="logo">인성이</div>
+        <a href="#" class="active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          내 글
+        </a>
+        <a href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          새 글 쓰기
+        </a>
+        <a href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          캘린더
+        </a>
+        <a href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          페르소나
+        </a>
+        <a href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          성과 분석
+        </a>
+      </div>
+      <div class="content">
+        <h2>내 글</h2>
+        <div class="cards">
+          <div class="card">
+            <span class="label">전체 글</span>
+            <span class="value">42</span>
+            <div class="bar" style="width:70%"></div>
+          </div>
+          <div class="card">
+            <span class="label">이번 주</span>
+            <span class="value">7</span>
+            <div class="bar" style="width:40%"></div>
+          </div>
+          <div class="card">
+            <span class="label">조회수</span>
+            <span class="value">1.2K</span>
+            <div class="bar" style="width:85%"></div>
+          </div>
+        </div>
+        <div class="table-mock">
+          <div class="table-row"><span class="dot"></span> 맛집 탐방 — 성수동 카페 리뷰</div>
+          <div class="table-row"><span class="dot"></span> 일상 기록 — 봄나들이 후기</div>
+          <div class="table-row"><span class="dot"></span> 제품 리뷰 — 무선 이어폰 추천</div>
+          <div class="table-row"><span class="dot"></span> 여행 — 제주도 3박 4일 코스</div>
+        </div>
+      </div>
+    </div>
+    <div class="palette">
+      <div class="swatch"><div class="color" style="background:#6366f1"></div><div class="name">Primary</div><div class="hex">#6366F1</div></div>
+      <div class="swatch"><div class="color" style="background:#818cf8"></div><div class="name">Light</div><div class="hex">#818CF8</div></div>
+      <div class="swatch"><div class="color" style="background:#f8fafc"></div><div class="name">Surface</div><div class="hex">#F8FAFC</div></div>
+      <div class="swatch"><div class="color" style="background:#1e293b"></div><div class="name">Text</div><div class="hex">#1E293B</div></div>
+      <div class="swatch"><div class="color" style="background:#e2e8f0"></div><div class="name">Border</div><div class="hex">#E2E8F0</div></div>
+      <div class="swatch"><div class="color" style="background:#64748b"></div><div class="name">Muted</div><div class="hex">#64748B</div></div>
+    </div>
+  </div>
+
+  <!-- ===== 시안 B: Vercel Clean ===== -->
+  <div class="scheme scheme-b">
+    <div class="scheme-title">
+      B. Vercel Clean
+      <span class="badge">미니멀 블루</span>
+    </div>
+    <div class="preview">
+      <div class="sidebar">
+        <div class="logo">인성이</div>
+        <a href="#" class="active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          내 글
+        </a>
+        <a href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          새 글 쓰기
+        </a>
+        <a href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          캘린더
+        </a>
+        <a href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          페르소나
+        </a>
+        <a href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          성과 분석
+        </a>
+      </div>
+      <div class="content">
+        <h2>내 글</h2>
+        <div class="cards">
+          <div class="card">
+            <span class="label">전체 글</span>
+            <span class="value">42</span>
+            <div class="bar" style="width:70%"></div>
+          </div>
+          <div class="card">
+            <span class="label">이번 주</span>
+            <span class="value">7</span>
+            <div class="bar" style="width:40%"></div>
+          </div>
+          <div class="card">
+            <span class="label">조회수</span>
+            <span class="value">1.2K</span>
+            <div class="bar" style="width:85%"></div>
+          </div>
+        </div>
+        <div class="table-mock">
+          <div class="table-row"><span class="dot"></span> 맛집 탐방 — 성수동 카페 리뷰</div>
+          <div class="table-row"><span class="dot"></span> 일상 기록 — 봄나들이 후기</div>
+          <div class="table-row"><span class="dot"></span> 제품 리뷰 — 무선 이어폰 추천</div>
+          <div class="table-row"><span class="dot"></span> 여행 — 제주도 3박 4일 코스</div>
+        </div>
+      </div>
+    </div>
+    <div class="palette">
+      <div class="swatch"><div class="color" style="background:#0070f3"></div><div class="name">Primary</div><div class="hex">#0070F3</div></div>
+      <div class="swatch"><div class="color" style="background:#3291ff"></div><div class="name">Light</div><div class="hex">#3291FF</div></div>
+      <div class="swatch"><div class="color" style="background:#fafafa"></div><div class="name">Surface</div><div class="hex">#FAFAFA</div></div>
+      <div class="swatch"><div class="color" style="background:#000000"></div><div class="name">Text</div><div class="hex">#000000</div></div>
+      <div class="swatch"><div class="color" style="background:#eaeaea"></div><div class="name">Border</div><div class="hex">#EAEAEA</div></div>
+      <div class="swatch"><div class="color" style="background:#666666"></div><div class="name">Muted</div><div class="hex">#666666</div></div>
+    </div>
+  </div>
+
+  <!-- ===== 시안 C: Soft Emerald ===== -->
+  <div class="scheme scheme-c">
+    <div class="scheme-title">
+      C. Soft Emerald
+      <span class="badge">에메랄드 그린</span>
+    </div>
+    <div class="preview">
+      <div class="sidebar">
+        <div class="logo">인성이</div>
+        <a href="#" class="active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          내 글
+        </a>
+        <a href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          새 글 쓰기
+        </a>
+        <a href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          캘린더
+        </a>
+        <a href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          페르소나
+        </a>
+        <a href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          성과 분석
+        </a>
+      </div>
+      <div class="content">
+        <h2>내 글</h2>
+        <div class="cards">
+          <div class="card">
+            <span class="label">전체 글</span>
+            <span class="value">42</span>
+            <div class="bar" style="width:70%"></div>
+          </div>
+          <div class="card">
+            <span class="label">이번 주</span>
+            <span class="value">7</span>
+            <div class="bar" style="width:40%"></div>
+          </div>
+          <div class="card">
+            <span class="label">조회수</span>
+            <span class="value">1.2K</span>
+            <div class="bar" style="width:85%"></div>
+          </div>
+        </div>
+        <div class="table-mock">
+          <div class="table-row"><span class="dot"></span> 맛집 탐방 — 성수동 카페 리뷰</div>
+          <div class="table-row"><span class="dot"></span> 일상 기록 — 봄나들이 후기</div>
+          <div class="table-row"><span class="dot"></span> 제품 리뷰 — 무선 이어폰 추천</div>
+          <div class="table-row"><span class="dot"></span> 여행 — 제주도 3박 4일 코스</div>
+        </div>
+      </div>
+    </div>
+    <div class="palette">
+      <div class="swatch"><div class="color" style="background:#16a34a"></div><div class="name">Primary</div><div class="hex">#16A34A</div></div>
+      <div class="swatch"><div class="color" style="background:#4ade80"></div><div class="name">Light</div><div class="hex">#4ADE80</div></div>
+      <div class="swatch"><div class="color" style="background:#f0fdf4"></div><div class="name">Surface</div><div class="hex">#F0FDF4</div></div>
+      <div class="swatch"><div class="color" style="background:#14532d"></div><div class="name">Text</div><div class="hex">#14532D</div></div>
+      <div class="swatch"><div class="color" style="background:#dcfce7"></div><div class="name">Border</div><div class="hex">#DCFCE7</div></div>
+      <div class="swatch"><div class="color" style="background:#6b7280"></div><div class="name">Muted</div><div class="hex">#6B7280</div></div>
+    </div>
+  </div>
+
+</div>
+
+<p style="text-align:center; margin-top:40px; color:#94a3b8; font-size:13px;">
+  브라우저에서 비교 후, 마음에 드는 시안 번호를 알려주세요.
+</p>
+
+</body>
+</html>

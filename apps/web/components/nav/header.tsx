@@ -10,11 +10,12 @@ import type { User } from "@supabase/supabase-js";
 
 // 글쓰기 탭으로 묶인 경로들
 const blogPaths = ["/dashboard", "/write", "/calendar", "/persona", "/analytics"];
+// 소셜봇 탭으로 묶인 경로들
+const socialPaths = ["/bot", "/neighbor"];
 
 const navItems = [
   { href: "/calendar", label: "글쓰기" },
-  { href: "/bot", label: "댓글 봇" },
-  { href: "/neighbor", label: "서로이웃" },
+  { href: "/bot", label: "소셜봇" },
   { href: "/guide", label: "사용법" },
 ];
 
@@ -51,28 +52,31 @@ export function Header() {
     router.refresh();
   }
 
+  function getIsActive(href: string) {
+    if (href === "/calendar") return blogPaths.some((p) => pathname.startsWith(p));
+    if (href === "/bot") return socialPaths.some((p) => pathname.startsWith(p));
+    return pathname.startsWith(href);
+  }
+
   return (
-    <header className="border-b bg-background">
-      <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
+    <header className="border-b border-primary/10 bg-primary/5">
+      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
         <div className="flex items-center gap-6">
-          <Link href="/calendar" className="text-lg font-bold">
+          <Link href="/calendar" className="text-lg font-bold text-primary">
             인성이
           </Link>
           <nav className="flex items-center gap-1">
             {navItems.map((item) => {
-              const isActive =
-                item.href === "/calendar"
-                  ? blogPaths.some((p) => pathname.startsWith(p))
-                  : pathname.startsWith(item.href);
+              const isActive = getIsActive(item.href);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
                     isActive
-                      ? "bg-secondary text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-foreground/70 hover:bg-primary/10 hover:text-primary"
                   )}
                 >
                   {item.label}
@@ -85,10 +89,10 @@ export function Header() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
                     pathname === item.href
-                      ? "bg-secondary text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-foreground/70 hover:bg-primary/10 hover:text-primary"
                   )}
                 >
                   {item.label}
@@ -98,11 +102,16 @@ export function Header() {
         </div>
         <div className="flex items-center gap-2">
           {user && (
-            <span className="text-sm text-muted-foreground">
+            <span className="text-sm text-foreground/50">
               {user.email}
             </span>
           )}
-          <Button variant="ghost" size="sm" onClick={handleLogout}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleLogout}
+            className="border-primary/20 text-foreground/70 hover:bg-primary/10 hover:text-primary"
+          >
             로그아웃
           </Button>
         </div>

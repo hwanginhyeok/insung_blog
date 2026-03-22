@@ -3,23 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import {
-  FileText,
-  PenSquare,
-  CalendarDays,
-  User,
-  BarChart3,
-} from "lucide-react";
+import { MessageCircle, Users } from "lucide-react";
 
 const sidebarItems = [
-  { href: "/dashboard", label: "내 글", icon: FileText },
-  { href: "/write", label: "새 글 쓰기", icon: PenSquare },
-  { href: "/calendar", label: "캘린더", icon: CalendarDays },
-  { href: "/persona", label: "페르소나", icon: User },
-  { href: "/analytics", label: "성과 분석", icon: BarChart3 },
+  { href: "/bot", label: "댓글봇", icon: MessageCircle },
+  { href: "/neighbor", label: "이웃봇", icon: Users },
 ];
 
-export default function BlogLayout({
+export default function SocialLayout({
   children,
 }: {
   children: React.ReactNode;
