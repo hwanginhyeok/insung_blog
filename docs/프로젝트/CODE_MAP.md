@@ -76,8 +76,11 @@
 | `supabase/migrations/00014_create_post_analytics.sql` | post_analytics 테이블 + user_post_stats 뷰 + RLS (성과 분석) | ✅ 실행됨 |
 | `supabase/migrations/00015_add_oauth_providers.sql` | users에 kakao_id, naver_id 컬럼 + 부분 유니크 인덱스 (OAuth) | ✅ 실행됨 |
 | `supabase/migrations/00017_add_naver_blog_id.sql` | bot_settings에 naver_blog_id 컬럼 추가 (다중 사용자) | ✅ 실행 완료 |
-| `supabase/migrations/00018_publish_command.sql` | bot_commands에 'publish' 명령 + payload JSONB 컬럼 추가 | 실행 필요 |
-| `supabase/migrations/00019_add_comment_prompt.sql` | bot_settings에 comment_prompt TEXT 컬럼 추가 (개인 댓글 스타일) | 실행 필요 |
+| `supabase/migrations/00018_publish_command.sql` | bot_commands에 'publish' 명령 + payload JSONB 컬럼 추가 | ✅ 실행 완료 |
+| `supabase/migrations/00019_add_comment_prompt.sql` | bot_settings에 comment_prompt TEXT 컬럼 추가 (개인 댓글 스타일) | ✅ 실행 완료 |
+| `supabase/migrations/00020_create_neighbor_tables.sql` | 이웃 관리 테이블 4개 (neighbors, requests, interactions, recommendations) + RLS + 인덱스 | ✅ 실행 완료 |
+| `supabase/migrations/00021_add_neighbor_settings.sql` | bot_settings에 이웃 설정 3컬럼 (auto_neighbor_request, max_requests, message) | ✅ 실행 완료 |
+| `supabase/migrations/00022_add_blog_themes.sql` | bot_settings에 blog_themes JSONB 컬럼 추가 | ✅ 실행 완료 |
 | `package.json` | 의존성 (Next 14, Supabase, shadcn/ui, react-hook-form, zod) | ✅ |
 
 ### 작업 문서
@@ -194,6 +197,19 @@
 | 파일 | 역할 | 상태 |
 |------|------|------|
 | `auto_blogger_detector.py` | 오토 블로거 감지 — 패턴 분석, 점수 계산, 스킵 결정 | ✅ **신규** |
+
+---
+
+## src/neighbor/
+
+| 파일 | 역할 | 상태 |
+|------|------|------|
+| `neighbor_checker.py` | 네이버 이웃 상태 확인 (서로이웃/일방 판별) | ✅ **신규** |
+| `neighbor_discoverer.py` | 키워드 기반 이웃 후보 탐색 (검색 → 블로그 목록) | ✅ **신규** |
+| `neighbor_requester.py` | 서로이웃 신청 자동화 (메시지 포함) | ✅ **신규** |
+| `neighbor_visitor.py` | 이웃 블로그 방문 + 교류 기록 | ✅ **신규** |
+| `neighbor_sync.py` | Supabase ↔ 로컬 이웃 데이터 동기화 | ✅ **신규** |
+| `interaction_tracker.py` | 이웃 간 교류(댓글/방문) 추적 및 통계 | ✅ **신규** |
 
 ---
 

@@ -146,6 +146,11 @@ def _handle_retry_command(chat_id: int, command_id: str, query_id: str) -> None:
     try:
         from src.storage.supabase_client import get_supabase
         sb = get_supabase()
+        # 소유권 확인: chat_id → user_id 매핑 후 본인 명령만 재시도
+        user_id = _resolve_user(str(chat_id))
+        if not user_id:
+            _send_message(chat_id, "⚠️ 사용자 인증에 실패했습니다.")
+            return
         result = (
             sb.table("bot_commands")
             .update({
@@ -156,6 +161,7 @@ def _handle_retry_command(chat_id: int, command_id: str, query_id: str) -> None:
             })
             .eq("id", command_id)
             .eq("status", "failed")
+            .eq("user_id", user_id)
             .execute()
         )
         if result.data:

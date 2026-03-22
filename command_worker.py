@@ -753,7 +753,7 @@ _HANDLERS = {
 # ── 메인 폴링 루프 ────────────────────────────────────────────────────────
 
 
-def _cleanup_stale_commands() -> int:
+async def _cleanup_stale_commands() -> int:
     """워커 재시작 시 running 상태로 남은 명령을 pending으로 복구 (자동 재시도). 반환: 정리 건수."""
     try:
         sb = get_supabase()
@@ -771,17 +771,15 @@ def _cleanup_stale_commands() -> int:
         count = len(result.data) if result.data else 0
         if count:
             logger.warning(f"stale 명령 {count}건 자동 재시도 (running → pending)")
-            # 영향받은 사용자에게 알림
-            _notify_stale_recovery(result.data)
+            await _notify_stale_recovery(result.data)
         return count
     except Exception as e:
         logger.error(f"stale 명령 정리 실패: {e}")
         return 0
 
 
-def _notify_stale_recovery(commands: list[dict]) -> None:
+async def _notify_stale_recovery(commands: list[dict]) -> None:
     """워커 재시작으로 복구된 명령에 대해 사용자 알림 전송."""
-    import asyncio
     from src.utils.telegram_notifier import send_telegram_message
     from src.storage.supabase_client import get_chat_id_for_user
 
@@ -792,7 +790,7 @@ def _notify_stale_recovery(commands: list[dict]) -> None:
         if uid:
             user_cmds.setdefault(uid, []).append(cmd.get("command", "?"))
 
-    async def _send_all():
+    try:
         for uid, cmd_list in user_cmds.items():
             chat_id = get_chat_id_for_user(uid)
             if not chat_id:
@@ -802,9 +800,6 @@ def _notify_stale_recovery(commands: list[dict]) -> None:
                 f"⚠️ 워커 재시작으로 중단된 명령을 자동 재시도합니다.\n명령: {cmds_str}",
                 chat_id=chat_id,
             )
-
-    try:
-        asyncio.run(_send_all())
     except Exception as e:
         logger.warning(f"stale 복구 알림 실패: {e}")
 
@@ -860,7 +855,7 @@ async def main_loop() -> None:
     _lock_fd = _acquire_lock()  # noqa: F841 — 변수 유지해야 잠금 유지
 
     # 워커 재시작 시 이전 크래시로 남은 stale 명령 정리
-    _cleanup_stale_commands()
+    await _cleanup_stale_commands()
 
     logger.info("╔════════════════════════════════════════════╗")
     logger.info("║   명령 큐 워커 시작 (10초 간격 폴링)        ║")
