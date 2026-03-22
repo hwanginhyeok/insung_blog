@@ -11,7 +11,7 @@ function getSupabase() {
   );
 }
 
-const VALID_COMMANDS = ["run", "execute", "retry", "publish", "extract_blog_id", "neighbor_request"] as const;
+const VALID_COMMANDS = ["run", "execute", "retry", "publish", "extract_blog_id", "neighbor_request", "discover_neighbors", "visit_neighbors", "discover_and_visit"] as const;
 type BotCommand = (typeof VALID_COMMANDS)[number];
 
 /**

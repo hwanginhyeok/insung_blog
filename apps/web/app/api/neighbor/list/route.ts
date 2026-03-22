@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     500
   );
 
-  const VALID_TYPES = ["mutual", "one_way_following", "one_way_follower"];
+  const VALID_TYPES = ["mutual", "one_way_following", "one_way_follower", "discovered"];
   if (neighborType && !VALID_TYPES.includes(neighborType)) {
     return NextResponse.json(
       { error: `type은 ${VALID_TYPES.join(", ")} 중 하나여야 합니다` },

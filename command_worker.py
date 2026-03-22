@@ -566,6 +566,134 @@ async def handle_neighbor_request(user_id: str | None = None, payload: dict | No
                 await browser.close()
 
 
+async def handle_discover_neighbors(
+    user_id: str | None = None, payload: dict | None = None
+) -> dict:
+    """키워드로 새 블로거를 검색하여 이웃 후보로 저장."""
+    if not user_id:
+        raise ValueError("discover_neighbors는 user_id가 필수입니다")
+
+    keywords = (payload or {}).get("keywords", [])
+    if isinstance(keywords, str):
+        keywords = [k.strip() for k in keywords.split(",") if k.strip()]
+    if not keywords:
+        raise ValueError("검색 키워드가 필요합니다")
+
+    from playwright.async_api import async_playwright
+
+    from src.auth.naver_login import ensure_login_cookie_only
+    from src.neighbor.neighbor_discoverer import discover_neighbors
+    from src.storage.supabase_client import get_user_bot_config
+    from src.utils.browser import create_browser
+
+    config = get_user_bot_config(user_id)
+    my_blog_id = (config or {}).get("naver_blog_id", "")
+
+    uid_label = user_id[:8]
+    logger.info(f"▶ 이웃 발견 시작: 키워드={keywords} (user={uid_label})")
+
+    async with _browser_semaphore:
+        async with async_playwright() as pw:
+            browser, context, page = await create_browser(pw, headless=True)
+            try:
+                logged_in = await ensure_login_cookie_only(context, page, user_id)
+                if not logged_in:
+                    raise RuntimeError("네이버 로그인 실패 — 쿠키 재업로드 필요")
+                return await discover_neighbors(
+                    page=page, keywords=keywords, user_id=user_id,
+                    my_blog_id=my_blog_id,
+                )
+            finally:
+                await browser.close()
+
+
+async def handle_visit_neighbors(
+    user_id: str | None = None, payload: dict | None = None
+) -> dict:
+    """최근 방문하지 않은 이웃을 방문하고 AI 댓글 생성."""
+    if not user_id:
+        raise ValueError("visit_neighbors는 user_id가 필수입니다")
+
+    from playwright.async_api import async_playwright
+
+    from src.auth.naver_login import ensure_login_cookie_only
+    from src.neighbor.neighbor_visitor import visit_neighbors
+    from src.storage.supabase_client import get_user_bot_config
+    from src.utils.browser import create_browser
+
+    config = get_user_bot_config(user_id)
+    if not config:
+        raise RuntimeError("봇 설정 없음 — /bot에서 블로그 ID 설정 필요")
+
+    uid_label = user_id[:8]
+    logger.info(f"▶ 이웃 방문 시작 (user={uid_label})")
+
+    async with _browser_semaphore:
+        async with async_playwright() as pw:
+            browser, context, page = await create_browser(pw, headless=True)
+            try:
+                logged_in = await ensure_login_cookie_only(context, page, user_id)
+                if not logged_in:
+                    raise RuntimeError("네이버 로그인 실패 — 쿠키 재업로드 필요")
+                result = await visit_neighbors(
+                    page=page, context=context, user_id=user_id,
+                    my_blog_id=config["naver_blog_id"],
+                    settings=config["settings"],
+                )
+            finally:
+                await browser.close()
+
+    # 실행 이력 기록 (bot_run_log)
+    from src.storage.supabase_client import record_run_sb
+
+    record_run_sb(
+        bloggers_visited=result.get("visited", 0),
+        comments_written=result.get("comments_generated", 0),
+        comments_failed=result.get("failed", 0),
+        error_message="; ".join(result.get("errors", []))[:500] or None,
+        user_id=user_id,
+    )
+
+    # 전체 실패 시 텔레그램 알림
+    if result.get("visited", 0) == 0 and result.get("failed", 0) > 0:
+        from src.utils.telegram_notifier import send_telegram_message
+
+        await send_telegram_message(
+            f"⚠️ 이웃 방문 전체 실패\n{result.get('message', '')}\n"
+            f"에러: {result['errors'][0]}"
+        )
+
+    return result
+
+
+async def handle_discover_and_visit(
+    user_id: str | None = None, payload: dict | None = None
+) -> dict:
+    """이웃 찾기 + 방문 + 댓글 + 신청을 한 번에 실행."""
+    if not user_id:
+        raise ValueError("discover_and_visit는 user_id가 필수입니다")
+
+    # 1단계: 이웃 찾기
+    discover_result = await handle_discover_neighbors(user_id=user_id, payload=payload)
+    discovered = discover_result.get("discovered", 0)
+
+    # 2단계: 이웃 방문
+    visit_result = await handle_visit_neighbors(user_id=user_id, payload=payload)
+    visited = visit_result.get("visited", 0)
+    comments = visit_result.get("comments_generated", 0)
+    requests = visit_result.get("neighbor_requests", 0)
+
+    msg = f"발견 {discovered}명 → 방문 {visited}명, 댓글 {comments}개, 신청 {requests}건"
+    logger.info(f"찾기+방문 완료: {msg}")
+    return {
+        "discovered": discovered,
+        "visited": visited,
+        "comments_generated": comments,
+        "neighbor_requests": requests,
+        "message": msg,
+    }
+
+
 async def handle_extract_blog_id(user_id: str | None = None) -> dict:
     """쿠키로 네이버 로그인 후 블로그 ID를 자동 추출하여 bot_settings에 저장."""
     if not user_id:
@@ -614,6 +742,9 @@ _HANDLERS = {
     "publish": handle_publish,
     "extract_blog_id": handle_extract_blog_id,
     "neighbor_request": handle_neighbor_request,
+    "discover_neighbors": handle_discover_neighbors,
+    "visit_neighbors": handle_visit_neighbors,
+    "discover_and_visit": handle_discover_and_visit,
 }
 
 
@@ -660,7 +791,7 @@ async def process_command(cmd: dict) -> None:
     try:
         kwargs: dict = {"user_id": cmd_user_id}
         # publish/neighbor_request 명령은 payload도 전달
-        if command_type in ("publish", "neighbor_request"):
+        if command_type in ("publish", "neighbor_request", "discover_neighbors", "visit_neighbors", "discover_and_visit"):
             kwargs["payload"] = cmd.get("payload")
         result = await handler(**kwargs)
         mark_completed(command_id, result)

@@ -222,6 +222,7 @@ def add_pending_comment_sb(
     post_title: str,
     comment_text: str,
     ai_generated: bool = True,
+    status: str = "pending",
     user_id: str | None = None,
 ) -> str | None:
     """
@@ -239,7 +240,7 @@ def add_pending_comment_sb(
             "post_title": post_title,
             "comment_text": comment_text,
             "ai_generated": ai_generated,
-            "status": "pending",
+            "status": status,
         }
 
         result = sb.table("pending_comments").insert(row).execute()

@@ -8,6 +8,7 @@ import { RecentInteractions } from "./_components/RecentInteractions";
 import { NeighborRecommendations } from "./_components/NeighborRecommendations";
 import { RequestHistory } from "./_components/RequestHistory";
 import { NeighborRequestForm } from "./_components/NeighborRequestForm";
+import { NeighborActions } from "./_components/NeighborActions";
 
 const TABS = [
   { key: "overview", label: "현황" },
@@ -41,6 +42,9 @@ export default function NeighborPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">서로이웃 관리</h1>
+
+      {/* 자동화 (이웃 찾기 / 방문) */}
+      <NeighborActions onComplete={refresh} />
 
       {/* 통계 카드 */}
       <NeighborOverview stats={stats} />
@@ -100,14 +104,18 @@ export default function NeighborPage() {
                             ? "bg-green-100 text-green-700"
                             : n.neighbor_type === "one_way_following"
                               ? "bg-blue-100 text-blue-700"
-                              : "bg-gray-100 text-gray-600"
+                              : n.neighbor_type === "discovered"
+                                ? "bg-yellow-100 text-yellow-700"
+                                : "bg-gray-100 text-gray-600"
                         }`}
                       >
                         {n.neighbor_type === "mutual"
                           ? "서로이웃"
                           : n.neighbor_type === "one_way_following"
                             ? "내가 추가"
-                            : "팔로워"}
+                            : n.neighbor_type === "discovered"
+                              ? "발견"
+                              : "팔로워"}
                       </span>
                     </div>
                   </div>

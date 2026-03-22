@@ -5,7 +5,7 @@ export interface Neighbor {
   user_id: string;
   blog_id: string;
   blog_name: string | null;
-  neighbor_type: "mutual" | "one_way_following" | "one_way_follower";
+  neighbor_type: "mutual" | "one_way_following" | "one_way_follower" | "discovered";
   category: string | null;
   last_interaction_at: string | null;
   created_at: string;
@@ -123,4 +123,87 @@ export async function updateRecommendation(
     body: JSON.stringify({ id, status }),
   });
   return res.ok;
+}
+
+// ── 블로그 테마 ──
+
+export async function fetchBlogThemes(): Promise<string[]> {
+  const res = await fetch("/api/neighbor/themes");
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.themes || [];
+}
+
+export async function saveBlogThemes(themes: string[]): Promise<boolean> {
+  const res = await fetch("/api/neighbor/themes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ themes }),
+  });
+  return res.ok;
+}
+
+// ── 이웃 발견/방문 명령 ──
+
+export async function sendDiscoverNeighbors(
+  keywords: string[]
+): Promise<{ success: boolean; error?: string }> {
+  const res = await fetch("/api/bot/command", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      command: "discover_neighbors",
+      payload: { keywords },
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) return { success: false, error: data.error };
+  return { success: true };
+}
+
+export async function sendVisitNeighbors(): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  const res = await fetch("/api/bot/command", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ command: "visit_neighbors" }),
+  });
+  const data = await res.json();
+  if (!res.ok) return { success: false, error: data.error };
+  return { success: true };
+}
+
+export async function sendDiscoverAndVisit(
+  keywords: string[]
+): Promise<{ success: boolean; error?: string }> {
+  const res = await fetch("/api/bot/command", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      command: "discover_and_visit",
+      payload: { keywords },
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) return { success: false, error: data.error };
+  return { success: true };
+}
+
+export interface BotCommandStatus {
+  id: string;
+  command: string;
+  status: "pending" | "running" | "completed" | "failed";
+  result: Record<string, unknown> | null;
+  error_message: string | null;
+  created_at: string;
+}
+
+export async function fetchCommandStatus(): Promise<{
+  activeCommand: BotCommandStatus | null;
+}> {
+  const res = await fetch("/api/bot/command");
+  if (!res.ok) return { activeCommand: null };
+  return res.json();
 }

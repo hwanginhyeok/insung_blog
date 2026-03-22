@@ -40,8 +40,7 @@ Supabase (공유 제어 평면)
 
 | # | 작업 | 중요도 | 상태 | 비고 |
 |---|------|--------|------|------|
-| NEIGHBOR-연동 | 이웃 시스템 미연동 항목 (추천 알고리즘, interaction 기록, 주기적 동기화) | P2 | 대기 | 코드 준비됨, 오케스트레이터 연동 필요 |
-| NEIGHBOR-DB | Supabase 마이그레이션 실행 (00020, 00021) | P1 | 대기 | SQL 아직 미실행 |
+| NEIGHBOR-연동 | 이웃 시스템 미연동 항목 (추천 알고리즘, interaction 기록, 주기적 동기화, 테마 자동 분석) | P2 | 대기 | 코드 준비됨, 오케스트레이터 연동 필요 |
 | TEST | 기능별 통합 테스트 (아래 상세) | P0 | 대기 | 브라우저 필요 — 코드 건강 점검 완료, 실행 테스트 미진행 |
 
 > **잔여 E2E 항목** (TEST 섹션에 통합)
@@ -65,29 +64,35 @@ Supabase (공유 제어 평면)
 | CQ-05 | 이모지 2개 제한 + ㅎㅎ/ㅋㅋ 정규화 + 마침표 통일 | ✅ | comment_post_processor.py (신규) |
 | CQ-06 | 카테고리별 폴백 문구 (8종 × 20개) | ✅ | phrases.py 확장 |
 
-## NEIGHBOR: 이웃 관리 시스템 — ✅ 코드 완료, DB 마이그레이션 대기 (2026-03-21)
+## NEIGHBOR: 이웃 관리 시스템 — ✅ 완료 (2026-03-21)
 
-> 서로이웃 관리 + 교류 추적 + 신청 자동화. 웹 UI + API + Python 모듈 + 워커 핸들러.
+> 서로이웃 관리 + 교류 추적 + 신청 자동화 + 이웃 발견/방문 + 테마 등록.
 > 요구사항: `docs/프로젝트/요구사항/신규방문자-서로이웃.md`
 
 | # | 작업 | 상태 | 비고 |
 |---|------|------|------|
-| NB-01 | DB 스키마 (neighbors, requests, interactions, recommendations) | ✅ | 00020_create_neighbor_tables.sql |
-| NB-02 | 봇 설정 확장 (auto_neighbor_request 등 3컬럼) | ✅ | 00021_add_neighbor_settings.sql |
-| NB-03 | 웹 UI (현황/교류/신청/추천 4탭) | ✅ | neighbor/page.tsx + 5 컴포넌트 + 훅 + API lib |
-| NB-04 | API Routes (stats/list/requests/interactions/recommendations) | ✅ | api/neighbor/* 5개 |
+| NB-01 | DB 스키마 (neighbors, requests, interactions, recommendations) | ✅ | 00020 마이그레이션 실행 완료 |
+| NB-02 | 봇 설정 확장 (auto_neighbor_request 등 3컬럼) | ✅ | 00021 마이그레이션 실행 완료 |
+| NB-03 | 웹 UI (현황/교류/신청/추천 4탭) | ✅ | neighbor/page.tsx + 6 컴포넌트 + 훅 + API lib |
+| NB-04 | API Routes (stats/list/requests/interactions/recommendations/themes) | ✅ | api/neighbor/* 6개 |
 | NB-05 | Python 이웃 체커 | ✅ | src/neighbor/neighbor_checker.py |
 | NB-06 | Python 이웃 신청 자동화 | ✅ | src/neighbor/neighbor_requester.py |
 | NB-07 | Python 이웃 DB 동기화 | ✅ | src/neighbor/neighbor_sync.py |
 | NB-08 | Python 교류 추적 | ✅ | src/neighbor/interaction_tracker.py |
 | NB-09 | 워커 핸들러 (neighbor_request) | ✅ | command_worker.py |
 | NB-10 | 네비게이션 + 관리자 API | ✅ | header.tsx + admin/users/[userId]/neighbors |
+| NB-11 | 이웃 발견 (키워드/테마 검색) | ✅ | neighbor_discoverer.py + discover_neighbors 명령 |
+| NB-12 | 이웃 방문 (미방문 이웃 자동 방문 + AI 댓글) | ✅ | neighbor_visitor.py + visit_neighbors 명령 |
+| NB-13 | 블로그 테마 등록/수정 | ✅ | bot_settings.blog_themes JSONB + themes API + UI |
+| NB-14 | 테마로 이웃 찾기 (원클릭) | ✅ | NeighborActions "테마로 이웃 찾기" 버튼 |
+| NB-15 | DB 마이그레이션 실행 (00020~00022 + CHECK 갱신) | ✅ | Supabase SQL Editor 실행 완료 |
 
 > **미연동 (향후)**:
 > - 추천 알고리즘 (neighbor_recommendations 데이터 생성)
 > - 댓글 작성 시 interaction 자동 기록
 > - 이웃 상태 주기적 동기화
-> - auto_neighbor_request 자동화
+> - auto_neighbor_request 자동화 (답방 시 자동 신청)
+> - 테마 자동 분석 (블로그 게시물 AI 분석 → 테마 추천)
 
 ## BOT-REFACTOR: 봇 페이지 리팩토링 — ✅ 완료 (2026-03-21)
 
@@ -254,7 +259,7 @@ Supabase (공유 제어 평면)
 
 | # | 작업 | 중요도 | 완료일 |
 |---|------|--------|--------|
-| NEIGHBOR | 이웃 관리 시스템 (DB 4테이블 + 웹 UI + API 5개 + Python 4모듈 + 워커 핸들러) | P1 | 03-21 |
+| NEIGHBOR | 이웃 관리 시스템 (DB 4테이블 + 웹 UI 6컴포넌트 + API 6개 + Python 6모듈 + 워커 핸들러 3개 + 테마 등록) | P1 | 03-21 |
 | COMMENT-QUALITY | 댓글 고도화 (톤 랜덤화 + 카테고리 감지 + 시작어 중복 방지 + 후처리 필터) | P1 | 03-21 |
 | BOT-REFACTOR | 봇 페이지 리팩토링 (컴포넌트 7 + 훅 3 + API lib 분리) | P2 | 03-21 |
 | ADMIN-ENHANCE | 관리자 페이지 개선 (시스템 통계 + 사용자 상세 모달 + API 4개) | P2 | 03-21 |
@@ -596,4 +601,4 @@ Supabase (공유 제어 평면)
 | DEPLOY-02 | 환경변수 6개 등록 | ✅ 완료 | NEXTAUTH_URL=insungblog.vercel.app |
 | DEPLOY-03 | Supabase Auth redirect URL 등록 | 수동 필요 | `insungblog.vercel.app/**` 추가 |
 
-*마지막 업데이트: 2026-03-21 (COMMENT-QUALITY + NEIGHBOR + BOT-REFACTOR + ADMIN-ENHANCE + BOT-API)*
+*마지막 업데이트: 2026-03-21 (NEIGHBOR 이웃 발견/방문/테마 추가)*
