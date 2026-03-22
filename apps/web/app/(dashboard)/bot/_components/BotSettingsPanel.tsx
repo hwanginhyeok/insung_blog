@@ -217,6 +217,67 @@ export function BotSettingsPanel({
             </div>
           </div>
 
+          {/* 이웃 신청 설정 */}
+          <div className="space-y-3 rounded-lg border p-4">
+            <h3 className="text-sm font-semibold">이웃 신청</h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex items-end gap-2">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    checked={settingsDraft.auto_neighbor_request ?? false}
+                    onChange={(e) =>
+                      onDraftChange((s) => ({
+                        ...s,
+                        auto_neighbor_request: e.target.checked,
+                      }))
+                    }
+                    className="rounded"
+                  />
+                  방문 시 자동 이웃 신청
+                </label>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">일일 신청 한도</label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={settingsDraft.max_neighbor_requests_per_day ?? 10}
+                  onChange={(e) =>
+                    onDraftChange((s) => ({
+                      ...s,
+                      max_neighbor_requests_per_day: Number(e.target.value),
+                    }))
+                  }
+                  className="mt-1 w-32"
+                  disabled={!settingsDraft.auto_neighbor_request}
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="text-sm font-medium">신청 메시지</label>
+                <Textarea
+                  placeholder="안녕하세요! 글이 좋아서 서로이웃 신청드립니다 :)"
+                  rows={2}
+                  value={settingsDraft.neighbor_request_message || ""}
+                  onChange={(e) =>
+                    onDraftChange((s) => ({
+                      ...s,
+                      neighbor_request_message: e.target.value || null,
+                    }))
+                  }
+                  className="mt-1 text-sm"
+                  disabled={!settingsDraft.auto_neighbor_request}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  비워두면 기본 메시지로 신청합니다.
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* 댓글 스타일 프롬프트 */}
           <div>
             <div className="flex items-center justify-between">

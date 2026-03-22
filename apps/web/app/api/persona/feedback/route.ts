@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
+import { createAdminClient } from "@/lib/supabase-admin";
 import type { DerivedRule } from "@/lib/ai/analyze-feedback";
 
 /**
@@ -33,7 +34,8 @@ export async function GET() {
   }
 
   // 사용자 기본 페르소나 조회 (다중 페르소나 대응)
-  const { data: persona } = await supabase
+  const admin = createAdminClient();
+  const { data: persona } = await admin
     .from("user_personas")
     .select("id")
     .eq("user_id", user.id)
@@ -45,7 +47,7 @@ export async function GET() {
   }
 
   // 1. 대기 중 규칙 (AI가 도출했고 사용자 승인 대기)
-  const { data: pendingRules } = await supabase
+  const { data: pendingRules } = await admin
     .from("persona_feedback")
     .select("id, feedback_text, derived_rule, created_at")
     .eq("persona_id", persona.id)
@@ -55,7 +57,7 @@ export async function GET() {
     .limit(20);
 
   // 2. 최근 피드백 히스토리 (전체, 최근 20건)
-  const { data: recentFeedbacks } = await supabase
+  const { data: recentFeedbacks } = await admin
     .from("persona_feedback")
     .select("id, feedback_text, rule_status, created_at")
     .eq("persona_id", persona.id)
@@ -112,7 +114,8 @@ export async function POST(req: NextRequest) {
   }
 
   // 사용자 페르소나 조회 (personaId 지정 또는 기본 페르소나)
-  let personaQuery = supabase
+  const admin = createAdminClient();
+  let personaQuery = admin
     .from("user_personas")
     .select("id")
     .eq("user_id", user.id);
@@ -133,7 +136,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 해당 피드백 조회 (소유권 확인 = persona_id 매칭)
-  const { data: feedback } = await supabase
+  const { data: feedback } = await admin
     .from("persona_feedback")
     .select("id, persona_id, derived_rule, rule_status")
     .eq("id", feedbackId)
@@ -163,7 +166,7 @@ export async function POST(req: NextRequest) {
 
   // ── 거절 ──
   if (action === "reject") {
-    await supabase
+    await admin
       .from("persona_feedback")
       .update({ rule_status: "rejected" })
       .eq("id", feedbackId);
@@ -182,7 +185,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { error: insertError } = await supabase
+  const { error: insertError } = await admin
     .from("persona_items")
     .insert({
       persona_id: persona.id,
@@ -202,7 +205,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 피드백 상태 업데이트
-  await supabase
+  await admin
     .from("persona_feedback")
     .update({ rule_status: "approved" })
     .eq("id", feedbackId);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
+import { createAdminClient } from "@/lib/supabase-admin";
 
 function getSupabase() {
   const cookieStore = cookies();
@@ -33,7 +34,8 @@ export async function GET(req: NextRequest) {
     200
   );
 
-  let query = supabase
+  const admin = createAdminClient();
+  let query = admin
     .from("neighbor_interactions")
     .select("*")
     .eq("user_id", user.id)

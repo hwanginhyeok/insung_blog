@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
+import { createAdminClient } from "@/lib/supabase-admin";
 
 /**
  * GET /api/bot/pending?status=pending
@@ -50,7 +51,8 @@ export async function GET(req: NextRequest) {
   );
   const descending = req.nextUrl.searchParams.get("order") === "desc";
 
-  let query = supabase
+  const admin = createAdminClient();
+  let query = admin
     .from("pending_comments")
     .select(
       "id, blog_id, post_url, post_title, comment_text, ai_generated, status, created_at, decided_by, decided_at"
@@ -102,7 +104,8 @@ export async function POST(req: NextRequest) {
 
   const newStatus = action === "approve" ? "approved" : "rejected";
 
-  const { data, error } = await supabase
+  const admin = createAdminClient();
+  const { data, error } = await admin
     .from("pending_comments")
     .update({
       status: newStatus,
@@ -151,7 +154,8 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
-  const { data, error } = await supabase
+  const admin = createAdminClient();
+  const { data, error } = await admin
     .from("pending_comments")
     .update({ comment_text: comment_text.trim() })
     .eq("id", id)

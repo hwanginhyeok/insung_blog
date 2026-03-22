@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
+import { createAdminClient } from "@/lib/supabase-admin";
 
 function getSupabase() {
   const cookieStore = cookies();
@@ -27,7 +28,8 @@ export async function GET() {
     return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 });
   }
 
-  const { data } = await supabase
+  const admin = createAdminClient();
+  const { data } = await admin
     .from("bot_cookies")
     .select("uploaded_at, cookie_data")
     .eq("user_id", user.id)
@@ -87,7 +89,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { error } = await supabase.from("bot_cookies").upsert(
+  const admin = createAdminClient();
+  const { error } = await admin.from("bot_cookies").upsert(
     {
       user_id: user.id,
       cookie_data: naverCookies,
@@ -102,7 +105,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 쿠키 업로드 성공 → extract_blog_id 명령 자동 등록 (중복 방지)
-  const { data: existingCmd } = await supabase
+  const { data: existingCmd } = await admin
     .from("bot_commands")
     .select("id")
     .eq("user_id", user.id)
@@ -112,7 +115,7 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
 
   if (!existingCmd) {
-    await supabase.from("bot_commands").insert({
+    await admin.from("bot_commands").insert({
       user_id: user.id,
       command: "extract_blog_id",
       status: "pending",
@@ -141,7 +144,8 @@ export async function DELETE() {
     return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 });
   }
 
-  await supabase.from("bot_cookies").delete().eq("user_id", user.id);
+  const admin = createAdminClient();
+  await admin.from("bot_cookies").delete().eq("user_id", user.id);
 
   return NextResponse.json({ success: true });
 }

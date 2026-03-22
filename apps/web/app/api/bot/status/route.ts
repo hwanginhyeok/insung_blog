@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
+import { createAdminClient } from "@/lib/supabase-admin";
 
 /**
  * GET /api/bot/status
@@ -30,15 +31,16 @@ export async function GET() {
   }
 
   // 병렬 조회: 최근 실행 이력 + 설정 + 대기 댓글 수 (user_id 필터)
+  const admin = createAdminClient();
   const [runsResult, settingsResult, pendingResult] = await Promise.all([
-    supabase
+    admin
       .from("bot_run_log")
       .select("*")
       .eq("user_id", user.id)
       .order("run_at", { ascending: false })
       .limit(10),
-    supabase.from("bot_settings").select("*").eq("user_id", user.id).single(),
-    supabase
+    admin.from("bot_settings").select("*").eq("user_id", user.id).single(),
+    admin
       .from("pending_comments")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)

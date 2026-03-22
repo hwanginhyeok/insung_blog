@@ -548,6 +548,8 @@ async def handle_neighbor_request(user_id: str | None = None, payload: dict | No
                     blog_id=target_blog_id,
                     message=message,
                     max_per_day=max_per_day,
+                    user_id=user_id,
+                    context=context,
                 )
 
                 # 신청 이력 저장
@@ -796,9 +798,26 @@ async def process_command(cmd: dict) -> None:
         result = await handler(**kwargs)
         mark_completed(command_id, result)
         logger.info(f"━━━ 명령 완료: {command_type} → {result.get('message', '')} ━━━")
+
+        # 완료 알림
+        if cmd_user_id:
+            try:
+                from src.utils.telegram_notifier import notify_command_result
+                await notify_command_result(cmd_user_id, command_type, result)
+            except Exception as notify_err:
+                logger.warning(f"완료 알림 전송 실패: {notify_err}")
+
     except Exception as e:
         logger.error(f"━━━ 명령 실패: {command_type} → {e} ━━━", exc_info=True)
         mark_failed(command_id, str(e)[:500])
+
+        # 실패 알림
+        if cmd_user_id:
+            try:
+                from src.utils.telegram_notifier import notify_command_failure
+                await notify_command_failure(cmd_user_id, command_type, str(e))
+            except Exception as notify_err:
+                logger.warning(f"실패 알림 전송 실패: {notify_err}")
 
 
 async def main_loop() -> None:

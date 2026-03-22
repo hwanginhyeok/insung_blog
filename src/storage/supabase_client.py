@@ -551,6 +551,80 @@ def get_recent_runs_sb(
         return []
 
 
+# ── 텔레그램 chat_id 매핑 ─────────────────────────────────────────────────
+
+
+def get_user_by_chat_id(chat_id: str) -> dict | None:
+    """
+    telegram_chat_id로 사용자 조회.
+    반환: {user_id, naver_blog_id, telegram_chat_id} 또는 None
+    """
+    try:
+        sb = get_supabase()
+        result = (
+            sb.table("bot_settings")
+            .select("user_id, naver_blog_id, telegram_chat_id")
+            .eq("telegram_chat_id", chat_id)
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            return result.data[0]
+    except Exception as e:
+        logger.error(f"chat_id 사용자 조회 실패: {e}")
+    return None
+
+
+def register_chat_id(blog_id: str, chat_id: str) -> bool:
+    """
+    네이버 블로그 ID로 사용자를 찾아 telegram_chat_id 등록.
+    반환: 매칭 성공 여부
+    """
+    try:
+        sb = get_supabase()
+        # naver_blog_id로 사용자 검색
+        result = (
+            sb.table("bot_settings")
+            .select("user_id, naver_blog_id")
+            .eq("naver_blog_id", blog_id)
+            .limit(1)
+            .execute()
+        )
+        if not result.data:
+            logger.warning(f"블로그 ID '{blog_id}' 매칭 실패")
+            return False
+
+        user_id = result.data[0]["user_id"]
+        # telegram_chat_id 업데이트
+        sb.table("bot_settings").update(
+            {"telegram_chat_id": chat_id}
+        ).eq("user_id", user_id).execute()
+
+        logger.info(f"텔레그램 chat_id 등록: {blog_id} → {chat_id}")
+        return True
+    except Exception as e:
+        logger.error(f"chat_id 등록 실패: {e}")
+        return False
+
+
+def get_chat_id_for_user(user_id: str) -> str | None:
+    """user_id로 telegram_chat_id 조회."""
+    try:
+        sb = get_supabase()
+        result = (
+            sb.table("bot_settings")
+            .select("telegram_chat_id")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if result.data and result.data[0].get("telegram_chat_id"):
+            return result.data[0]["telegram_chat_id"]
+    except Exception as e:
+        logger.error(f"chat_id 조회 실패: {e}")
+    return None
+
+
 def record_cookie_expiry(user_id: str) -> None:
     """쿠키 만료 이벤트를 bot_run_log에 에러로 기록."""
     try:

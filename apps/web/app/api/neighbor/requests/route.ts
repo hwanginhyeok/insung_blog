@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
+import { createAdminClient } from "@/lib/supabase-admin";
 
 function getSupabase() {
   const cookieStore = cookies();
@@ -32,7 +33,8 @@ export async function GET(req: NextRequest) {
     200
   );
 
-  let query = supabase
+  const admin = createAdminClient();
+  let query = admin
     .from("neighbor_requests")
     .select("*")
     .eq("user_id", user.id)
@@ -83,7 +85,8 @@ export async function POST(req: NextRequest) {
   }
 
   // 중복 방지: pending/running 상태 명령이 있으면 거부
-  const { data: active } = await supabase
+  const admin = createAdminClient();
+  const { data: active } = await admin
     .from("bot_commands")
     .select("id")
     .eq("user_id", user.id)
@@ -99,7 +102,7 @@ export async function POST(req: NextRequest) {
   }
 
   // bot_commands에 neighbor_request 명령 등록
-  const { data, error } = await supabase
+  const { data, error } = await admin
     .from("bot_commands")
     .insert({
       user_id: user.id,

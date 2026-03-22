@@ -1,24 +1,20 @@
 """
-텔레그램 봇 — 사진 전송 → AI 초안 생성 → HTML 프리뷰 + 댓글 승인 workflow
+텔레그램 봇 — 멀티유저 + 댓글봇 + 이웃관리 + AI 초안 통합
 
-사용법:
+기능:
+  [게시물] 사진 전송 → AI 초안 생성 → HTML 프리뷰
+  [댓글]   /pending → 인라인 버튼 승인/거부 → /execute 일괄 게시
+  [이웃]   /discover, /visit, /neighbor, /all
+  [설정]   /settings, /set_mode, /set_weekday, /set_weekend
+  [큐]     /run, /execute, /retry → bot_commands 큐 등록 → 완료 알림
+
+멀티유저:
+  /start → 블로그 ID 입력 → chat_id 자동 등록
+  모든 명령은 chat_id → user_id 매핑 후 실행
+
+실행:
   source .venv/bin/activate
   python telegram_bot.py
-
-[게시물 작성]
-  사진 전송 → AI 초안 생성 → /send_html로 파일 수신 → 승인 시 발행
-
-[댓글 작성]
-  /preview_comment {blog_id} → 초안 확인 → 승인/거부 버튼 → 작성 완료
-
-[설정]
-  /settings - 현재 설정 확인
-  /set_mode {manual|auto} - 승인 모드
-  /set_weekday {시작} {종료} - 평일 시간대
-  /set_weekend {시작} {종료} - 주말 시간대
-
-명령어:
-  /status, /help, /settings, /pending
 """
 import os
 import sys
@@ -39,7 +35,6 @@ logger = get_telegram_logger()
 from src.utils.photo_marker import render_html_segments, strip_markers
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-ALLOWED_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 if not BOT_TOKEN:
     print("오류: .env에 TELEGRAM_BOT_TOKEN이 필요합니다")
@@ -53,21 +48,45 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 MEDIA_GROUP_WAIT = 2.0
 _media_groups: dict[str, dict] = {}
 
+# /start 등록 상태 머신 (chat_id → 상태)
+_registration_state: dict[str, str] = {}
+
+# user_id 캐시 (chat_id → user_id)
+_user_cache: dict[str, str] = {}
+
+
+# ───────────────────────────────────────────────
+# 멀티유저 인증
+# ───────────────────────────────────────────────
+
+def _resolve_user(chat_id: str) -> str | None:
+    """chat_id → user_id 매핑. 캐시 사용."""
+    if chat_id in _user_cache:
+        return _user_cache[chat_id]
+
+    from src.storage.supabase_client import get_user_by_chat_id
+    user = get_user_by_chat_id(str(chat_id))
+    if user:
+        _user_cache[str(chat_id)] = user["user_id"]
+        return user["user_id"]
+    return None
+
+
+# ───────────────────────────────────────────────
+# 유틸리티
+# ───────────────────────────────────────────────
 
 def _run_async(coro):
     """동기 컨텍스트에서 async 함수 실행"""
     import asyncio
     try:
         loop = asyncio.get_running_loop()
-        # 이미 실행 중인 이벤트 루프가 있으면 create_task 사용
         if loop.is_running():
-            # Fire-and-forget: 결과 기다리지 않고 실행
             asyncio.create_task(coro)
             return None
         else:
             return loop.run_until_complete(coro)
     except RuntimeError:
-        # 이벤트 루프가 없으면 새로 만들어 실행
         return asyncio.run(coro)
 
 
@@ -121,11 +140,35 @@ def _download_photo(file_id: str) -> str | None:
         return None
 
 
+def _enqueue_command(user_id: str, command: str, payload: dict | None = None) -> bool:
+    """bot_commands 큐에 명령 등록."""
+    try:
+        from src.storage.supabase_client import get_supabase
+        sb = get_supabase()
+        row = {
+            "user_id": user_id,
+            "command": command,
+            "status": "pending",
+        }
+        if payload:
+            row["payload"] = payload
+        sb.table("bot_commands").insert(row).execute()
+        logger.info(f"명령 큐 등록: {command} (user={user_id[:8]})")
+        return True
+    except Exception as e:
+        logger.error(f"명령 큐 등록 실패: {e}")
+        return False
+
+
+# ───────────────────────────────────────────────
+# HTML 프리뷰 생성
+# ───────────────────────────────────────────────
+
 def _generate_html(title: str, body: str, hashtags: list[str], category: str | None, image_paths: list[str]) -> Path:
     """HTML 프리뷰 생성"""
     content_html = render_html_segments(body, image_paths)
     tags_html = " ".join(f'<span class="tag">#{t}</span>' for t in hashtags)
-    
+
     html = f"""<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -159,29 +202,33 @@ def _generate_html(title: str, body: str, hashtags: list[str], category: str | N
 </div>
 </body>
 </html>"""
-    
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_path = OUTPUT_DIR / f"preview_{timestamp}.html"
     output_path.write_text(html, encoding="utf-8")
     return output_path
 
 
-def _process_photos(chat_id: int, photo_file_ids: list[str], caption: str) -> None:
+# ───────────────────────────────────────────────
+# 사진 처리 (AI 초안)
+# ───────────────────────────────────────────────
+
+def _process_photos(chat_id: int, photo_file_ids: list[str], caption: str, user_id: str | None = None) -> None:
     """사진 처리 → AI 생성 → HTML"""
     count = len(photo_file_ids)
     _send_message(chat_id, f"사진 {count}장 수신. AI 초안 생성 중... (30초~1분)")
-    
+
     local_paths = []
     for file_id in photo_file_ids:
         path = _download_photo(file_id)
         if path:
             local_paths.append(path)
         time.sleep(0.1)
-    
+
     if not local_paths:
         _send_message(chat_id, "사진 다운로드 실패.")
         return
-    
+
     try:
         from src.ai.content_generator import generate_post
         result = generate_post(local_paths, caption)
@@ -189,14 +236,13 @@ def _process_photos(chat_id: int, photo_file_ids: list[str], caption: str) -> No
         logger.error(f"AI 생성 실패: {e}")
         _send_message(chat_id, f"AI 생성 오류: {e}")
         return
-    
+
     title, body, hashtags, category = result["title"], result["body"], result["hashtags"], result.get("category")
     html_path = _generate_html(title, body, hashtags, category, local_paths)
 
-    clean_body = strip_markers(body)
     tags_str = " ".join(f"#{t}" for t in hashtags[:10])
 
-    # Supabase에 저장 (웹 대시보드에서 조회 가능)
+    # Supabase에 저장
     saved_id = None
     try:
         from src.storage.supabase_client import save_generation
@@ -209,11 +255,11 @@ def _process_photos(chat_id: int, photo_file_ids: list[str], caption: str) -> No
             photo_paths=local_paths,
             html=html_path.read_text(encoding="utf-8"),
             source="telegram",
+            user_id=user_id,
         )
     except Exception as e:
         logger.warning(f"Supabase 저장 실패 (텔레그램 전송은 계속): {e}")
 
-    # HTML 파일 바로 전송
     db_note = " | 웹 대시보드 동기화 완료" if saved_id else ""
     _send_message(
         chat_id,
@@ -222,8 +268,6 @@ def _process_photos(chat_id: int, photo_file_ids: list[str], caption: str) -> No
         f"<b>해시태그 ({len(hashtags)}개):</b> {tags_str}\n\n"
         f"📎 HTML 파일 첨부됩니다{db_note}"
     )
-
-    # HTML 파일 전송
     _send_document(chat_id, html_path, caption=f"{title}.html")
 
 
@@ -231,7 +275,7 @@ def _flush_media_group(group_id: str) -> None:
     group = _media_groups.pop(group_id, None)
     if not group:
         return
-    _process_photos(group["chat_id"], group["photos"], group["caption"])
+    _process_photos(group["chat_id"], group["photos"], group["caption"], group.get("user_id"))
 
 
 def _check_media_groups() -> None:
@@ -245,46 +289,52 @@ def _check_media_groups() -> None:
 # 댓글 승인 workflow (Inline Keyboard)
 # ───────────────────────────────────────────────
 
-async def _preview_comment_with_buttons(chat_id: int, blog_id: str) -> None:
+async def _preview_comment_with_buttons(chat_id: int, blog_id: str, user_id: str | None = None) -> None:
     """댓글 초안 미리보기 + 승인/거부 버튼"""
     _send_message(chat_id, f"🔍 {blog_id} 블로그 분석 중...")
-    
+
     try:
         from playwright.async_api import async_playwright
         from src.collectors.post_collector import collect_posts
         from src.commenter.comment_writer import _extract_post_body
         from src.commenter.ai_comment import generate_comment
         from src.utils.browser import create_browser
-        from src.auth.naver_login import ensure_login
+        from src.auth.naver_login import ensure_login, ensure_login_cookie_only
         from src.storage.supabase_client import add_pending_comment_sb
-        
-        naver_id = os.environ.get("NAVER_ID", "")
-        naver_pw = os.environ.get("NAVER_PW", "")
-        
+
         async with async_playwright() as pw:
             browser, context, page = await create_browser(pw, headless=True)
             try:
-                if not await ensure_login(context, page, naver_id, naver_pw):
+                # 로그인: user_id가 있으면 쿠키, 없으면 ID/PW
+                if user_id:
+                    logged_in = await ensure_login_cookie_only(context, page, user_id)
+                else:
+                    naver_id = os.environ.get("NAVER_ID", "")
+                    naver_pw = os.environ.get("NAVER_PW", "")
+                    logged_in = await ensure_login(context, page, naver_id, naver_pw)
+
+                if not logged_in:
                     _send_message(chat_id, "❌ 로그인 실패")
                     return
-                
+
                 posts = await collect_posts(page, blog_id)
                 if not posts:
                     _send_message(chat_id, f"❌ {blog_id}: 게시물 없음")
                     return
-                
+
                 post_url, post_title = posts[0]
-                await page.goto(post_url, timeout=30000)
+                await page.goto(post_url, timeout=30_000)
+                import asyncio
                 await asyncio.sleep(2)
-                
+
                 target_frame = page.frame("mainFrame") or page.main_frame
                 post_body = await _extract_post_body(target_frame)
                 comment_draft = generate_comment(post_body, post_title, recent_comments=[])
-                
-                # Supabase에 저장
-                comment_id = add_pending_comment_sb(blog_id, post_url, post_title, comment_draft)
-                
-                # Inline Keyboard 버튼 생성
+
+                comment_id = add_pending_comment_sb(
+                    blog_id, post_url, post_title, comment_draft, user_id=user_id,
+                )
+
                 keyboard = {
                     "inline_keyboard": [
                         [
@@ -296,7 +346,7 @@ async def _preview_comment_with_buttons(chat_id: int, blog_id: str) -> None:
                         ]
                     ]
                 }
-                
+
                 _send_message(
                     chat_id,
                     f"<b>💬 댓글 초안</b>\n\n"
@@ -306,26 +356,19 @@ async def _preview_comment_with_buttons(chat_id: int, blog_id: str) -> None:
                     f"<b>길이:</b> {len(comment_draft)}자",
                     reply_markup=keyboard
                 )
-                
+
             finally:
                 await browser.close()
-                
+
     except Exception as e:
         logger.error(f"댓글 미리보기 실패: {e}")
         _send_message(chat_id, f"❌ 오류: {e}")
 
 
 def _handle_approval(chat_id: int, comment_id: str, action: str, query_id: str = None) -> None:
-    """
-    승인/거부/수정 처리 (동기 함수).
-
-    승인 시: approved 상태로 변경만 수행 (즉시 작성하지 않음)
-    실제 작성은 /execute 명령으로 일괄 실행.
-    comment_id: Supabase UUID 문자열.
-    """
+    """승인/거부/수정 처리."""
     from src.storage.supabase_client import update_pending_status_sb
 
-    # 콜백 응답 (버튼 로딩 상태 표시)
     if query_id:
         _answer_callback(query_id, "처리 중...")
 
@@ -341,15 +384,12 @@ def _handle_approval(chat_id: int, comment_id: str, action: str, query_id: str =
         _send_message(chat_id, f"✏️ 수정할 내용을 입력하세요:\n/edit_text:{comment_id} [새로운 댓글]")
         return
 
-    # 승인 (action == "approve")
-    # pending 상태 → approved 상태로 변경만 수행
+    # 승인
     updated = update_pending_status_sb(comment_id, "approved", decided_by="telegram")
-
     if not updated:
         _send_message(chat_id, "⚠️ 이미 처리되었거나 취소된 댓글입니다.")
         return
 
-    # 승인 완료 메시지
     _send_message(
         chat_id,
         f"✅ <b>댓글이 승인되었습니다</b>\n\n"
@@ -358,17 +398,16 @@ def _handle_approval(chat_id: int, comment_id: str, action: str, query_id: str =
     )
 
 
-async def _edit_and_approve(chat_id: int, comment_id: str, new_text: str) -> None:
-    """수정 후 승인 (comment_id: Supabase UUID 문자열)"""
+async def _edit_and_approve(chat_id: int, comment_id: str, new_text: str, user_id: str | None = None) -> None:
+    """수정 후 승인"""
     from src.storage.supabase_client import (
         get_pending_comments_sb,
         update_pending_status_sb,
         add_pending_comment_sb,
     )
 
-    # 기존 댓글 정보 가져오기 (pending 상태에서 먼저 검색)
     old = None
-    for p in get_pending_comments_sb("pending"):
+    for p in get_pending_comments_sb("pending", user_id=user_id):
         if p["id"] == comment_id:
             old = p
             break
@@ -377,11 +416,10 @@ async def _edit_and_approve(chat_id: int, comment_id: str, new_text: str) -> Non
         _send_message(chat_id, "❌ 원본 댓글을 찾을 수 없습니다.")
         return
 
-    # 기존 댓글 거부
     update_pending_status_sb(comment_id, "rejected", decided_by="telegram")
-
-    # 수정된 내용으로 새 pending 생성
-    new_id = add_pending_comment_sb(old["blog_id"], old["post_url"], old["post_title"], new_text)
+    new_id = add_pending_comment_sb(
+        old["blog_id"], old["post_url"], old["post_title"], new_text, user_id=user_id,
+    )
 
     if new_id:
         keyboard = {
@@ -407,11 +445,11 @@ async def _edit_and_approve(chat_id: int, comment_id: str, new_text: str) -> Non
 # 설정 명령어
 # ───────────────────────────────────────────────
 
-def _show_settings(chat_id: int) -> None:
-    """현재 설정 표시 (Supabase에서 조회)"""
+def _show_settings(chat_id: int, user_id: str | None = None) -> None:
+    """현재 설정 표시"""
     from src.storage.supabase_client import get_bot_settings_sb
 
-    settings = get_bot_settings_sb()
+    settings = get_bot_settings_sb(user_id=user_id)
 
     mode_emoji = "👤" if settings.get("approval_mode") == "manual" else "🤖"
     weekday = settings.get("weekday_hours", {"start": 20, "end": 24})
@@ -433,40 +471,40 @@ def _show_settings(chat_id: int) -> None:
     _send_message(chat_id, text)
 
 
-def _set_mode(chat_id: int, mode: str) -> None:
-    """승인 모드 설정 (Supabase)"""
+def _set_mode(chat_id: int, mode: str, user_id: str | None = None) -> None:
+    """승인 모드 설정"""
     if mode not in ("manual", "auto"):
         _send_message(chat_id, "❌ 사용법: /set_mode manual 또는 /set_mode auto")
         return
 
     from src.storage.supabase_client import update_bot_settings_sb
-    update_bot_settings_sb(approval_mode=mode)
+    update_bot_settings_sb(user_id=user_id, approval_mode=mode)
 
     emoji = "👤" if mode == "manual" else "🤖"
     _send_message(chat_id, f"{emoji} 승인 모드가 <b>{mode}</b>로 변경되었습니다.")
 
 
-def _set_weekday(chat_id: int, start: str, end: str) -> None:
-    """평일 시간대 설정 (Supabase)"""
+def _set_weekday(chat_id: int, start: str, end: str, user_id: str | None = None) -> None:
+    """평일 시간대 설정"""
     try:
         s, e = int(start), int(end)
         if not (0 <= s < 24 and 0 <= e <= 24 and s < e):
             raise ValueError
         from src.storage.supabase_client import update_bot_settings_sb
-        update_bot_settings_sb(weekday_hours={"start": s, "end": e})
+        update_bot_settings_sb(user_id=user_id, weekday_hours={"start": s, "end": e})
         _send_message(chat_id, f"📅 평일 시간대: <b>{s}:00 ~ {e}:00</b>로 설정되었습니다.")
     except ValueError:
         _send_message(chat_id, "❌ 사용법: /set_weekday 20 24 (시작 종료, 0~24)")
 
 
-def _set_weekend(chat_id: int, start: str, end: str) -> None:
-    """주말 시간대 설정 (Supabase)"""
+def _set_weekend(chat_id: int, start: str, end: str, user_id: str | None = None) -> None:
+    """주말 시간대 설정"""
     try:
         s, e = int(start), int(end)
         if not (0 <= s < 24 and 0 <= e <= 24 and s < e):
             raise ValueError
         from src.storage.supabase_client import update_bot_settings_sb
-        update_bot_settings_sb(weekend_hours={"start": s, "end": e})
+        update_bot_settings_sb(user_id=user_id, weekend_hours={"start": s, "end": e})
         _send_message(chat_id, f"🌴 주말 시간대: <b>{s}:00 ~ {e}:00</b>로 설정되었습니다.")
     except ValueError:
         _send_message(chat_id, "❌ 사용법: /set_weekend 13 18 (시작 종료, 0~24)")
@@ -481,44 +519,43 @@ def _send_html_file(chat_id: int) -> None:
     _send_document(chat_id, html_files[0], caption="📄 HTML 프리뷰")
 
 
-async def _show_pending_list_async(chat_id: int) -> None:
-    """승인 대기 목록 표시 - 3개씩 묶어서 표시 (Supabase 조회)"""
+# ───────────────────────────────────────────────
+# 현황/목록 표시
+# ───────────────────────────────────────────────
+
+async def _show_pending_list_async(chat_id: int, user_id: str | None = None) -> None:
+    """승인 대기 목록 표시 - 3개씩 묶어서 표시"""
     import asyncio
     from src.storage.supabase_client import get_pending_comments_sb
 
-    # 먼저 빠르게 응답 (텔레그램 타임아웃 방지)
     _send_message(chat_id, "⏳ 목록을 불러오는 중...")
 
     try:
-        pending = get_pending_comments_sb("pending")
+        pending = get_pending_comments_sb("pending", user_id=user_id)
     except Exception as e:
         logger.error(f"pending 목록 조회 실패: {e}")
         _send_message(chat_id, f"❌ 목록 조회 실패: {e}")
         return
-    
+
     if not pending:
         _send_message(chat_id, "📭 승인 대기 중인 댓글이 없습니다.")
         return
-    
+
     total = len(pending)
-    
-    # 안내 메시지
     _send_message(
-        chat_id, 
+        chat_id,
         f"<b>📋 승인 대기 댓글: 총 {total}개</b>\n"
         f"✅ 승인 후 <code>/execute</code>로 일괄 작성하세요"
     )
-    
-    # 3개씩 묶어서 표시
+
     chunk_size = 3
     messages = []
-    
+
     for chunk_start in range(0, total, chunk_size):
         chunk = pending[chunk_start:chunk_start + chunk_size]
         chunk_num = chunk_start // chunk_size + 1
         total_chunks = (total + chunk_size - 1) // chunk_size
-        
-        # 댓글 내용 합치기
+
         comments_text = []
         for i, p in enumerate(chunk, chunk_start + 1):
             comments_text.append(
@@ -526,97 +563,43 @@ async def _show_pending_list_async(chat_id: int) -> None:
                 f"<code>{p['comment_text'][:60]}{'...' if len(p['comment_text']) > 60 else ''}</code> "
                 f"({len(p['comment_text'])}자)"
             )
-        
-        # Inline Keyboard 버튼 (한 줄에 2개씩)
+
         keyboard_rows = []
         for p in chunk:
             keyboard_rows.append([
-                {"text": f"✅ 승인", "callback_data": f"approve:{p['id']}"},
-                {"text": f"❌ 거부", "callback_data": f"reject:{p['id']}"},
+                {"text": "✅ 승인", "callback_data": f"approve:{p['id']}"},
+                {"text": "❌ 거부", "callback_data": f"reject:{p['id']}"},
             ])
-        
+
         keyboard = {"inline_keyboard": keyboard_rows}
-        
         text = (
             f"<b>[{chunk_num}/{total_chunks}]</b>\n"
             + "\n\n".join(comments_text)
         )
-        
         messages.append((text, keyboard))
-    
-    # 메시지 순차 전송 (텔레그램 API 제한 고려)
+
     for text, keyboard in messages:
         _send_message(chat_id, text, reply_markup=keyboard)
-        await asyncio.sleep(0.1)  # API rate limit 방지
+        await asyncio.sleep(0.1)
 
 
-def _show_pending_list(chat_id: int) -> None:
-    """동기 래퍼 - 비동기 실행"""
-    _run_async(_show_pending_list_async(chat_id))
+def _show_pending_list(chat_id: int, user_id: str | None = None) -> None:
+    """동기 래퍼"""
+    _run_async(_show_pending_list_async(chat_id, user_id=user_id))
 
 
-async def _execute_approved_comments_async(chat_id: int) -> None:
-    """
-    승인된 댓글 일괄 실행.
-    API 서버의 /comment/execute 엔드포인트를 호출.
-    """
-    api_token = os.environ.get("API_SECRET_TOKEN", "")
-    
-    if not api_token:
-        _send_message(chat_id, "❌ API_SECRET_TOKEN이 설정되지 않았습니다.")
-        return
-    
-    _send_message(chat_id, "🚀 <b>댓글 실행 시작</b>\n\n승인된 댓글을 조회하는 중...")
-    
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "http://localhost:8001/comment/execute",
-                headers={"Authorization": f"Bearer {api_token}"},
-                json={"chat_id": chat_id},
-                timeout=300.0,  # 5분 타임아웃 (댓글 작성에 시간 소요)
-            )
-        
-        if response.status_code == 200:
-            result = response.json()
-            # 결과는 API 서버에서 텔레그램으로 직접 발송됨
-            # 여기서는 간단히 로깅만
-            logger.info(f"댓글 실행 완료: {result}")
-        elif response.status_code == 401:
-            _send_message(chat_id, "❌ API 인증 실패. 토큰을 확인하세요.")
-        elif response.status_code == 404:
-            _send_message(chat_id, "❌ API 서버가 실행되지 않았습니다. (port 8001)")
-        else:
-            _send_message(
-                chat_id, 
-                f"❌ API 오류 (HTTP {response.status_code}): {response.text[:200]}"
-            )
-    
-    except httpx.ConnectError:
-        _send_message(
-            chat_id, 
-            "❌ API 서버 연결 실패\n\n"
-            "API 서버가 실행 중인지 확인하세요:\n"
-            "<code>source .venv/bin/activate && uvicorn api_server:app --port 8001</code>"
-        )
-    except Exception as e:
-        logger.error(f"댓글 실행 요청 실패: {e}")
-        _send_message(chat_id, f"❌ 실행 요청 중 오류 발생: {str(e)[:200]}")
-
-
-def _show_status(chat_id: int) -> None:
-    """현황 표시 (Supabase 제어 + SQLite 운영 데이터 혼합)"""
+def _show_status(chat_id: int, user_id: str | None = None) -> None:
+    """현황 표시"""
     from src.storage.database import count_today_comments, count_today_bloggers, init_db, get_comment_quality_stats
     from src.storage.database import get_retry_targets
     from src.storage.supabase_client import get_pending_count_sb, get_recent_runs_sb
 
-    init_db()
-    stats = get_comment_quality_stats(days=1)
-    pending_count = get_pending_count_sb()
-    retry_count = len(get_retry_targets())
-    recent_runs = get_recent_runs_sb(limit=1)
+    init_db(user_id=user_id)
+    stats = get_comment_quality_stats(days=1, user_id=user_id)
+    pending_count = get_pending_count_sb(user_id=user_id)
+    retry_count = len(get_retry_targets(user_id=user_id))
+    recent_runs = get_recent_runs_sb(limit=1, user_id=user_id)
 
-    # 최근 실행 정보
     last_run_text = "없음"
     if recent_runs:
         r = recent_runs[0]
@@ -626,7 +609,7 @@ def _show_status(chat_id: int) -> None:
     text = (
         f"<b>📊 오늘 현황</b>\n"
         f"댓글: {stats['success_count']}개 (성공률 {stats['success_rate']:.0f}%)\n"
-        f"방문: {count_today_bloggers()}명\n"
+        f"방문: {count_today_bloggers(user_id=user_id)}명\n"
         f"평균 길이: {stats['avg_length']}자\n\n"
         f"<b>⏳ 대기 중</b>\n"
         f"승인 대기: {pending_count}개\n"
@@ -638,32 +621,114 @@ def _show_status(chat_id: int) -> None:
 
 
 # ───────────────────────────────────────────────
+# /start 등록 플로우
+# ───────────────────────────────────────────────
+
+def _handle_start(chat_id: int) -> None:
+    """
+    /start → 이미 등록된 사용자면 환영, 미등록이면 블로그 ID 입력 요청.
+    """
+    user_id = _resolve_user(str(chat_id))
+    if user_id:
+        _send_message(
+            chat_id,
+            "✅ 이미 등록된 사용자입니다.\n/help로 명령어를 확인하세요."
+        )
+        return
+
+    _registration_state[str(chat_id)] = "awaiting_blog_id"
+    _send_message(
+        chat_id,
+        "👋 <b>블로그 자동화 봇</b>에 오신 걸 환영합니다!\n\n"
+        "등록을 위해 <b>네이버 블로그 ID</b>를 입력해주세요.\n"
+        "(예: myblog123)"
+    )
+
+
+def _handle_registration(chat_id: int, text: str) -> bool:
+    """
+    등록 상태 머신 처리. 등록 중이면 True 반환.
+    """
+    state = _registration_state.get(str(chat_id))
+    if state != "awaiting_blog_id":
+        return False
+
+    blog_id = text.strip()
+    if not blog_id or blog_id.startswith("/"):
+        _send_message(chat_id, "❌ 유효한 블로그 ID를 입력해주세요.")
+        return True
+
+    from src.storage.supabase_client import register_chat_id
+    success = register_chat_id(blog_id, str(chat_id))
+
+    if success:
+        _registration_state.pop(str(chat_id), None)
+        # 캐시 갱신
+        user_id = _resolve_user(str(chat_id))
+        _send_message(
+            chat_id,
+            f"✅ <b>등록 완료!</b>\n\n"
+            f"블로그 ID: <code>{blog_id}</code>\n\n"
+            f"/help로 사용 가능한 명령어를 확인하세요."
+        )
+    else:
+        _send_message(
+            chat_id,
+            f"❌ 등록되지 않은 블로그 ID입니다: <code>{blog_id}</code>\n\n"
+            f"웹에서 먼저 가입 후 다시 시도해주세요.\n"
+            f"다시 입력하거나 /cancel로 취소하세요."
+        )
+
+    return True
+
+
+# ───────────────────────────────────────────────
 # 명령어 처리
 # ───────────────────────────────────────────────
 
 def _handle_command(chat_id: int, text: str) -> None:
     """명령어 처리"""
-    import asyncio
-    
-    
     parts = text.strip().split(maxsplit=2)
     cmd = parts[0].lower()
     arg1 = parts[1] if len(parts) > 1 else ""
     arg2 = parts[2] if len(parts) > 2 else ""
-    
 
-    if cmd in ("/start", "/help"):
+    # /start는 미등록자도 사용 가능
+    if cmd == "/start":
+        _handle_start(chat_id)
+        return
+
+    # /cancel은 등록 취소
+    if cmd == "/cancel":
+        if _registration_state.pop(str(chat_id), None):
+            _send_message(chat_id, "등록이 취소되었습니다.")
+        return
+
+    # 멀티유저 인증
+    user_id = _resolve_user(str(chat_id))
+    if not user_id:
+        _send_message(chat_id, "❌ 등록되지 않은 사용자입니다.\n/start로 등록해주세요.")
+        return
+
+    if cmd == "/help":
         _send_message(
             chat_id,
             "<b>🤖 블로그 자동화 봇</b>\n\n"
             "<b>[게시물]</b>\n"
-            "사진 전송 → AI 초안 → /send_html\n\n"
+            "사진 전송 → AI 초안 → HTML 프리뷰\n"
+            "/send_html - 최신 HTML 전송\n\n"
             "<b>[댓글]</b>\n"
             "/preview_comment {blog_id} - 초안 확인\n"
-            "→ ✅ 승인 / ❌ 거부 버튼\n\n"
-            "<b>[댓글 실행]</b>\n"
             "/pending - 승인 대기 목록\n"
-            "/execute - 승인된 댓글 일괄 작성\n\n"
+            "/execute - 승인된 댓글 일괄 작성\n"
+            "/retry - 재시도 실행\n\n"
+            "<b>[봇 실행]</b>\n"
+            "/run - 봇 1회 실행\n\n"
+            "<b>[이웃 관리]</b>\n"
+            "/discover 키워드1,키워드2 - 이웃 발견\n"
+            "/visit - 이웃 방문\n"
+            "/neighbor blog_id - 서로이웃 신청\n"
+            "/all 키워드 - 찾기+방문 한번에\n\n"
             "<b>[설정]</b>\n"
             "/settings - 현재 설정\n"
             "/set_mode manual|auto\n"
@@ -671,76 +736,131 @@ def _handle_command(chat_id: int, text: str) -> None:
             "/set_weekend 13 18\n\n"
             "/status - 현황"
         )
-    
+
     elif cmd == "/status":
-        _show_status(chat_id)
-    
+        _show_status(chat_id, user_id=user_id)
+
     elif cmd == "/settings":
-        _show_settings(chat_id)
-    
+        _show_settings(chat_id, user_id=user_id)
+
     elif cmd == "/set_mode":
-        _set_mode(chat_id, arg1)
-    
+        _set_mode(chat_id, arg1, user_id=user_id)
+
     elif cmd == "/set_weekday":
-        _set_weekday(chat_id, arg1, arg2)
-    
+        _set_weekday(chat_id, arg1, arg2, user_id=user_id)
+
     elif cmd == "/set_weekend":
-        _set_weekend(chat_id, arg1, arg2)
-    
+        _set_weekend(chat_id, arg1, arg2, user_id=user_id)
+
     elif cmd == "/preview_comment":
         if not arg1:
             _send_message(chat_id, "사용법: /preview_comment {blog_id}")
             return
-        _run_async(_preview_comment_with_buttons(chat_id, arg1))
-    
-    elif cmd == "/approve_comment":
-        # 직접 승인 명령 (버튼 외 방법)
-        _send_message(chat_id, "초안을 선택하세요: /pending")
-    
+        _run_async(_preview_comment_with_buttons(chat_id, arg1, user_id=user_id))
+
     elif cmd == "/pending":
-        _show_pending_list(chat_id)
-    
+        _show_pending_list(chat_id, user_id=user_id)
+
     elif cmd == "/execute":
-        _run_async(_execute_approved_comments_async(chat_id))
-    
+        if _enqueue_command(user_id, "execute"):
+            _send_message(chat_id, "⏳ <b>execute</b> 명령이 등록되었습니다. 완료 시 알려드릴게요.")
+        else:
+            _send_message(chat_id, "❌ 명령 등록에 실패했습니다.")
+
+    elif cmd == "/run":
+        if _enqueue_command(user_id, "run"):
+            _send_message(chat_id, "⏳ <b>run</b> 명령이 등록되었습니다. 완료 시 알려드릴게요.")
+        else:
+            _send_message(chat_id, "❌ 명령 등록에 실패했습니다.")
+
+    elif cmd == "/retry":
+        if _enqueue_command(user_id, "retry"):
+            _send_message(chat_id, "⏳ <b>retry</b> 명령이 등록되었습니다. 완료 시 알려드릴게요.")
+        else:
+            _send_message(chat_id, "❌ 명령 등록에 실패했습니다.")
+
+    elif cmd == "/discover":
+        if not arg1:
+            _send_message(chat_id, "사용법: /discover 키워드1,키워드2")
+            return
+        # arg1 + arg2를 합쳐서 키워드 추출
+        raw = (arg1 + " " + arg2).strip() if arg2 else arg1
+        keywords = [k.strip() for k in raw.replace(",", " ").split() if k.strip()]
+        if _enqueue_command(user_id, "discover_neighbors", {"keywords": keywords}):
+            _send_message(chat_id, f"⏳ <b>이웃 발견</b> 명령이 등록되었습니다.\n키워드: {', '.join(keywords)}\n완료 시 알려드릴게요.")
+        else:
+            _send_message(chat_id, "❌ 명령 등록에 실패했습니다.")
+
+    elif cmd == "/visit":
+        if _enqueue_command(user_id, "visit_neighbors"):
+            _send_message(chat_id, "⏳ <b>이웃 방문</b> 명령이 등록되었습니다. 완료 시 알려드릴게요.")
+        else:
+            _send_message(chat_id, "❌ 명령 등록에 실패했습니다.")
+
+    elif cmd == "/neighbor":
+        if not arg1:
+            _send_message(chat_id, "사용법: /neighbor blog_id")
+            return
+        payload = {
+            "target_blog_id": arg1,
+            "message": "안녕하세요! 서로이웃 신청드립니다 😊",
+        }
+        if _enqueue_command(user_id, "neighbor_request", payload):
+            _send_message(chat_id, f"⏳ <b>서로이웃 신청</b> 명령이 등록되었습니다.\n대상: {arg1}\n완료 시 알려드릴게요.")
+        else:
+            _send_message(chat_id, "❌ 명령 등록에 실패했습니다.")
+
+    elif cmd == "/all":
+        if not arg1:
+            _send_message(chat_id, "사용법: /all 키워드1,키워드2")
+            return
+        raw = (arg1 + " " + arg2).strip() if arg2 else arg1
+        keywords = [k.strip() for k in raw.replace(",", " ").split() if k.strip()]
+        if _enqueue_command(user_id, "discover_and_visit", {"keywords": keywords}):
+            _send_message(chat_id, f"⏳ <b>찾기+방문</b> 명령이 등록되었습니다.\n키워드: {', '.join(keywords)}\n완료 시 알려드릴게요.")
+        else:
+            _send_message(chat_id, "❌ 명령 등록에 실패했습니다.")
+
     elif cmd == "/send_html":
         _send_html_file(chat_id)
-    
+
     elif cmd.startswith("/edit_text:"):
-        # 수정 명령 처리 (comment_id는 UUID 문자열)
         try:
             comment_id = cmd.split(":", 1)[1]
             if not comment_id:
                 raise ValueError("빈 ID")
-            _run_async(_edit_and_approve(chat_id, comment_id, text[len(cmd):].strip()))
+            _run_async(_edit_and_approve(chat_id, comment_id, text[len(cmd):].strip(), user_id=user_id))
         except (ValueError, IndexError):
             _send_message(chat_id, "❌ 사용법: /edit_text:{id} [내용]")
-    
+
     else:
         _send_message(chat_id, "알 수 없는 명령어. /help를 입력하세요.")
 
 
+# ───────────────────────────────────────────────
+# 메인 루프
+# ───────────────────────────────────────────────
+
 def main():
     print("=" * 50)
-    print("  텔레그램 봇 시작")
+    print("  텔레그램 봇 시작 (멀티유저 + 이웃관리 통합)")
     print(f"  봇 토큰: ...{BOT_TOKEN[-8:]}")
     print("=" * 50)
-    
+
     # DB 초기화
     from src.storage.database import init_db
     init_db()
     print("✅ DB 초기화 완료\n")
-    
+
     offset = 0
-    
+
     print("[DEBUG] 폴링 루프 시작")
-    
+
     while True:
         try:
             _check_media_groups()
             poll_timeout = 2 if _media_groups else 30
-            
-            
+
             r = httpx.get(
                 f"{BASE_URL}/getUpdates",
                 params={
@@ -750,55 +870,62 @@ def main():
                 },
                 timeout=poll_timeout + 5,
             )
-            
+
             updates = r.json().get("result", [])
-            
+
             for update in updates:
                 offset = update["update_id"] + 1
-                
-                # Callback Query 처리 (Inline Keyboard)
+
+                # Callback Query 처리
                 if "callback_query" in update:
                     query = update["callback_query"]
                     chat_id = query["message"]["chat"]["id"]
                     data = query["data"]
                     query_id = query["id"]
-                    
-                    if ALLOWED_CHAT_ID and str(chat_id) != ALLOWED_CHAT_ID:
+
+                    # 콜백은 등록된 사용자만 처리
+                    user_id = _resolve_user(str(chat_id))
+                    if not user_id:
+                        _answer_callback(query_id, "등록되지 않은 사용자입니다")
                         continue
-                    
-                    # 콜백 처리 (comment_id는 Supabase UUID 문자열)
+
                     print(f"[BOT] 콜백 수신: chat_id={chat_id}, data={data}")
                     if data.startswith("approve:"):
                         comment_id = data.split(":", 1)[1]
-                        print(f"[BOT] 승인 처리: comment_id={comment_id}")
                         _handle_approval(chat_id, comment_id, "approve", query_id)
                     elif data.startswith("reject:"):
                         comment_id = data.split(":", 1)[1]
-                        print(f"[BOT] 거부 처리: comment_id={comment_id}")
                         _handle_approval(chat_id, comment_id, "reject", query_id)
                     elif data.startswith("edit:"):
                         comment_id = data.split(":", 1)[1]
                         _handle_approval(chat_id, comment_id, "edit", query_id)
                     continue
-                
+
                 # 일반 메시지 처리
                 message = update.get("message")
                 if not message:
                     continue
-                
+
                 chat_id = message["chat"]["id"]
-                
-                if ALLOWED_CHAT_ID and str(chat_id) != ALLOWED_CHAT_ID:
-                    logger.warning(f"미허용 Chat ID: {chat_id}")
-                    _send_message(chat_id, "권한이 없습니다.")
+
+                # 등록 플로우 처리 (텍스트만)
+                if "text" in message:
+                    if _handle_registration(chat_id, message["text"]):
+                        continue
+                    _handle_command(chat_id, message["text"])
                     continue
-                
-                # 사진 처리
+
+                # 사진 처리 (등록된 사용자만)
                 if "photo" in message:
+                    user_id = _resolve_user(str(chat_id))
+                    if not user_id:
+                        _send_message(chat_id, "❌ 등록되지 않은 사용자입니다.\n/start로 등록해주세요.")
+                        continue
+
                     file_id = message["photo"][-1]["file_id"]
                     caption = message.get("caption", "")
                     media_group_id = message.get("media_group_id")
-                    
+
                     if media_group_id:
                         if media_group_id not in _media_groups:
                             _media_groups[media_group_id] = {
@@ -806,6 +933,7 @@ def main():
                                 "photos": [],
                                 "caption": caption,
                                 "last_seen": time.time(),
+                                "user_id": user_id,
                             }
                         group = _media_groups[media_group_id]
                         group["photos"].append(file_id)
@@ -813,14 +941,10 @@ def main():
                         if not group["caption"] and caption:
                             group["caption"] = caption
                     else:
-                        _process_photos(chat_id, [file_id], caption)
-                
-                # 텍스트 명령어
-                elif "text" in message:
-                    _handle_command(chat_id, message["text"])
-            
+                        _process_photos(chat_id, [file_id], caption, user_id=user_id)
+
             _check_media_groups()
-            
+
         except httpx.TimeoutException:
             _check_media_groups()
             continue

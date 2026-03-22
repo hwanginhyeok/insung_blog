@@ -102,7 +102,7 @@ async def visit_neighbors(
                     req_result = await send_neighbor_request(
                         page=page, blog_id=blog_id,
                         message=request_message, max_per_day=max_requests,
-                        user_id=user_id,
+                        user_id=user_id, context=context,
                     )
                     if req_result["success"]:
                         neighbor_requests_sent += 1

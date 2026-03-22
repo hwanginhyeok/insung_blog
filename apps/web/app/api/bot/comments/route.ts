@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
+import { createAdminClient } from "@/lib/supabase-admin";
 
 function getSupabase() {
   const cookieStore = cookies();
@@ -66,7 +67,8 @@ export async function GET(req: NextRequest) {
   const offset = (page - 1) * limit;
 
   // 기본 쿼리
-  let query = supabase
+  const admin = createAdminClient();
+  let query = admin
     .from("pending_comments")
     .select(
       "id, blog_id, post_url, post_title, comment_text, ai_generated, status, created_at, decided_by, decided_at",

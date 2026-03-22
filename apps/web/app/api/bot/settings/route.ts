@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
+import { createAdminClient } from "@/lib/supabase-admin";
 
 /**
  * POST /api/bot/settings
@@ -109,7 +110,8 @@ export async function POST(req: NextRequest) {
   }
 
   // upsert (없으면 생성, 있으면 수정)
-  const { data, error } = await supabase
+  const admin = createAdminClient();
+  const { data, error } = await admin
     .from("bot_settings")
     .upsert(
       {

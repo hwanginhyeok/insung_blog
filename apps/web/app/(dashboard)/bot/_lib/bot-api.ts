@@ -31,6 +31,9 @@ export interface BotSettings {
   max_bloggers_per_day: number;
   naver_blog_id: string | null;
   comment_prompt: string | null;
+  auto_neighbor_request: boolean;
+  max_neighbor_requests_per_day: number;
+  neighbor_request_message: string | null;
 }
 
 export interface TodayStats {
@@ -85,6 +88,9 @@ export const defaultSettings: BotSettings = {
   max_bloggers_per_day: 10,
   naver_blog_id: null,
   comment_prompt: null,
+  auto_neighbor_request: false,
+  max_neighbor_requests_per_day: 10,
+  neighbor_request_message: "",
 };
 
 export const STATUS_LABELS: Record<string, { label: string; className: string }> = {

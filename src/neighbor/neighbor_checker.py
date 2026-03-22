@@ -51,6 +51,8 @@ async def check_neighbor_status(page: Page, blog_id: str) -> str | None:
 
         # "이웃추가" 버튼 존재 여부
         add_btn = await main_frame.query_selector(
+            'a.btn_addbuddy, a.btn_add_nb._addBuddyPop, '
+            'a.btn_add_buddy._addBuddy, '
             'a[class*="buddy_add"], button[class*="neighbor_add"], '
             'a[href*="BuddyAdd"], .btn_buddy_add'
         )

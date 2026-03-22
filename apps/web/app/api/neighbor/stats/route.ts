@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
+import { createAdminClient } from "@/lib/supabase-admin";
 
 function getSupabase() {
   const cookieStore = cookies();
@@ -27,17 +28,18 @@ export async function GET() {
   }
 
   // 병렬 조회
+  const admin = createAdminClient();
   const [neighborsResult, requestsResult, interactionsResult] =
     await Promise.all([
-      supabase
+      admin
         .from("neighbors")
         .select("neighbor_type")
         .eq("user_id", user.id),
-      supabase
+      admin
         .from("neighbor_requests")
         .select("status")
         .eq("user_id", user.id),
-      supabase
+      admin
         .from("neighbor_interactions")
         .select("id", { count: "exact", head: true })
         .eq("user_id", user.id),

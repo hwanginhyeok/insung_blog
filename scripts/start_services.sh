@@ -18,7 +18,7 @@ tmux send-keys -t $SESSION:api "source .venv/bin/activate && uvicorn api_server:
 
 # 텔레그램 봇 (창 1)
 tmux new-window -t $SESSION -n "telegram" -c "$PROJECT_DIR"
-tmux send-keys -t $SESSION:telegram "source .venv/bin/activate && python telegram_bot_simple.py" Enter
+tmux send-keys -t $SESSION:telegram "source .venv/bin/activate && python telegram_bot.py" Enter
 
 # 명령 큐 워커 (창 2) — 기존 워커 프로세스 종료 후 시작
 pkill -f "command_worker.py" 2>/dev/null && sleep 1
