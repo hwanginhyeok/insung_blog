@@ -43,7 +43,7 @@ export function CommentAnalyticsChart() {
   const [data, setData] = useState<DayData[]>([]);
   const [totals, setTotals] = useState<Totals>({ comments: 0, bloggers: 0, failed: 0, runs: 0 });
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState<Period>(14);
+  const [period, setPeriod] = useState<Period>(7);
   const [chartType, setChartType] = useState<ChartType>("bar");
 
   useEffect(() => {

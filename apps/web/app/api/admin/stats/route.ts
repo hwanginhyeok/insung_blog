@@ -79,6 +79,41 @@ export async function GET() {
     { bloggers: 0, comments: 0, failed: 0, runs: 0 }
   );
 
+  // 유저별 봇 사용현황 요약
+  const { data: allRunLogs } = await admin
+    .from("bot_run_log")
+    .select("user_id, run_at, comments_written, comments_failed, error_message")
+    .gte("run_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).getTime();
+  const userBotStats: Record<string, {
+    runs: number;
+    comments: number;
+    failed: number;
+    lastRunAt: string | null;
+    botStatus: "active" | "inactive" | "error";
+  }> = {};
+
+  for (const r of (allRunLogs || [])) {
+    const uid = r.user_id;
+    if (!userBotStats[uid]) {
+      userBotStats[uid] = { runs: 0, comments: 0, failed: 0, lastRunAt: null, botStatus: "inactive" };
+    }
+    const s = userBotStats[uid];
+    s.runs++;
+    s.comments += r.comments_written || 0;
+    s.failed += r.comments_failed || 0;
+
+    // 최근 실행 시각 갱신
+    if (!s.lastRunAt || r.run_at > s.lastRunAt) {
+      s.lastRunAt = r.run_at;
+      const runTime = new Date(r.run_at).getTime();
+      if (runTime > sevenDaysAgo) {
+        s.botStatus = r.error_message ? "error" : "active";
+      }
+    }
+  }
+
   return NextResponse.json({
     users: {
       total: usersTier.total,
@@ -94,5 +129,6 @@ export async function GET() {
       byType: neighborType.dist,
     },
     weekly: weeklyStats,
+    userBotStats,
   });
 }

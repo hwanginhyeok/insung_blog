@@ -55,6 +55,8 @@ from src.storage.supabase_client import (
 )
 from src.utils.browser import create_browser
 from src.utils.delay import delay_between_bloggers, delay_between_comments
+from src.neighbor.interaction_tracker import record_interaction
+from src.neighbor.neighbor_sync import upsert_neighbor, update_last_interaction
 from src.utils.logger import logger
 from src.utils.time_guard import assert_allowed_time
 
@@ -314,6 +316,14 @@ async def run(
                             if success:
                                 comments_written += 1
                                 blogger_had_comment = True
+                                # 교류 기록 저장
+                                record_interaction(
+                                    blog_id, "comment_sent",
+                                    post_url=data["url"],
+                                    content=comment_text[:200] if comment_text else None,
+                                    user_id=user_id,
+                                )
+                                update_last_interaction(blog_id, user_id=user_id)
                             else:
                                 comments_failed += 1
                                 add_to_retry_queue(
@@ -334,6 +344,14 @@ async def run(
                             )
                             logger.info(f"승인 대기 등록: {data['url'][:60]}")
                             blogger_had_comment = True
+                            # 교류 기록 (pending이지만 방문은 함)
+                            record_interaction(
+                                blog_id, "comment_sent",
+                                post_url=data["url"],
+                                content=ai_comments[i][:200] if ai_comments[i] else None,
+                                user_id=user_id,
+                            )
+                            update_last_interaction(blog_id, user_id=user_id)
 
                         await delay_between_comments()
 
@@ -341,6 +359,26 @@ async def run(
                     mark_blogger_visited(blog_id, user_id=user_id)
                     bloggers_visited += 1
                     logger.info(f"✓ {blog_id} 방문 완료")
+
+                    # 이웃 DB 동기화 + 자동 신청
+                    upsert_neighbor(blog_id, user_id=user_id)
+                    if settings.get("auto_neighbor_request"):
+                        try:
+                            from src.neighbor.neighbor_checker import check_neighbor_status
+                            status = await check_neighbor_status(page, blog_id)
+                            if status is None:
+                                # 이웃이 아닌 경우 → 자동 신청
+                                from src.neighbor.neighbor_requester import send_neighbor_request
+                                req_msg = settings.get("neighbor_request_message", "")
+                                max_req = settings.get("max_neighbor_requests_per_day", 10)
+                                result = await send_neighbor_request(
+                                    page, blog_id, req_msg, max_req, user_id=user_id,
+                                )
+                                if result.get("success"):
+                                    logger.info(f"자동 서로이웃 신청 완료: {blog_id}")
+                        except Exception as e:
+                            logger.debug(f"자동 이웃 신청 실패 ({blog_id}): {e}")
+
                     await delay_between_bloggers()
 
             # ── retry_queue 재시도 처리 ──

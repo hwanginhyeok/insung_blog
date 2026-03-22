@@ -44,6 +44,7 @@
 | `app/api/persona/analyze/route.ts` | AI 페르소나 분석 API Route (POST, 2-pass Sonnet → persona_items INSERT) | ✅ **신규** |
 | `app/api/persona/feedback/route.ts` | 피드백 규칙 API Route — GET: 대기 규칙 + 히스토리 조회, POST: 규칙 승인/거절 | ✅ **신규** |
 | `app/api/bot/command/route.ts` | 봇 명령 큐 API Route — POST: 명령 등록(run/execute/retry/publish/**extract_blog_id**+payload), GET: 최근 5개 조회(폴링) | ✅ (extract_blog_id 확장) |
+| `app/api/admin/users/[userId]/bot-stats/route.ts` | 유저별 봇 사용현황 API — 실행횟수, 댓글 게시/실패, 상태 뱃지 | ✅ **신규** |
 | `app/api/bot/cookies/route.ts` | 쿠키 업로드 API Route — GET: 상태, POST: 업로드(upsert)+**extract_blog_id 자동 트리거**, DELETE: 삭제 | ✅ (자동 추출 확장) |
 | `app/api/posts/route.ts` | 글 관리 API Route — DELETE: 삭제(Storage 동시 정리), PATCH: 제목/본문/해시태그/버전 수정 | ✅ **신규** |
 | `app/api/persona/list/route.ts` | 페르소나 목록 API Route (GET: 사용자 전체 페르소나) | ✅ **신규** |
@@ -208,8 +209,10 @@
 | `neighbor_discoverer.py` | 키워드 기반 이웃 후보 탐색 (검색 → 블로그 목록) | ✅ **신규** |
 | `neighbor_requester.py` | 서로이웃 신청 자동화 (메시지 포함) | ✅ **신규** |
 | `neighbor_visitor.py` | 이웃 블로그 방문 + 교류 기록 | ✅ **신규** |
-| `neighbor_sync.py` | Supabase ↔ 로컬 이웃 데이터 동기화 | ✅ **신규** |
+| `neighbor_sync.py` | Supabase ↔ 로컬 이웃 데이터 동기화 + `sync_neighbor_statuses()` 주기적 동기화 | ✅ 동기화 확장 |
 | `interaction_tracker.py` | 이웃 간 교류(댓글/방문) 추적 및 통계 | ✅ **신규** |
+| `recommend_engine.py` | 이웃 추천 엔진 — 교류 빈도+테마 매칭 기반 추천 데이터 생성. `generate_recommendations()` | ✅ **신규** |
+| `theme_analyzer.py` | 블로그 테마 자동 분석 — 키워드 매칭 기반. `analyze_blog_themes()`, `update_user_themes()` | ✅ **신규** |
 
 ---
 
@@ -279,6 +282,8 @@
 | `프로젝트/매뉴얼/coding-rules.md` | Python 코딩 규칙 | ✅ |
 | `프로젝트/매뉴얼/workflow-rules.md` | 워크플로우 + 코드리뷰 규칙 | ✅ |
 | `프로젝트/코드리뷰/REVIEW_LOG.md` | 코드리뷰 기록 | ✅ |
+| `프로젝트/reports/scalability_report.md` | 확장성 점검 리포트 (유저 10/50/100명 시나리오) | ✅ **신규** |
+| `프로젝트/briefings/` | 작업별 브리핑 파일 디렉토리 | ✅ **신규** |
 | `프로젝트/tasks/W*.md`, `P3-*.md` | 주차별 작업 상세 (설계 기록용, 수정 안 함) | 아카이브 |
 | `phase1~4-*.md` | Phase별 설계 문서 (설계 기록용, 수정 안 함) | 아카이브 |
 | `00-project-overview.md` | DEPRECATED → ARCHITECTURE.md로 통합 | 폐기 |

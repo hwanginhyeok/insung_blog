@@ -27,6 +27,14 @@ interface UserRow {
   created_at: string;
 }
 
+interface UserBotStat {
+  runs: number;
+  comments: number;
+  failed: number;
+  lastRunAt: string | null;
+  botStatus: "active" | "inactive" | "error";
+}
+
 interface SystemStats {
   users: {
     total: number;
@@ -47,6 +55,7 @@ interface SystemStats {
     failed: number;
     runs: number;
   };
+  userBotStats?: Record<string, UserBotStat>;
 }
 
 const TIER_OPTIONS: { value: Tier; label: string }[] = [
@@ -175,6 +184,7 @@ export default function AdminPage() {
                   <th className="px-4 py-3 font-medium">등급</th>
                   <th className="px-4 py-3 font-medium">사용량</th>
                   <th className="px-4 py-3 font-medium">상태</th>
+                  <th className="px-4 py-3 font-medium">봇</th>
                   <th className="px-4 py-3 font-medium">가입일</th>
                   <th className="px-4 py-3 font-medium">상세</th>
                 </tr>
@@ -244,6 +254,33 @@ export default function AdminPage() {
                         >
                           {u.status === "active" ? "활성" : "정지"}
                         </button>
+                      </td>
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const bs = systemStats?.userBotStats?.[u.id];
+                          if (!bs) return <span className="text-muted-foreground text-xs">—</span>;
+                          const statusStyle = {
+                            active: "bg-green-500/10 text-green-600",
+                            error: "bg-red-500/10 text-red-600",
+                            inactive: "bg-gray-500/10 text-gray-500",
+                          }[bs.botStatus];
+                          const statusLabel = {
+                            active: "활성",
+                            error: "에러",
+                            inactive: "비활성",
+                          }[bs.botStatus];
+                          return (
+                            <div className="flex flex-col gap-0.5">
+                              <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${statusStyle}`}>
+                                {statusLabel}
+                              </span>
+                              <span className="text-xs text-muted-foreground tabular-nums">
+                                {bs.runs}회 · {bs.comments}건
+                                {bs.failed > 0 && <span className="text-red-500"> · {bs.failed}실패</span>}
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {new Date(u.created_at).toLocaleDateString("ko-KR", {
