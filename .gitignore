@@ -8,6 +8,7 @@ __pycache__/
 *.pyc
 .venv/
 .venv-wsl/
+node_modules/
 
 # 디버그 아티팩트 (스크린샷, HTML 덤프)
 *.png

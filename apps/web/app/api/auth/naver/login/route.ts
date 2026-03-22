@@ -14,10 +14,10 @@ export async function GET(req: NextRequest) {
   }
 
   // Open Redirect 방지: 내부 경로만 허용
-  const rawRedirect = req.nextUrl.searchParams.get("redirect") || "/dashboard";
+  const rawRedirect = req.nextUrl.searchParams.get("redirect") || "/calendar";
   const redirect = rawRedirect.startsWith("/") && !rawRedirect.startsWith("//")
     ? rawRedirect
-    : "/dashboard";
+    : "/calendar";
   const state = crypto.randomUUID();
 
   const origin = process.env.NEXT_PUBLIC_SITE_URL || req.nextUrl.origin;

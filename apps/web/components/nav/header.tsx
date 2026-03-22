@@ -8,12 +8,11 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { User } from "@supabase/supabase-js";
 
+// 글쓰기 탭으로 묶인 경로들
+const blogPaths = ["/dashboard", "/write", "/calendar", "/persona", "/analytics"];
+
 const navItems = [
-  { href: "/dashboard", label: "내 글" },
-  { href: "/write", label: "새 글 쓰기" },
-  { href: "/calendar", label: "캘린더" },
-  { href: "/persona", label: "페르소나" },
-  { href: "/analytics", label: "성과 분석" },
+  { href: "/calendar", label: "글쓰기" },
   { href: "/bot", label: "댓글 봇" },
   { href: "/neighbor", label: "서로이웃" },
   { href: "/guide", label: "사용법" },
@@ -56,24 +55,30 @@ export function Header() {
     <header className="border-b bg-background">
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
         <div className="flex items-center gap-6">
-          <Link href="/dashboard" className="text-lg font-bold">
+          <Link href="/calendar" className="text-lg font-bold">
             인성이
           </Link>
           <nav className="flex items-center gap-1">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                  pathname === item.href
-                    ? "bg-secondary text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {item.label}
-              </Link>
-            ))}
+            {navItems.map((item) => {
+              const isActive =
+                item.href === "/calendar"
+                  ? blogPaths.some((p) => pathname.startsWith(p))
+                  : pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    isActive
+                      ? "bg-secondary text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
             {isAdmin &&
               adminItems.map((item) => (
                 <Link

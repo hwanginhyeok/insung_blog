@@ -46,7 +46,7 @@ export async function middleware(req: NextRequest) {
 
   // 이미 로그인된 사용자가 /login 접근 시 대시보드로
   if (pathname === "/login" && user) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+    return NextResponse.redirect(new URL("/calendar", req.url));
   }
 
   return res;

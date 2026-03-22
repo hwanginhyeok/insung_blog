@@ -30,10 +30,10 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   // Open Redirect 방지: 내부 경로만 허용
-  const rawRedirect = searchParams.get("redirect") || "/dashboard";
+  const rawRedirect = searchParams.get("redirect") || "/calendar";
   const redirect = rawRedirect.startsWith("/") && !rawRedirect.startsWith("//")
     ? rawRedirect
-    : "/dashboard";
+    : "/calendar";
 
   // OAuth 콜백 에러 메시지 표시
   const oauthError = searchParams.get("error");

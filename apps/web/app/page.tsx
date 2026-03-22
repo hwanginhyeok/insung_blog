@@ -14,7 +14,7 @@ export default function Home() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Link href="/dashboard">
+          <Link href="/calendar">
             <Button className="w-full" size="lg">
               시작하기
             </Button>

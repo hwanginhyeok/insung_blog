@@ -11,10 +11,10 @@ export async function GET(req: NextRequest) {
   const state = req.nextUrl.searchParams.get("state");
   const storedState = req.cookies.get("oauth_state")?.value;
   // Open Redirect 방지: 내부 경로만 허용
-  const rawRedirect = req.cookies.get("oauth_redirect")?.value || "/dashboard";
+  const rawRedirect = req.cookies.get("oauth_redirect")?.value || "/calendar";
   const redirect = rawRedirect.startsWith("/") && !rawRedirect.startsWith("//")
     ? rawRedirect
-    : "/dashboard";
+    : "/calendar";
 
   const loginError = (msg: string) =>
     NextResponse.redirect(
