@@ -11,6 +11,8 @@ import { CommentHistoryTable } from "./_components/CommentHistoryTable";
 import { BotSettingsPanel } from "./_components/BotSettingsPanel";
 import { CookieStatusBadge } from "./_components/CookieStatusBadge";
 import { RunHistoryPanel } from "./_components/RunHistoryPanel";
+import { CommentCalendar } from "./_components/CommentCalendar";
+import { CommentAnalyticsChart } from "./_components/CommentAnalyticsChart";
 import { BotSettings, apiFetchStatus } from "./_lib/bot-api";
 
 export default function BotPage() {
@@ -156,7 +158,11 @@ export default function BotPage() {
         onBulkApproved={fetchApproved}
       />
 
-      {/* 댓글 내역 */}
+      {/* 댓글 분석 차트 + 활동 캘린더 */}
+      <CommentAnalyticsChart />
+      <CommentCalendar days={28} />
+
+      {/* 댓글 내역 (접기/펼치기) */}
       <CommentHistoryTable
         historyTab={historyTab}
         history={history}
