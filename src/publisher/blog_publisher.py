@@ -1,16 +1,26 @@
 """
-스마트에디터 자동 발행 모듈 — Playwright로 네이버 블로그 글쓰기 자동화
+스마트에디터 자동 발행/임시저장 모듈 — Playwright로 네이버 블로그 글쓰기 자동화
 
 흐름 (2026년 신형 스마트에디터 ONE 기준):
-  1. 글쓰기 페이지 이동 (SPA, iframe 없음)
-  2. 도움말 패널 닫기 (첫 방문 시 자동 표시됨)
-  3. 제목 입력
-  4. 이미지 업로드 (이미지 버튼 → file chooser)
-  5. 본문 입력 (contenteditable div에 keyboard.type)
-  6. 폰트 적용
-  7. 발행 버튼 클릭 → 발행 모달 열림
-  8. 모달에서 태그 입력
-  9. 모달에서 확인 발행 → 게시물 URL 캡처
+  [발행 모드] publish_post()
+    1. 글쓰기 페이지 이동 (SPA, iframe 없음)
+    2. 도움말 패널 닫기 (첫 방문 시 자동 표시됨)
+    3. 제목 입력
+    4. 이미지 업로드 (이미지 버튼 → file chooser)
+    5. 본문 입력 (contenteditable div에 keyboard.type)
+    6. 폰트 적용
+    7. 발행 버튼 클릭 → 발행 모달 열림
+    8. 모달에서 태그 입력
+    9. 모달에서 확인 발행 → 게시물 URL 캡처
+
+  [임시저장 모드] save_draft()
+    1. 글쓰기 페이지 이동
+    2. 도움말 패널 닫기
+    3. 제목 입력
+    4. 이미지 업로드 (있으면)
+    5. 본문 HTML 주입 (page.evaluate로 innerHTML 직접 설정)
+    6. 임시저장 버튼 클릭
+    7. 저장 확인 (토스트 메시지 감지)
 """
 import asyncio
 import json
@@ -56,6 +66,23 @@ _TAG_SELECTORS = [
     "[placeholder*='태그']",                  # placeholder="태그 입력 (최대 30개)"
     "[class*='tag_textarea']",                # tag_textarea__CD7pC
     "[class*='tag_input']",                   # tag_input__rvUB5
+]
+
+# ── 임시저장 버튼 셀렉터 (우선순위순) ──
+# 네이버 스마트에디터 상단 툴바 "임시저장" 버튼
+_DRAFT_SAVE_SELECTORS = [
+    'button[data-click-area="tpb.save"]',          # data 속성 기반 (발행=tpb.publish 패턴)
+    'button[data-click-area="tpb.tempSave"]',       # tempSave 가능성
+    'button[data-click-area="tpb.draft"]',          # draft 가능성
+]
+
+# 임시저장 성공 토스트/알림 셀렉터
+_DRAFT_TOAST_SELECTORS = [
+    '[class*="toast"]',                             # 토스트 메시지 컨테이너
+    '[class*="snackbar"]',                          # 스낵바 형태
+    '[class*="alert"]',                             # 알림 형태
+    '[class*="save_complete"]',                     # 저장 완료 메시지
+    '[class*="temp_save"]',                         # 임시저장 완료 관련
 ]
 
 # ── 폰트 드롭다운 버튼 셀렉터 ──
@@ -529,5 +556,258 @@ async def _select_from_dropdown(
         except Exception as e:
             logger.debug(f"드롭다운 선택 실패 ({selector}): {e}")
             continue
+
+    return False
+
+
+# ── 임시저장 ────────────────────────────────────────────────────────────────
+
+
+async def save_draft(
+    page: Page,
+    blog_id: str,
+    title: str,
+    body_html: str,
+    image_paths: list[str] | None = None,
+    hashtags: list[str] | None = None,
+) -> dict:
+    """
+    스마트에디터에 HTML 본문을 주입하고 임시저장.
+
+    기존 publish_post()와 달리:
+      - 본문을 keyboard.type() 대신 innerHTML로 HTML 직접 주입
+      - 발행 대신 임시저장 버튼 클릭
+      - 폰트 적용 불필요 (HTML에 이미 스타일 포함)
+
+    Args:
+        page: Playwright 페이지
+        blog_id: 네이버 블로그 ID
+        title: 게시물 제목
+        body_html: SmartEditor ONE 호환 HTML (renderToNaverHtml 출력)
+        image_paths: 업로드할 이미지 경로 (선택)
+        hashtags: 해시태그 목록 (선택, 임시저장에도 태그 설정 가능)
+
+    Returns:
+        {"success": True/False, "message": str}
+    """
+    # 글쓰기 페이지 이동
+    write_url = BLOG_WRITE_URL.format(blog_id=blog_id)
+    logger.info(f"[임시저장] 글쓰기 페이지 이동: {write_url}")
+    await page.goto(write_url, timeout=PAGE_LOAD_TIMEOUT)
+    await page.wait_for_load_state("networkidle", timeout=EDITOR_LOAD_TIMEOUT)
+    await asyncio.sleep(3)
+
+    # 도움말 패널 닫기
+    await _close_help_panel(page)
+
+    # 제목 입력
+    title_ok = await _input_title(page, title)
+    if not title_ok:
+        logger.error("[임시저장] 제목 입력 실패")
+        return {"success": False, "message": "제목 입력 실패"}
+    await delay_short()
+
+    # 이미지 업로드 (있으면)
+    if image_paths:
+        img_ok = await _upload_images(page, image_paths)
+        if not img_ok:
+            logger.warning("[임시저장] 이미지 업로드 실패 — 본문만 저장합니다")
+        await delay_short()
+
+    # 본문 HTML 주입
+    html_ok = await _inject_html_body(page, body_html)
+    if not html_ok:
+        logger.error("[임시저장] 본문 HTML 주입 실패")
+        return {"success": False, "message": "본문 HTML 주입 실패"}
+    await delay_short()
+
+    # 임시저장 클릭
+    saved = await _click_draft_save(page)
+    if not saved:
+        logger.error("[임시저장] 임시저장 버튼 클릭 실패")
+        return {"success": False, "message": "임시저장 버튼을 찾지 못했습니다"}
+
+    logger.info("[임시저장] 임시저장 완료")
+    return {"success": True, "message": "임시저장 완료"}
+
+
+async def _inject_html_body(page: Page, body_html: str) -> bool:
+    """
+    SmartEditor ONE의 본문 영역에 HTML을 직접 주입.
+
+    전략:
+      1. 에디터 본문 컨테이너(.se-components-wrap 또는 유사)를 찾음
+      2. 기존 본문 컴포넌트 뒤에 HTML을 추가 (제목 컴포넌트 보존)
+      3. SmartEditor의 내부 구조(se-component, se-text 등)를 유지하여 에디터가 인식
+
+    주의: body_html은 renderToNaverHtml()이 생성한 SmartEditor 호환 HTML이어야 함
+    """
+    # JSON 이스케이프 (JS 문자열에 안전하게 전달)
+    escaped_html = json.dumps(body_html)
+
+    injected = await page.evaluate(f"""() => {{
+        // 전략 1: .se-components-wrap 내부에 주입 (제목 컴포넌트 뒤에)
+        const wrap = document.querySelector('.se-components-wrap');
+        if (wrap) {{
+            // 기존 텍스트 컴포넌트 중 제목이 아닌 것 제거 (빈 본문 placeholder)
+            const existingTexts = wrap.querySelectorAll('.se-component.se-text');
+            for (const comp of existingTexts) {{
+                // 제목 컴포넌트는 보존
+                if (comp.closest('.se-title') || comp.querySelector('.se-title-text')) {{
+                    continue;
+                }}
+                // 빈 컴포넌트(placeholder)만 제거
+                const text = comp.textContent.trim();
+                if (!text || text === '\\u200b') {{
+                    comp.remove();
+                }}
+            }}
+            // HTML 주입
+            const temp = document.createElement('div');
+            temp.innerHTML = {escaped_html};
+            while (temp.firstChild) {{
+                wrap.appendChild(temp.firstChild);
+            }}
+            return 'components-wrap';
+        }}
+
+        // 전략 2: contenteditable 영역에 직접 주입
+        const editables = document.querySelectorAll('[contenteditable="true"]');
+        for (const el of editables) {{
+            // 제목 영역 건너뜀
+            if (el.closest('.se-title-text') || el.closest('.se-title')) {{
+                continue;
+            }}
+            el.innerHTML = {escaped_html};
+            // input 이벤트 트리거 (에디터 상태 동기화)
+            el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            return 'contenteditable';
+        }}
+
+        // 전략 3: 본문 영역(.se-content) 하위에 주입
+        const content = document.querySelector('.se-content, .se-editor-content');
+        if (content) {{
+            const temp = document.createElement('div');
+            temp.innerHTML = {escaped_html};
+            while (temp.firstChild) {{
+                content.appendChild(temp.firstChild);
+            }}
+            return 'se-content';
+        }}
+
+        return null;
+    }}""")
+
+    if injected:
+        logger.info(f"[임시저장] HTML 주입 성공 (방법: {injected}, {len(body_html)}자)")
+        # 에디터가 변경을 인식하도록 잠시 대기
+        await asyncio.sleep(1)
+        return True
+
+    logger.error("[임시저장] HTML 주입할 영역을 찾지 못했습니다")
+    return False
+
+
+async def _click_draft_save(page: Page) -> bool:
+    """
+    임시저장 버튼을 클릭하고 저장 완료를 확인.
+
+    네이버 스마트에디터 임시저장 버튼 탐색 전략:
+      1. data 속성 기반 셀렉터 (확실)
+      2. 텍스트 기반 JS 탐색 ("임시저장" 텍스트)
+      3. 키보드 단축키 (Ctrl+S)
+    """
+    # 전략 1: 셀렉터 기반
+    for selector in _DRAFT_SAVE_SELECTORS:
+        try:
+            btn = await page.query_selector(selector)
+            if btn:
+                await btn.click()
+                logger.debug(f"[임시저장] 버튼 클릭 (셀렉터: {selector})")
+                return await _verify_draft_saved(page)
+        except Exception as e:
+            logger.debug(f"[임시저장] 셀렉터 시도 실패 ({selector}): {e}")
+
+    # 전략 2: JS로 텍스트 기반 탐색
+    clicked = await page.evaluate("""() => {
+        const buttons = document.querySelectorAll('button, a, span[role="button"]');
+        for (const btn of buttons) {
+            const text = btn.textContent.trim();
+            if (text === '임시저장' || text === '임시 저장') {
+                btn.click();
+                return true;
+            }
+        }
+        // 아이콘+텍스트 조합 탐색
+        const allEls = document.querySelectorAll('[class*="save"], [class*="draft"], [class*="temp"]');
+        for (const el of allEls) {
+            const btn = el.closest('button') || el.querySelector('button');
+            if (btn && (el.textContent.includes('임시') || el.textContent.includes('저장'))) {
+                btn.click();
+                return true;
+            }
+        }
+        return false;
+    }""")
+
+    if clicked:
+        logger.debug("[임시저장] 텍스트 기반 버튼 클릭")
+        return await _verify_draft_saved(page)
+
+    # 전략 3: Ctrl+S 단축키 (대부분의 에디터에서 임시저장)
+    logger.debug("[임시저장] Ctrl+S 단축키 시도")
+    await page.keyboard.press("Control+s")
+    saved = await _verify_draft_saved(page)
+    if saved:
+        return True
+
+    logger.warning("[임시저장] 모든 방법 실패")
+    return False
+
+
+async def _verify_draft_saved(page: Page) -> bool:
+    """임시저장 성공 여부 확인 (토스트/알림 감지 또는 타이틀 변경)."""
+    await asyncio.sleep(2)
+
+    # 방법 1: 토스트/알림 메시지 감지
+    for selector in _DRAFT_TOAST_SELECTORS:
+        try:
+            el = await page.query_selector(selector)
+            if el:
+                text = await el.text_content()
+                if text and ("저장" in text or "완료" in text or "save" in text.lower()):
+                    logger.debug(f"[임시저장] 토스트 확인: {text.strip()[:50]}")
+                    return True
+        except Exception:
+            continue
+
+    # 방법 2: JS로 저장 성공 힌트 탐색
+    saved_hint = await page.evaluate("""() => {
+        // 페이지 내 "저장되었습니다", "임시저장 완료" 등의 텍스트 탐색
+        const body = document.body.innerText;
+        if (body.includes('임시저장') && (body.includes('완료') || body.includes('되었'))) {
+            return 'text-hint';
+        }
+        // URL에 savedPostId 등의 파라미터가 추가되었는지 확인
+        if (window.location.href.includes('savedPost') || window.location.href.includes('tempSave')) {
+            return 'url-hint';
+        }
+        return null;
+    }""")
+
+    if saved_hint:
+        logger.debug(f"[임시저장] 저장 확인: {saved_hint}")
+        return True
+
+    # 방법 3: 에러가 없으면 성공으로 간주 (Ctrl+S 사용 시)
+    # 에러 모달이나 알림이 없으면 저장된 것으로 판단
+    error_detected = await page.evaluate("""() => {
+        const body = document.body.innerText;
+        return body.includes('저장 실패') || body.includes('오류') || body.includes('에러');
+    }""")
+
+    if not error_detected:
+        logger.debug("[임시저장] 에러 미감지 — 저장 성공으로 판단")
+        return True
 
     return False

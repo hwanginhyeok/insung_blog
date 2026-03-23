@@ -259,13 +259,15 @@ export function renderToNaverHtml(
 ): string {
   const blocks: string[] = [];
 
-  // 제목 블록
-  blocks.push(makeTextBlock(title, config, {
-    bold: true,
-    size: config.titleSize,
-    sizeClass: config.titleSizeClass,
-  }));
-  blocks.push(makeEmptyBlock(config));
+  // 제목 블록 (비어있으면 건너뜀 — save_draft에서 에디터 제목란에 별도 입력)
+  if (title.trim()) {
+    blocks.push(makeTextBlock(title, config, {
+      bold: true,
+      size: config.titleSize,
+      sizeClass: config.titleSizeClass,
+    }));
+    blocks.push(makeEmptyBlock(config));
+  }
 
   // 본문 처리
   const paragraphs = body.split(/\n\n+/); // 문단 분리

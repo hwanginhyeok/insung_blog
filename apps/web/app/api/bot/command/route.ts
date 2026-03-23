@@ -12,7 +12,7 @@ function getSupabase() {
   );
 }
 
-const VALID_COMMANDS = ["run", "execute", "retry", "publish", "extract_blog_id", "neighbor_request", "discover_neighbors", "visit_neighbors", "discover_and_visit"] as const;
+const VALID_COMMANDS = ["run", "execute", "retry", "publish", "save_draft", "extract_blog_id", "neighbor_request", "discover_neighbors", "visit_neighbors", "discover_and_visit"] as const;
 type BotCommand = (typeof VALID_COMMANDS)[number];
 
 /**
@@ -46,6 +46,14 @@ export async function POST(req: NextRequest) {
   if (command === "publish" && (!payload || !payload.title || !payload.body)) {
     return NextResponse.json(
       { error: "publish 명령에는 payload(title, body)가 필요합니다" },
+      { status: 400 }
+    );
+  }
+
+  // save_draft 명령은 payload 필수 (title + body_html)
+  if (command === "save_draft" && (!payload || !payload.title || !payload.body_html)) {
+    return NextResponse.json(
+      { error: "save_draft 명령에는 payload(title, body_html)가 필요합니다" },
       { status: 400 }
     );
   }

@@ -69,6 +69,11 @@ function WritePageContent() {
     postUrl?: string;
     message: string;
   } | null>(null);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [draftSaveResult, setDraftSaveResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [quota, setQuota] = useState<{
@@ -657,6 +662,81 @@ function WritePageContent() {
     }
   }
 
+  async function handleSaveDraft() {
+    if (!draft || !savedId) return;
+    setIsSavingDraft(true);
+    setDraftSaveResult(null);
+    setError(null);
+
+    try {
+      // HTML 생성 (본문만 — 제목은 에디터 제목란에 별도 입력)
+      const { renderToNaverHtml, buildRenderConfig } = await import("@/lib/render/naver-html");
+      const config = buildRenderConfig(cachedFormatting);
+      // 제목은 빈 문자열로 전달 (save_draft가 에디터 제목란에 직접 입력하므로 중복 방지)
+      const bodyHtml = renderToNaverHtml("", draft.body, cachedPhotoUrls, config);
+
+      // save_draft 명령을 bot_commands 큐에 등록
+      const res = await fetch("/api/bot/command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command: "save_draft",
+          payload: {
+            queue_id: savedId,
+            title: draft.title,
+            body_html: bodyHtml,
+            hashtags: draft.hashtags,
+            image_paths: [],
+            category: category,
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "임시저장 명령 등록 실패");
+      }
+
+      // 폴링으로 완료 대기 (최대 5분, 5초 간격)
+      const maxAttempts = 60;
+      for (let i = 0; i < maxAttempts; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+
+        const pollRes = await fetch("/api/bot/command");
+        if (!pollRes.ok) continue;
+
+        const pollData = await pollRes.json();
+        const draftCmd = (pollData.commands || []).find(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (c: any) => c.command === "save_draft" && c.payload?.queue_id === savedId
+        );
+
+        if (!draftCmd) continue;
+
+        if (draftCmd.status === "completed") {
+          setDraftSaveResult({
+            success: true,
+            message: "네이버 블로그에 임시저장되었습니다! 네이버에서 확인 후 발행하세요.",
+          });
+          return;
+        }
+
+        if (draftCmd.status === "failed") {
+          throw new Error(draftCmd.error_message || "임시저장 실패");
+        }
+      }
+
+      throw new Error("임시저장 시간 초과 (5분). 워커가 실행 중인지 확인하세요.");
+    } catch (e) {
+      setDraftSaveResult({
+        success: false,
+        message: e instanceof Error ? e.message : "임시저장 중 오류가 발생했습니다",
+      });
+    } finally {
+      setIsSavingDraft(false);
+    }
+  }
+
   return (
     <div className={`space-y-6 ${draft ? "pb-24" : ""}`}>
       <div>
@@ -881,8 +961,20 @@ function WritePageContent() {
                           </Button>
                           <Button
                             size="sm"
+                            variant="outline"
+                            onClick={handleSaveDraft}
+                            disabled={isSavingDraft || draftSaveResult?.success === true || isPublishing}
+                          >
+                            {isSavingDraft
+                              ? "저장 중..."
+                              : draftSaveResult?.success
+                                ? "임시저장 완료"
+                                : "네이버 임시저장"}
+                          </Button>
+                          <Button
+                            size="sm"
                             onClick={handlePublish}
-                            disabled={isPublishing || publishResult?.success === true}
+                            disabled={isPublishing || publishResult?.success === true || isSavingDraft}
                             className="bg-green-600 hover:bg-green-700 text-white"
                           >
                             {isPublishing
@@ -1055,6 +1147,37 @@ function WritePageContent() {
                           블로그에서 보기 →
                         </a>
                       )}
+                    </div>
+                  )}
+
+                  {/* 임시저장 결과 */}
+                  {draftSaveResult && (
+                    <div
+                      className={`rounded-lg p-4 ${
+                        draftSaveResult.success
+                          ? "bg-blue-50 border border-blue-200"
+                          : "bg-red-50 border border-red-200"
+                      }`}
+                    >
+                      <p
+                        className={`text-sm font-medium ${
+                          draftSaveResult.success ? "text-blue-800" : "text-red-800"
+                        }`}
+                      >
+                        {draftSaveResult.success ? "✅" : "❌"} {draftSaveResult.message}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 임시저장 진행 중 표시 */}
+                  {isSavingDraft && (
+                    <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
+                      <p className="text-sm text-blue-800">
+                        ⏳ 네이버 블로그에 임시저장 중입니다... (최대 5분 소요)
+                      </p>
+                      <p className="mt-1 text-xs text-blue-600">
+                        로컬 워커가 Playwright로 스마트에디터에 HTML을 주입하고 있습니다.
+                      </p>
                     </div>
                   )}
 

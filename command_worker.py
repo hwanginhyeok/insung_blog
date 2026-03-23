@@ -699,6 +699,109 @@ async def handle_discover_and_visit(
     }
 
 
+async def handle_save_draft(user_id: str | None = None, payload: dict | None = None) -> dict:
+    """
+    네이버 블로그 임시저장.
+
+    payload 필수 키:
+      - title, body_html, queue_id
+    선택 키:
+      - hashtags, image_paths
+    """
+    if not payload:
+        raise ValueError("save_draft 명령에 payload가 필요합니다")
+
+    title = payload.get("title", "")
+    body_html = payload.get("body_html", "")
+    queue_id = payload.get("queue_id")
+    hashtags = payload.get("hashtags", [])
+    image_paths = payload.get("image_paths", [])
+
+    if not title or not body_html:
+        raise ValueError("title과 body_html은 필수입니다")
+
+    if not queue_id:
+        raise ValueError("queue_id는 필수입니다 (generation_queue 추적용)")
+
+    from playwright.async_api import async_playwright
+
+    from src.auth.naver_login import ensure_login, ensure_login_cookie_only
+    from src.publisher.blog_publisher import save_draft
+    from src.utils.browser import create_browser
+
+    # 블로그 ID 결정
+    if user_id:
+        from src.storage.supabase_client import get_user_bot_config
+        config = get_user_bot_config(user_id)
+        if not config:
+            raise RuntimeError("봇 설정 없음 — /bot에서 블로그 ID 설정 필요")
+        blog_id = config["naver_blog_id"]
+    else:
+        blog_id = os.environ.get("MY_BLOG_ID", "")
+        if not blog_id:
+            raise RuntimeError(".env MY_BLOG_ID 미설정")
+
+    # generation_queue 상태 → saving
+    sb = get_supabase()
+    if queue_id:
+        sb.table("generation_queue").update({"status": "saving"}).eq("id", queue_id).execute()
+
+    uid_label = user_id[:8] if user_id else "admin"
+    logger.info(f"▶ 임시저장 시작: '{title[:30]}...' (user={uid_label})")
+
+    try:
+        async with _browser_semaphore:
+            async with async_playwright() as pw:
+                browser, context, page = await create_browser(pw, headless=True)
+
+                try:
+                    # 로그인
+                    if user_id:
+                        logged_in = await ensure_login_cookie_only(context, page, user_id)
+                    else:
+                        naver_id = os.environ.get("NAVER_ID", "")
+                        naver_pw = os.environ.get("NAVER_PW", "")
+                        if not all([naver_id, naver_pw]):
+                            raise RuntimeError(".env 인증 정보 누락")
+                        logged_in = await ensure_login(context, page, naver_id, naver_pw)
+
+                    if not logged_in:
+                        raise RuntimeError("네이버 로그인 실패 — 쿠키 재업로드 필요")
+
+                    result = await save_draft(
+                        page=page,
+                        blog_id=blog_id,
+                        title=title,
+                        body_html=body_html,
+                        image_paths=image_paths,
+                        hashtags=hashtags,
+                    )
+                finally:
+                    await browser.close()
+
+        if result.get("success"):
+            if queue_id:
+                sb.table("generation_queue").update(
+                    {"status": "saved"}
+                ).eq("id", queue_id).execute()
+
+            logger.info(f"✓ 임시저장 완료 (user={uid_label})")
+            return {"message": "임시저장 완료", "queue_id": queue_id}
+        else:
+            if queue_id:
+                sb.table("generation_queue").update(
+                    {"status": "save_failed"}
+                ).eq("id", queue_id).execute()
+            raise RuntimeError(result.get("message", "임시저장 실패"))
+
+    except Exception:
+        if queue_id:
+            sb.table("generation_queue").update(
+                {"status": "save_failed"}
+            ).eq("id", queue_id).execute()
+        raise
+
+
 async def handle_extract_blog_id(user_id: str | None = None) -> dict:
     """쿠키로 네이버 로그인 후 블로그 ID를 자동 추출하여 bot_settings에 저장."""
     if not user_id:
@@ -745,6 +848,7 @@ _HANDLERS = {
     "execute": handle_execute,
     "retry": handle_retry,
     "publish": handle_publish,
+    "save_draft": handle_save_draft,
     "extract_blog_id": handle_extract_blog_id,
     "neighbor_request": handle_neighbor_request,
     "discover_neighbors": handle_discover_neighbors,
@@ -823,8 +927,8 @@ async def process_command(cmd: dict) -> None:
 
     try:
         kwargs: dict = {"user_id": cmd_user_id}
-        # publish/neighbor_request 명령은 payload도 전달
-        if command_type in ("publish", "neighbor_request", "discover_neighbors", "visit_neighbors", "discover_and_visit"):
+        # publish/save_draft/neighbor_request 명령은 payload도 전달
+        if command_type in ("publish", "save_draft", "neighbor_request", "discover_neighbors", "visit_neighbors", "discover_and_visit"):
             kwargs["payload"] = cmd.get("payload")
         result = await handler(**kwargs)
         mark_completed(command_id, result)

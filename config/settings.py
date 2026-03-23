@@ -139,6 +139,7 @@ RAW_CATEGORY_MAP: dict[str, str] = {
 EDITOR_LOAD_TIMEOUT = 60_000
 IMAGE_UPLOAD_TIMEOUT = 30_000
 PUBLISH_CONFIRM_TIMEOUT = 15_000
+DRAFT_SAVE_TIMEOUT = 10_000  # 임시저장 확인 대기
 
 # ── 오토 블로거 감지 설정 ──────────────────────────
 # 1분 내 답글을 "빠른 답글"로 간주 (초)
