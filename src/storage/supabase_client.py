@@ -289,6 +289,7 @@ def update_pending_status_sb(
     status: str,
     decided_by: str = "telegram",
     fail_reason: str | None = None,
+    user_id: str | None = None,
 ) -> bool:
     """
     대기 댓글 상태 변경.
@@ -310,12 +311,14 @@ def update_pending_status_sb(
         if fail_reason:
             update_data["fail_reason"] = fail_reason
 
-        result = (
+        query = (
             sb.table("pending_comments")
             .update(update_data)
             .eq("id", comment_id)
-            .execute()
         )
+        if user_id:
+            query = query.eq("user_id", user_id)
+        result = query.execute()
 
         if result.data:
             logger.info(f"대기댓글 상태 변경: {comment_id[:8]}... → {status} (by {decided_by})")

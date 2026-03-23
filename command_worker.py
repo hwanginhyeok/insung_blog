@@ -659,10 +659,13 @@ async def handle_visit_neighbors(
     # 전체 실패 시 텔레그램 알림
     if result.get("visited", 0) == 0 and result.get("failed", 0) > 0:
         from src.utils.telegram_notifier import send_telegram_message
+        from src.storage.supabase_client import get_chat_id_for_user
 
+        chat_id = get_chat_id_for_user(user_id) if user_id else None
         await send_telegram_message(
             f"⚠️ 이웃 방문 전체 실패\n{result.get('message', '')}\n"
-            f"에러: {result['errors'][0]}"
+            f"에러: {result['errors'][0]}",
+            chat_id=chat_id,
         )
 
     return result

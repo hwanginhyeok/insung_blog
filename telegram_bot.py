@@ -398,7 +398,7 @@ async def _preview_comment_with_buttons(chat_id: int, blog_id: str, user_id: str
         _send_message(chat_id, f"❌ 오류: {e}")
 
 
-def _handle_approval(chat_id: int, comment_id: str, action: str, query_id: str = None) -> None:
+def _handle_approval(chat_id: int, comment_id: str, action: str, query_id: str = None, user_id: str | None = None) -> None:
     """승인/거부/수정 처리."""
     from src.storage.supabase_client import update_pending_status_sb
 
@@ -406,7 +406,7 @@ def _handle_approval(chat_id: int, comment_id: str, action: str, query_id: str =
         _answer_callback(query_id, "처리 중...")
 
     if action == "reject":
-        updated = update_pending_status_sb(comment_id, "rejected", decided_by="telegram")
+        updated = update_pending_status_sb(comment_id, "rejected", decided_by="telegram", user_id=user_id)
         if updated:
             _send_message(chat_id, "❌ 댓글이 거부되었습니다.")
         else:
@@ -418,7 +418,7 @@ def _handle_approval(chat_id: int, comment_id: str, action: str, query_id: str =
         return
 
     # 승인
-    updated = update_pending_status_sb(comment_id, "approved", decided_by="telegram")
+    updated = update_pending_status_sb(comment_id, "approved", decided_by="telegram", user_id=user_id)
     if not updated:
         _send_message(chat_id, "⚠️ 이미 처리되었거나 취소된 댓글입니다.")
         return
@@ -925,13 +925,13 @@ def main():
                     print(f"[BOT] 콜백 수신: chat_id={chat_id}, data={data}")
                     if data.startswith("approve:"):
                         comment_id = data.split(":", 1)[1]
-                        _handle_approval(chat_id, comment_id, "approve", query_id)
+                        _handle_approval(chat_id, comment_id, "approve", query_id, user_id=user_id)
                     elif data.startswith("reject:"):
                         comment_id = data.split(":", 1)[1]
-                        _handle_approval(chat_id, comment_id, "reject", query_id)
+                        _handle_approval(chat_id, comment_id, "reject", query_id, user_id=user_id)
                     elif data.startswith("edit:"):
                         comment_id = data.split(":", 1)[1]
-                        _handle_approval(chat_id, comment_id, "edit", query_id)
+                        _handle_approval(chat_id, comment_id, "edit", query_id, user_id=user_id)
                     elif data.startswith("retry_cmd:"):
                         cmd_id = data.split(":", 1)[1]
                         _handle_retry_command(chat_id, cmd_id, query_id)
