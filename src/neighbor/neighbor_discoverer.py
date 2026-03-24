@@ -28,10 +28,14 @@ async def discover_neighbors(
     keywords: list[str],
     user_id: str,
     my_blog_id: str,
+    my_blog_ids: set[str] | None = None,
     max_results: int = MAX_DISCOVER_TOTAL,
 ) -> dict:
     """키워드 기반 새 블로거 발견. 결과를 neighbors 테이블에 저장."""
     existing_ids = {n["blog_id"] for n in get_neighbors(user_id=user_id)}
+    # 자기 블로그 ID 전부 제외
+    if my_blog_ids:
+        existing_ids.update(my_blog_ids)
     existing_ids.add(my_blog_id)
 
     discovered: list[dict] = []

@@ -47,6 +47,7 @@ from src.storage.database import (
     remove_from_retry_queue,
 )
 from src.storage.supabase_client import (
+    add_blog_id_for_user,
     add_pending_comment_sb,
     get_bot_settings_sb,
     get_pending_count_sb,
@@ -155,25 +156,28 @@ async def run(
                 await notify_login_failure(msg)
                 raise RuntimeError(f"{msg} — 실행 중단")
 
-            # ── 블로그 ID 제외 목록 구성 (자기 블로그 방문 방지) ──
-            # 한 사용자가 여러 블로그 ID를 가질 수 있으므로, 저장된 ID + 실제 감지 ID 모두 제외
+            # ── 자기 블로그 제외 목록 구성 (다중 ID 지원) ──
             my_blog_ids: set[str] = set()
+            # 1) DB에 저장된 모든 블로그 ID 로드
+            if user_id and config:
+                for bid in config.get("naver_blog_ids", []):
+                    if bid:
+                        my_blog_ids.add(bid)
             if my_blog_id:
                 my_blog_ids.add(my_blog_id)
-            # .env MY_BLOG_ID도 항상 포함 (레거시 호환)
+            # 2) .env MY_BLOG_ID (레거시 호환)
             env_blog_id = os.environ.get("MY_BLOG_ID", "")
             if env_blog_id:
                 my_blog_ids.add(env_blog_id)
-            # 로그인 후 실제 블로그 ID 감지
+            # 3) 로그인 후 실제 블로그 ID 감지 + DB에 자동 등록
             try:
                 detected_id = await extract_blog_id(context, page)
                 if detected_id:
                     my_blog_ids.add(detected_id)
-                    if detected_id != my_blog_id:
-                        logger.warning(
-                            f"블로그 ID 불일치! 저장={my_blog_id}, 실제={detected_id} "
-                            f"— 둘 다 제외 목록에 추가"
-                        )
+                    if detected_id not in (config or {}).get("naver_blog_ids", []):
+                        logger.info(f"새 블로그 ID 감지: {detected_id}")
+                        if user_id:
+                            add_blog_id_for_user(user_id, detected_id)
             except Exception as e:
                 logger.debug(f"블로그 ID 감지 실패 (무시): {e}")
 
@@ -281,7 +285,8 @@ async def run(
                                 raise RuntimeError("세션 만료 — 실행 중단")
 
                         body, page_has_my_comment = await visit_and_extract(
-                            page, post_url, my_blog_id
+                            page, post_url, my_blog_id,
+                            my_blog_ids=my_blog_ids,
                         )
 
                         # DB vs 페이지 비교 로그

@@ -590,6 +590,9 @@ async def handle_discover_neighbors(
 
     config = get_user_bot_config(user_id)
     my_blog_id = (config or {}).get("naver_blog_id", "")
+    my_blog_ids = set((config or {}).get("naver_blog_ids", []))
+    if my_blog_id:
+        my_blog_ids.add(my_blog_id)
 
     uid_label = user_id[:8]
     logger.info(f"▶ 이웃 발견 시작: 키워드={keywords} (user={uid_label})")
@@ -603,7 +606,7 @@ async def handle_discover_neighbors(
                     raise RuntimeError("네이버 로그인 실패 — 쿠키 재업로드 필요")
                 return await discover_neighbors(
                     page=page, keywords=keywords, user_id=user_id,
-                    my_blog_id=my_blog_id,
+                    my_blog_id=my_blog_id, my_blog_ids=my_blog_ids,
                 )
             finally:
                 await browser.close()
@@ -637,10 +640,13 @@ async def handle_visit_neighbors(
                 logged_in = await ensure_login_cookie_only(context, page, user_id)
                 if not logged_in:
                     raise RuntimeError("네이버 로그인 실패 — 쿠키 재업로드 필요")
+                my_blog_ids_set = set(config.get("naver_blog_ids", []))
+                my_blog_ids_set.add(config["naver_blog_id"])
                 result = await visit_neighbors(
                     page=page, context=context, user_id=user_id,
                     my_blog_id=config["naver_blog_id"],
                     settings=config["settings"],
+                    my_blog_ids=my_blog_ids_set,
                 )
             finally:
                 await browser.close()
@@ -828,11 +834,13 @@ async def handle_extract_blog_id(user_id: str | None = None) -> dict:
                 if not blog_id:
                     raise RuntimeError("블로그 ID 추출 실패 — 블로그가 없거나 접근 불가")
 
-                # bot_settings에 naver_blog_id만 업데이트
+                # bot_settings에 naver_blog_id 업데이트 + 배열에도 추가
                 sb = get_supabase()
                 sb.table("bot_settings").update(
                     {"naver_blog_id": blog_id}
                 ).eq("user_id", user_id).execute()
+                from src.storage.supabase_client import add_blog_id_for_user
+                add_blog_id_for_user(user_id, blog_id)
 
                 logger.info(f"✓ 블로그 ID 추출 완료: {blog_id} (user={uid_label})")
                 return {"message": f"블로그 ID 감지: {blog_id}", "blog_id": blog_id}

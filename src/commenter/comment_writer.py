@@ -62,16 +62,28 @@ _CAPTCHA_INDICATORS = [
 
 
 async def visit_and_extract(
-    page: Page, post_url: str, my_blog_id: str | None = None
+    page: Page,
+    post_url: str,
+    my_blog_id: str | None = None,
+    my_blog_ids: set[str] | None = None,
 ) -> tuple[str, bool | None]:
     """
     게시물 방문 → 읽기 시뮬레이션 → 본문 텍스트 추출 + 내 댓글 존재 확인.
     배치 댓글 생성을 위해 본문만 가져오고 댓글은 작성하지 않음.
 
+    Args:
+        my_blog_id: 대표 블로그 ID (하위 호환)
+        my_blog_ids: 제외할 모든 블로그 ID 세트 (다중 ID 지원)
+
     Returns:
         (본문 텍스트, 내 댓글 존재 여부)
-        my_blog_id 미제공 시 존재 여부는 None.
+        my_blog_id/my_blog_ids 모두 미제공 시 존재 여부는 None.
     """
+    # 제외 ID 세트 구성
+    check_ids = my_blog_ids or (set() if not my_blog_id else {my_blog_id})
+    if my_blog_id:
+        check_ids.add(my_blog_id)
+
     try:
         await page.goto(post_url, timeout=PAGE_LOAD_TIMEOUT)
         await page.wait_for_load_state("domcontentloaded", timeout=PAGE_LOAD_TIMEOUT)
@@ -83,10 +95,10 @@ async def visit_and_extract(
         body = await _extract_post_body(target_frame)
         logger.debug(f"본문 추출 완료 ({len(body)}자): {post_url[:60]}")
 
-        # 내 댓글 존재 확인 (my_blog_id 제공 시)
+        # 내 댓글 존재 확인
         my_comment_exists = None
-        if my_blog_id:
-            my_comment_exists = await _check_my_comment(target_frame, my_blog_id)
+        if check_ids:
+            my_comment_exists = await _check_my_comment(target_frame, check_ids)
 
         return body, my_comment_exists
     except Exception as e:
@@ -94,13 +106,17 @@ async def visit_and_extract(
         return "", None
 
 
-async def _check_my_comment(frame: Frame, my_blog_id: str) -> bool:
+async def _check_my_comment(frame: Frame, my_blog_ids: set[str]) -> bool:
     """
-    댓글 영역에서 내 blog_id로 작성된 댓글이 있는지 확인.
-    댓글 작성자 프로필 링크에 blog.naver.com/{my_blog_id}가 포함되면 True.
+    댓글 영역에서 내 blog_id(들)로 작성된 댓글이 있는지 확인.
+    다중 블로그 ID를 지원하여 모든 부계정 댓글도 감지.
     """
+    import json
+    # JS에 안전하게 전달하기 위해 JSON 배열로 변환
+    ids_json = json.dumps(list(my_blog_ids))
     try:
         found = await frame.evaluate(f'''() => {{
+            const myIds = {ids_json};
             // 댓글 영역의 모든 프로필 링크 검색
             const links = document.querySelectorAll(
                 '.u_cbox_info a[href], .u_cbox_nick a[href], ' +
@@ -108,9 +124,11 @@ async def _check_my_comment(frame: Frame, my_blog_id: str) -> bool:
             );
             for (const link of links) {{
                 const href = link.getAttribute('href') || '';
-                if (href.includes('blog.naver.com/{my_blog_id}') ||
-                    href.includes('/{my_blog_id}')) {{
-                    return true;
+                for (const myId of myIds) {{
+                    if (href.includes('blog.naver.com/' + myId) ||
+                        href.includes('/' + myId)) {{
+                        return true;
+                    }}
                 }}
             }}
             // 닉네임 텍스트에서도 검색 (프로필 링크 없는 경우)
@@ -119,8 +137,10 @@ async def _check_my_comment(frame: Frame, my_blog_id: str) -> bool:
             );
             for (const nick of nicks) {{
                 const onclick = nick.getAttribute('onclick') || '';
-                if (onclick.includes('{my_blog_id}')) {{
-                    return true;
+                for (const myId of myIds) {{
+                    if (onclick.includes(myId)) {{
+                        return true;
+                    }}
                 }}
             }}
             return false;

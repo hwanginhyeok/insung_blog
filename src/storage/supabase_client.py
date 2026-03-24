@@ -143,9 +143,22 @@ def get_user_bot_config(user_id: str) -> dict | None:
         if cookies_result.data and cookies_result.data[0].get("cookie_data"):
             cookies = cookies_result.data[0]["cookie_data"]
 
+        # 다중 블로그 ID: naver_blog_ids가 비어있으면 naver_blog_id로 폴백
+        raw_ids = settings_row.get("naver_blog_ids") or []
+        if isinstance(raw_ids, str):
+            import json as _json
+            try:
+                raw_ids = _json.loads(raw_ids)
+            except Exception:
+                raw_ids = []
+        naver_blog_ids = list({bid for bid in raw_ids if bid})
+        if naver_blog_id and naver_blog_id not in naver_blog_ids:
+            naver_blog_ids.append(naver_blog_id)
+
         return {
             "user_id": user_id,
             "naver_blog_id": naver_blog_id,
+            "naver_blog_ids": naver_blog_ids,
             "cookies": cookies,
             "has_cookies": cookies is not None,
             "settings": {
@@ -162,6 +175,55 @@ def get_user_bot_config(user_id: str) -> dict | None:
     except Exception as e:
         logger.error(f"사용자 {user_id[:8]} 봇 설정 로드 실패: {e}")
         return None
+
+
+def add_blog_id_for_user(user_id: str, blog_id: str) -> bool:
+    """
+    사용자의 naver_blog_ids 배열에 블로그 ID를 추가 (중복 방지).
+    naver_blog_id(대표 ID)가 비어있으면 함께 설정.
+    Returns: 추가 성공 여부
+    """
+    if not blog_id:
+        return False
+    try:
+        sb = get_supabase()
+        result = (
+            sb.table("bot_settings")
+            .select("naver_blog_id, naver_blog_ids")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not result.data:
+            return False
+
+        row = result.data[0]
+        existing_ids = row.get("naver_blog_ids") or []
+        if isinstance(existing_ids, str):
+            import json as _json
+            try:
+                existing_ids = _json.loads(existing_ids)
+            except Exception:
+                existing_ids = []
+
+        # 이미 존재하면 스킵
+        if blog_id in existing_ids:
+            return False
+
+        # 배열에 추가
+        new_ids = existing_ids + [blog_id]
+        update_data: dict = {"naver_blog_ids": new_ids}
+
+        # 대표 ID가 비어있으면 함께 설정
+        if not row.get("naver_blog_id"):
+            update_data["naver_blog_id"] = blog_id
+
+        sb.table("bot_settings").update(update_data).eq("user_id", user_id).execute()
+        logger.info(f"블로그 ID 추가: {blog_id} (user={user_id[:8]}, 총 {len(new_ids)}개)")
+        return True
+    except Exception as e:
+        logger.error(f"블로그 ID 추가 실패: {e}")
+        return False
 
 
 # ── generation_queue ──────────────────────────────────────────────────────

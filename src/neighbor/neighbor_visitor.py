@@ -43,6 +43,7 @@ async def visit_neighbors(
     user_id: str,
     my_blog_id: str,
     settings: dict,
+    my_blog_ids: set[str] | None = None,
 ) -> dict:
     """
     최근 방문하지 않은 이웃을 방문 → AI 댓글 생성 → 이웃 아니면 서로이웃 신청.
@@ -84,7 +85,8 @@ async def visit_neighbors(
             # 1. 댓글 생성
             count = await _visit_one_neighbor(
                 page=page, context=context, blog_id=blog_id,
-                my_blog_id=my_blog_id, user_id=user_id,
+                my_blog_id=my_blog_id, my_blog_ids=my_blog_ids,
+                user_id=user_id,
                 approval_mode=approval_mode, comment_prompt=comment_prompt,
             )
             visited += 1
@@ -165,6 +167,7 @@ async def _visit_one_neighbor(
     user_id: str,
     approval_mode: str,
     comment_prompt: str | None,
+    my_blog_ids: set[str] | None = None,
 ) -> int:
     """블로거 1명 방문 → 게시물 수집 → AI 댓글 생성. 생성된 댓글 수 반환."""
     # 게시물 수집 (최대 5개) — collect_posts는 (url, title) 튜플 리스트 반환
@@ -188,7 +191,8 @@ async def _visit_one_neighbor(
     for post_url, post_title in target_posts:
         try:
             body, has_my_comment = await visit_and_extract(
-                page, post_url, my_blog_id
+                page, post_url, my_blog_id,
+                my_blog_ids=my_blog_ids,
             )
             if has_my_comment:
                 continue
