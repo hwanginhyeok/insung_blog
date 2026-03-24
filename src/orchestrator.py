@@ -25,7 +25,7 @@ from config.settings import (
     MAX_BLOGGERS_PER_DAY,
     MAX_COMMENTS_PER_DAY,
 )
-from src.auth.naver_login import ensure_login, ensure_login_cookie_only
+from src.auth.naver_login import ensure_login, ensure_login_cookie_only, extract_blog_id
 from src.auth.session_manager import check_and_refresh_session, get_session_status
 from src.utils.telegram_notifier import notify_login_failure
 from src.collectors.comment_collector import collect_commenters
@@ -155,12 +155,36 @@ async def run(
                 await notify_login_failure(msg)
                 raise RuntimeError(f"{msg} — 실행 중단")
 
+            # ── 블로그 ID 제외 목록 구성 (자기 블로그 방문 방지) ──
+            # 한 사용자가 여러 블로그 ID를 가질 수 있으므로, 저장된 ID + 실제 감지 ID 모두 제외
+            my_blog_ids: set[str] = set()
+            if my_blog_id:
+                my_blog_ids.add(my_blog_id)
+            # .env MY_BLOG_ID도 항상 포함 (레거시 호환)
+            env_blog_id = os.environ.get("MY_BLOG_ID", "")
+            if env_blog_id:
+                my_blog_ids.add(env_blog_id)
+            # 로그인 후 실제 블로그 ID 감지
+            try:
+                detected_id = await extract_blog_id(context, page)
+                if detected_id:
+                    my_blog_ids.add(detected_id)
+                    if detected_id != my_blog_id:
+                        logger.warning(
+                            f"블로그 ID 불일치! 저장={my_blog_id}, 실제={detected_id} "
+                            f"— 둘 다 제외 목록에 추가"
+                        )
+            except Exception as e:
+                logger.debug(f"블로그 ID 감지 실패 (무시): {e}")
+
+            logger.info(f"자기 블로그 제외 목록: {my_blog_ids}")
+
             # 댓글 작성자 수집 (test_visit 지정 시 건너뜀)
             if test_visit:
                 commenters = [test_visit]
                 logger.info(f"[test-visit] commenter 수집 건너뜀 → {test_visit} 직접 방문")
             else:
-                commenters = await collect_commenters(page, my_blog_id)
+                commenters = await collect_commenters(page, my_blog_id, my_blog_ids=my_blog_ids)
                 if not commenters:
                     logger.info("수집된 댓글 작성자 없음 — 종료")
                     return
@@ -188,6 +212,11 @@ async def run(
                 if bloggers_visited >= remaining_quota:
                     logger.info("오늘 방문 한도 달성 — 중단")
                     break
+
+                # 자기 블로그 이중 체크 (collect_commenters에서 이미 제외하지만 안전장치)
+                if blog_id in my_blog_ids:
+                    logger.debug(f"{blog_id}: 자기 블로그 — 스킵")
+                    continue
 
                 if is_blogger_visited_today(blog_id, user_id=user_id):
                     logger.debug(f"{blog_id}: 오늘 이미 방문 — 스킵")

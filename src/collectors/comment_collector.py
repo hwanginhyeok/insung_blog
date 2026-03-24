@@ -25,25 +25,40 @@ from src.utils.delay import delay_short
 from src.utils.logger import logger
 
 
-async def collect_commenters(page: Page, my_blog_id: str) -> list[str]:
+async def collect_commenters(
+    page: Page,
+    my_blog_id: str,
+    my_blog_ids: set[str] | None = None,
+) -> list[str]:
     """
     내 블로그 댓글 작성자 blog_id 목록 반환 (중복 제거, 자기 자신 제외)
+
+    Args:
+        my_blog_id: 대표 블로그 ID (관리자 페이지 접근용)
+        my_blog_ids: 제외할 블로그 ID 전체 세트 (한 사용자가 여러 ID 보유 가능)
     """
+    # 제외 목록: my_blog_ids가 없으면 my_blog_id 하나만
+    exclude_ids = my_blog_ids or {my_blog_id}
+    exclude_ids.add(my_blog_id)  # 항상 포함
+
     blog_ids = await _collect_from_admin(page, my_blog_id)
 
     if not blog_ids:
         logger.info("관리자 페이지 파싱 실패 — 폴백: 게시물 직접 방문")
         blog_ids = await _collect_from_posts_fallback(page, my_blog_id)
 
-    # 자기 자신 제거 + 중복 제거 (순서 유지)
+    # 자기 자신(모든 ID) 제거 + 중복 제거 (순서 유지)
     seen: set[str] = set()
     result: list[str] = []
     for bid in blog_ids:
-        if bid and bid != my_blog_id and bid not in seen:
+        if bid and bid not in exclude_ids and bid not in seen:
             seen.add(bid)
             result.append(bid)
 
-    logger.info(f"수집된 댓글 작성자: {len(result)}명")
+    if len(exclude_ids) > 1:
+        logger.info(f"수집된 댓글 작성자: {len(result)}명 (제외 ID: {exclude_ids})")
+    else:
+        logger.info(f"수집된 댓글 작성자: {len(result)}명")
     return result
 
 
