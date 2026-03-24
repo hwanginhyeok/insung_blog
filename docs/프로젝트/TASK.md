@@ -58,6 +58,9 @@ Supabase (공유 제어 평면)
 | # | 작업 | 중요도 | 상태 | 비고 |
 |---|------|--------|------|------|
 | SAVE-DRAFT | 네이버 블로그 임시저장 기능 (HTML 주입 + 임시저장) | P1 | ✅ 구현완료 | E2E 테스트 필요 (브라우저+워커) |
+| MULTI-BLOG-ID | 블로그 ID 다중 관리 + 자기 블로그 방문 차단 | P0 | ✅ 완료 | naver_blog_ids 배열 + 자동감지 + 전체 사용처 수정. 마이그레이션 00023 실행 필요 |
+| WORKER-PARALLEL | 워커 병렬 실행 (다중 사용자 동시 처리) | P0 | ✅ 완료 | create_task + Semaphore(3) + 같은 명령만 중복 차단 |
+| SECURITY-REVIEW | 전체 기능 보안 점검 + 에러 수정 | P1 | ✅ 완료 | calendar status 화이트리스트 + payload 크기 제한 |
 | WORKER-CMD | command_worker에 추천/동기화/테마분석 명령 핸들러 추가 | P1 | 대기 | 웹에서 트리거 가능하게 |
 | ADMIN-BOT-DETAIL | UserDetailModal에 봇 실행 이력 탭 추가 | P2 | 대기 | 상세 일별 차트 + 로그 테이블 |
 | NAV-MOBILE | 드롭다운 메뉴 모바일 반응형 검증 및 수정 | P2 | 대기 | 야간 작업에서 NAV-LAYOUT 후속 |
