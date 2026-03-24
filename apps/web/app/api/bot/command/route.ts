@@ -58,12 +58,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 중복 방지: 해당 사용자의 pending 또는 running 상태 명령이 있으면 거부
+  // 중복 방지: 같은 타입의 명령만 차단 (다른 명령은 동시 실행 허용)
+  // 예: run + publish 동시 OK, run + run 차단
   const admin = createAdminClient();
   const { data: active } = await admin
     .from("bot_commands")
     .select("id, command, status")
     .eq("user_id", user.id)
+    .eq("command", command)
     .in("status", ["pending", "running"])
     .limit(1)
     .maybeSingle();
@@ -71,7 +73,7 @@ export async function POST(req: NextRequest) {
   if (active) {
     return NextResponse.json(
       {
-        error: "이미 진행 중인 명령이 있습니다",
+        error: `이미 진행 중인 ${command} 명령이 있습니다`,
         activeCommand: active,
       },
       { status: 409 }

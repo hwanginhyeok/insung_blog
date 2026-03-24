@@ -35,8 +35,9 @@ logger = setup_logger("command_worker")
 
 POLL_INTERVAL = 10  # 초
 
-# Playwright 동시 실행 제한 (WSL2 메모리 보호)
-_browser_semaphore = asyncio.Semaphore(2)
+# Playwright 동시 실행 제한 — .env MAX_CONCURRENT_BROWSERS로 조절 가능 (기본 3)
+MAX_CONCURRENT_BROWSERS = int(os.environ.get("MAX_CONCURRENT_BROWSERS", "3"))
+_browser_semaphore = asyncio.Semaphore(MAX_CONCURRENT_BROWSERS)
 
 # 종료 시그널 처리
 _shutdown = False
@@ -966,29 +967,58 @@ async def process_command(cmd: dict) -> None:
 
 
 async def main_loop() -> None:
-    """10초 간격 폴링 루프."""
+    """폴링 루프 — 명령을 병렬로 실행 (Semaphore가 동시 실행 제한)."""
     _lock_fd = _acquire_lock()  # noqa: F841 — 변수 유지해야 잠금 유지
 
     # 워커 재시작 시 이전 크래시로 남은 stale 명령 정리
     await _cleanup_stale_commands()
 
-    logger.info("╔════════════════════════════════════════════╗")
-    logger.info("║   명령 큐 워커 시작 (10초 간격 폴링)        ║")
-    logger.info("╚════════════════════════════════════════════╝")
+    logger.info("╔════════════════════════════════════════════════════════╗")
+    logger.info(f"║   명령 큐 워커 시작 (병렬 실행, 최대 {MAX_CONCURRENT_BROWSERS}개)       ║")
+    logger.info("╚════════════════════════════════════════════════════════╝")
 
     # 시작 시 admin user_id 캐싱 (실패하면 즉시 종료)
     get_admin_user_id()
 
+    _active_tasks: set[asyncio.Task] = set()
+
     while not _shutdown:
+        # 완료된 태스크 정리 + 예외 로깅
+        done = {t for t in _active_tasks if t.done()}
+        for t in done:
+            exc = t.exception()
+            if exc:
+                logger.error(f"태스크 예외: {exc}")
+        _active_tasks -= done
+
+        # pending 명령 claim
         cmd = claim_command()
         if cmd:
-            await process_command(cmd)
+            active_count = len(_active_tasks)
+            logger.info(f"[{active_count + 1}/{MAX_CONCURRENT_BROWSERS} 슬롯] 명령 할당: {cmd['command']}")
+            task = asyncio.create_task(process_command(cmd))
+            _active_tasks.add(task)
+            # 연속으로 더 가져올 수 있으면 바로 다음 명령 확인 (Semaphore가 제한)
+            continue
         else:
             # pending 없으면 대기
             for _ in range(POLL_INTERVAL):
                 if _shutdown:
                     break
                 await asyncio.sleep(1)
+
+    # 종료 시 실행 중인 태스크 대기
+    if _active_tasks:
+        logger.info(f"종료 대기: {len(_active_tasks)}개 태스크 실행 중...")
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*_active_tasks, return_exceptions=True),
+                timeout=60,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("종료 타임아웃 (60초) — 남은 태스크 강제 종료")
+            for t in _active_tasks:
+                t.cancel()
 
     logger.info("워커 정상 종료")
 
