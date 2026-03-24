@@ -166,11 +166,20 @@ export async function PATCH(req: NextRequest) {
   }
 
   // 허용 필드만 화이트리스트로 추출 (user_id 등 변조 방지)
+  const VALID_STATUSES = ["planned", "in_progress", "completed", "cancelled"];
   const updates: Record<string, string> = {};
   if (topic !== undefined) updates.topic = topic;
   if (category !== undefined) updates.category = category;
   if (memo !== undefined) updates.memo = memo;
-  if (status !== undefined) updates.status = status;
+  if (status !== undefined) {
+    if (!VALID_STATUSES.includes(status)) {
+      return NextResponse.json(
+        { error: `유효하지 않은 상태: ${status}. 허용: ${VALID_STATUSES.join(", ")}` },
+        { status: 400 }
+      );
+    }
+    updates.status = status;
+  }
   if (planned_date !== undefined) updates.planned_date = planned_date;
 
   const { error } = await supabase

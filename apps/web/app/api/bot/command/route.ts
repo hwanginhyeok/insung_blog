@@ -35,6 +35,14 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { command, payload } = body as { command: string; payload?: Record<string, unknown> };
 
+  // payload 크기 제한 (1MB 초과 시 거부)
+  if (payload && JSON.stringify(payload).length > 1_000_000) {
+    return NextResponse.json(
+      { error: "payload가 너무 큽니다 (최대 1MB)" },
+      { status: 400 }
+    );
+  }
+
   if (!command || !VALID_COMMANDS.includes(command as BotCommand)) {
     return NextResponse.json(
       { error: `유효하지 않은 명령: ${command}. 허용: ${VALID_COMMANDS.join(", ")}` },
