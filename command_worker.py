@@ -930,6 +930,28 @@ async def _cleanup_stale_commands() -> int:
         return 0
 
 
+async def _cleanup_stale_generation_queue() -> int:
+    """워커 재시작 시 publishing/saving 상태로 멈춘 generation_queue를 failed로 복구."""
+    try:
+        sb = get_supabase()
+        total = 0
+        for stale_status, fail_status in [("publishing", "failed"), ("saving", "save_failed")]:
+            result = (
+                sb.table("generation_queue")
+                .update({"status": fail_status})
+                .eq("status", stale_status)
+                .execute()
+            )
+            count = len(result.data) if result.data else 0
+            if count:
+                logger.warning(f"generation_queue 고아 복구: {stale_status} → {fail_status} ({count}건)")
+                total += count
+        return total
+    except Exception as e:
+        logger.error(f"generation_queue 고아 복구 실패: {e}")
+        return 0
+
+
 async def _notify_stale_recovery(commands: list[dict]) -> None:
     """워커 재시작으로 복구된 명령에 대해 사용자 알림 전송."""
     from src.utils.telegram_notifier import send_telegram_message
@@ -1006,8 +1028,9 @@ async def main_loop() -> None:
     """폴링 루프 — 명령을 병렬로 실행 (Semaphore가 동시 실행 제한)."""
     _lock_fd = _acquire_lock()  # noqa: F841 — 변수 유지해야 잠금 유지
 
-    # 워커 재시작 시 이전 크래시로 남은 stale 명령 정리
+    # 워커 재시작 시 이전 크래시로 남은 고아 상태 정리
     await _cleanup_stale_commands()
+    await _cleanup_stale_generation_queue()
 
     logger.info("╔════════════════════════════════════════════════════════╗")
     logger.info(f"║   명령 큐 워커 시작 (병렬 실행, 최대 {MAX_CONCURRENT_BROWSERS}개)       ║")
