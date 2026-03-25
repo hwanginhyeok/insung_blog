@@ -44,10 +44,23 @@ _INVALID_RESPONSE_PATTERNS = [
     "invalid",
     "unable to",
     "cannot",
+    "마케팅 글",
+    "홍보",
+    "광고 글",
+    "스팸",
+    "어뷰징",
+    "처럼 보이",
+    "같은 느낌이",
+    "추천하기 어렵",
 ]
 
 # 게시물 작성 스타일과 통일된 규칙
 _BASE_RULES = """\
+[필수 형식 규칙 — 반드시 지킬 것]
+- 반드시 3~5줄, 줄바꿈(\\n)으로 호흡 나누기
+- 총 글자수 120~180자 (한 줄짜리 짧은 댓글 작성 시 실패 처리됨)
+- 마지막 줄은 감사/응원으로 마무리
+
 말투와 스타일:
 - 친근한 해요체 (~했어요, ~이에요, ~예요, ~네요)
 - 가볍고 일상적인 톤, 센스있고 위트있게
@@ -58,19 +71,18 @@ _BASE_RULES = """\
 - 본문에서 구체적 정보 2~3가지를 골라서 언급 (메뉴, 장소, 가격, 할인, 분위기 등)
 - 확실하게 보이는 것만 언급 (추측 금지)
 - 공감 + 나도 해보고 싶다는 느낌 + 감사 표현을 자연스럽게 섞기
+- 마케팅/광고성 글이더라도 긍정적인 댓글을 작성. "이건 광고입니다" 같은 메타 댓글 금지.
+- 글의 의도를 평가하지 말 것. 항상 독자 입장에서 공감하는 댓글만 작성.
 
-형식:
-- 반드시 3~5줄, 줄바꿈(\\n)으로 호흡 나누기
-- 총 글자수 120~180자 (이 범위를 반드시 지킬 것, 한 줄짜리 짧은 댓글 금지)
-- 마지막 줄은 감사/응원으로 마무리
 출력: 댓글 텍스트만 (번호, 따옴표 없이)"""
 
 # 게시물 작성 스타일과 통일된 톤
 _SYSTEM_TONE = (
     "너는 네이버 블로그를 자주 보는 30대 직장인이야. "
+    "반드시 3줄 이상, 120자 이상으로 댓글을 써. 한 줄짜리 짧은 댓글은 절대 금지. "
     "글을 꼼꼼히 읽고, 본문 속 구체적인 정보 2~3가지를 골라 "
     "센스있고 위트있게 공감 댓글을 남겨. "
-    "줄바꿈으로 호흡을 나누고, 이모티콘도 자연스럽게 써."
+    "줄바꿈(\\n)으로 호흡을 나누고, 이모티콘도 자연스럽게 써."
 )
 
 # ── D-1: 톤 랜덤화 ────────────────────────────────────────────────────────────
@@ -314,7 +326,13 @@ def generate_comment(
                 avoid_starters=avoid_starters,
                 category_hint=category_hint,
             )
-            user_message = f"[제목] {post_title}\n\n[본문]\n{body}"
+            user_message = (
+                f"[제목] {post_title}\n\n[본문]\n{body}\n\n"
+                "위 게시물에 3줄 이상, 120자 이상의 댓글을 작성해.\n"
+                "예시: 와 여기 분위기 진짜 좋네요! 사진 보니까 바로 가고 싶어졌어요 ㅎㅎ\\n"
+                "가격도 합리적이고 메뉴도 다양해서 선택 장애 올 것 같아요\\n"
+                "다음에 친구들이랑 꼭 가봐야겠어요 좋은 정보 감사합니다 ❤️"
+            )
 
             response = client.messages.create(
                 model=COMMENT_AI_MODEL,
@@ -468,7 +486,8 @@ def generate_comments_batch(
     user_message += (
         f"\n\n위 {len(valid_indices)}개 게시물에 댓글을 1개씩 작성해. "
         "각 댓글은 본문 속 정보 2~3가지를 활용해 3~5줄(120~180자)로 작성.\n"
-        "한 줄짜리 짧은 댓글 금지. 반드시 줄바꿈으로 나눠서 3줄 이상.\n"
+        "⚠️ 한 줄짜리 짧은 댓글 절대 금지. 반드시 줄바꿈(\\n)으로 나눠서 3줄 이상.\n"
+        "120자 미만인 댓글은 실패 처리되므로 반드시 120자 이상 작성.\n"
         "서로 다른 표현을 써서 다양하게.\n"
         "출력 형식 (번호: 댓글, 줄바꿈은 \\n으로):\n"
         "1: 와 20% 할인 받으셨군요! 평일 가면 더 여유롭겠다 ㅎㅎ\\n사진 보니까 분위기도 너무 좋고 인테리어가 감성적이에요\\n다음에 꼭 한번 가봐야겠어요 좋은 정보 감사합니다 ❤️\n"
@@ -501,11 +520,29 @@ def generate_comments_batch(
                 raw = parsed[seq]
                 if raw and _is_valid_comment(raw):
                     comment = _clean_comment(raw)
+                    # 최소 글자수 체크 (단건과 동일 기준)
+                    if len(comment) < 80:
+                        logger.warning(f"배치 댓글 너무 짧음 ({len(comment)}자) — 단건 재시도 예정")
+                        continue
                     if not any(_is_similar(comment, rc) for rc in recent_comments_local):
                         # D-3: 후처리 적용
                         comment = post_process(comment)
                         results[i] = comment
                         recent_comments_local.append(comment)
+
+            # 배치에서 짧거나 실패한 댓글은 단건으로 재시도
+            fallback_category = None
+            for seq, i in enumerate(valid_indices):
+                fallback_category = _detect_category(posts[i].get("title", ""), posts[i].get("body", ""))
+                if results[i] == pick_phrase(posts[i]["title"], category=fallback_category):
+                    retry_comment = generate_comment(
+                        posts[i]["body"], posts[i]["title"],
+                        recent_comments_local, custom_prompt=custom_prompt,
+                    )
+                    if len(retry_comment) >= 80:
+                        results[i] = retry_comment
+                        recent_comments_local.append(retry_comment)
+                        logger.info(f"배치 실패 → 단건 재시도 성공 ({len(retry_comment)}자)")
 
             logger.info(
                 f"배치 댓글 생성 완료: {len(valid_indices)}개 요청, "
