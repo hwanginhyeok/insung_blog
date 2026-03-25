@@ -14,6 +14,7 @@
   - user_id 지정 시 → get_user_bot_config()로 설정/쿠키/blog_id 로드
   - user_id=None 시 → 기존 .env 기반 admin 실행 (하위 호환)
 """
+import asyncio
 import os
 import time
 
@@ -142,6 +143,7 @@ async def run(
     start_time = time.time()
 
     try:
+        # ── 1단계: 로그인 + 수집용 브라우저 (수집 후 닫음) ──
         async with async_playwright() as pw:
             browser, context, page = await create_browser(pw, headless=True)
 
@@ -212,216 +214,232 @@ async def run(
                 f"수집된 댓글 작성자: {len(commenters)}명"
             )
 
-            for blog_id in commenters:
-                if bloggers_visited >= remaining_quota:
-                    logger.info("오늘 방문 한도 달성 — 중단")
-                    break
+            # 수집용 브라우저 닫기 (이후 병렬 방문은 각자 브라우저를 열음)
+            await browser.close()
 
-                # 자기 블로그 이중 체크 (collect_commenters에서 이미 제외하지만 안전장치)
-                if blog_id in my_blog_ids:
-                    logger.debug(f"{blog_id}: 자기 블로그 — 스킵")
-                    continue
+        # ── 블로거 방문 (탄력적 병렬 실행) ──
+        # 유저당 할당 슬롯 수만큼 블로거를 동시 방문
+        from command_worker import get_slots_for_user, _browser_semaphore, MAX_CONCURRENT_BROWSERS
 
-                if is_blogger_visited_today(blog_id, user_id=user_id):
-                    logger.debug(f"{blog_id}: 오늘 이미 방문 — 스킵")
-                    continue
+        # 방문 대상 필터링 (스킵 제거)
+        visit_queue: list[str] = []
+        for blog_id in commenters:
+            if len(visit_queue) >= remaining_quota:
+                break
+            if blog_id in my_blog_ids:
+                continue
+            if is_blogger_visited_today(blog_id, user_id=user_id):
+                continue
+            visit_queue.append(blog_id)
 
-                # 오토 블로거 체크 (스킵하지 않고 로그만 — 데이터 수집용)
-                is_auto, score, reason = is_auto_blogger(blog_id)
-                if is_auto:
-                    logger.info(f"[데이터] {blog_id} 오토 의심(스킵 안 함): {reason} (점수={score})")
-                elif score >= AUTO_BLOGGER_SCORE_LOW:
-                    logger.info(f"[데이터] {blog_id} 오토 주의: 점수={score}")
+        logger.info(f"방문 대상: {len(visit_queue)}명")
 
-                logger.info(f"▶ 방문: {blog_id}")
-                posts = await collect_posts(page, blog_id)
+        # 단일 블로거 방문 함수 (병렬 실행 단위 — 각자 브라우저 생성/해제)
+        async def _visit_one(bid: str, pw_instance) -> tuple[int, int, int]:
+            """블로거 1명 방문. 반환: (방문성공, 댓글작성, 댓글실패)"""
+            v, w, f = 0, 0, 0
 
-                if not posts:
-                    logger.info(f"{blog_id}: 게시물 없음 — 스킵")
-                    continue
+            # 오토 블로거 체크 (로그만)
+            _is_auto, _score, _reason = is_auto_blogger(bid)
+            if _is_auto:
+                logger.info(f"[데이터] {bid} 오토 의심: {_reason} (점수={_score})")
+            elif _score >= AUTO_BLOGGER_SCORE_LOW:
+                logger.info(f"[데이터] {bid} 오토 주의: 점수={_score}")
 
-                # 댓글 대상 필터링 (DB 기준)
-                eligible = []
-                for url, title in posts:
-                    db_commented = is_post_commented(url, user_id=user_id)
-                    if not db_commented:
-                        eligible.append((url, title))
+            async with _browser_semaphore:
+                _browser, _context, _page = await create_browser(pw_instance, headless=True)
+                try:
+                    # 로그인
+                    if use_cookie_only:
+                        logged = await ensure_login_cookie_only(_context, _page, user_id)
                     else:
-                        logger.debug(f"[DB 체크] 이미 댓글 있음: {url[:60]}")
+                        logged = await ensure_login(_context, _page, naver_id, naver_pw)
+                    if not logged:
+                        logger.warning(f"{bid}: 로그인 실패 — 스킵")
+                        return v, w, f
 
-                if not eligible:
-                    logger.info(f"{blog_id}: 댓글 가능한 게시물 없음 (DB 기준) — 스킵")
-                    continue
+                    logger.info(f"▶ 방문: {bid}")
+                    posts = await collect_posts(_page, bid)
+                    if not posts:
+                        logger.info(f"{bid}: 게시물 없음 — 스킵")
+                        return v, w, f
 
-                # 일일 한도까지만
-                comment_room = max_comments - count_today_comments(user_id=user_id)
-                if comment_room <= 0:
-                    logger.info(f"오늘 댓글 한도({max_comments}개) 달성 — 중단")
-                    break
-                eligible = eligible[:comment_room]
+                    # 댓글 대상 필터링
+                    eligible = [(url, title) for url, title in posts
+                                if not is_post_commented(url, user_id=user_id)]
+                    if not eligible:
+                        logger.info(f"{bid}: 댓글 가능한 게시물 없음 — 스킵")
+                        return v, w, f
 
-                blogger_had_comment = False
-                BATCH_SIZE = 3
+                    comment_room = max_comments - count_today_comments(user_id=user_id)
+                    if comment_room <= 0:
+                        return v, w, f
+                    eligible = eligible[:min(comment_room, 5)]
 
-                for batch_start in range(0, len(eligible), BATCH_SIZE):
-                    batch = eligible[batch_start:batch_start + BATCH_SIZE]
+                    blogger_had_comment = False
+                    BATCH_SIZE = 3
 
-                    # ── 1단계: 게시물 방문 + 본문 추출 + 페이지 댓글 존재 확인 ──
-                    batch_data: list[dict] = []
-                    for post_url, post_title in batch:
-                        # 주기적 세션 체크 (5개마다)
-                        total_processed = comments_written + comments_failed
-                        if total_processed > 0 and total_processed % 5 == 0:
-                            if use_cookie_only:
-                                # 다중 사용자: 쿠키 재검증
-                                from src.auth.naver_login import _is_logged_in
-                                session_ok = await _is_logged_in(page)
-                            else:
-                                session_ok = await check_and_refresh_session(
-                                    context, page, naver_id, naver_pw
-                                )
-                            if not session_ok:
-                                await notify_login_failure("세션 만료 — 댓글 작성 중단")
-                                raise RuntimeError("세션 만료 — 실행 중단")
+                    for batch_start in range(0, len(eligible), BATCH_SIZE):
+                        batch = eligible[batch_start:batch_start + BATCH_SIZE]
 
-                        body, page_has_my_comment = await visit_and_extract(
-                            page, post_url, my_blog_id,
-                            my_blog_ids=my_blog_ids,
-                        )
-
-                        # DB vs 페이지 비교 로그
-                        db_says = is_post_commented(post_url, user_id=user_id)
-                        if db_says and not page_has_my_comment:
-                            logger.info(
-                                f"[비교] DB=댓글있음, 페이지=없음 → 삭제됨? {post_url[:60]}"
+                        # 1단계: 본문 추출
+                        batch_data: list[dict] = []
+                        for post_url, post_title in batch:
+                            body, has_mine = await visit_and_extract(
+                                _page, post_url, my_blog_id,
+                                my_blog_ids=my_blog_ids,
                             )
-                        elif not db_says and page_has_my_comment:
-                            logger.info(
-                                f"[비교] DB=없음, 페이지=댓글있음 → DB 누락 {post_url[:60]}"
-                            )
+                            if has_mine:
+                                continue
+                            if body:
+                                batch_data.append({
+                                    "url": post_url, "title": post_title, "body": body,
+                                })
+                            await delay_between_comments()
 
-                        # 페이지에서 내 댓글이 이미 있으면 스킵
-                        if page_has_my_comment:
-                            logger.info(
-                                f"[페이지 체크] 내 댓글 이미 존재 — 스킵: {post_url[:60]}"
-                            )
+                        if not batch_data:
                             continue
 
-                        batch_data.append({
-                            "url": post_url,
-                            "title": post_title,
-                            "body": body,
-                        })
-                        await delay_between_comments()
+                        # 2단계: AI 댓글 생성
+                        ai_comments = generate_comments_batch(
+                            [{"body": d["body"], "title": d["title"]} for d in batch_data],
+                            custom_prompt=comment_prompt,
+                        )
+                        logger.info(
+                            f"배치 처리: {len(batch_data)}개 게시물 → "
+                            f"API 1회 호출 → {len(ai_comments)}개 댓글"
+                        )
 
-                    if not batch_data:
-                        continue
+                        # 3단계: 댓글 작성/등록
+                        for i, data in enumerate(batch_data):
+                            if count_today_comments(user_id=user_id) >= max_comments:
+                                break
 
-                    # ── 2단계: 배치 AI 댓글 생성 (API 1회) ──
-                    ai_comments = generate_comments_batch(
-                        [{"body": d["body"], "title": d["title"]} for d in batch_data],
-                        custom_prompt=comment_prompt,
-                    )
-                    logger.info(
-                        f"배치 처리: {len(batch_data)}개 게시물 → "
-                        f"API 1회 호출 → {len(ai_comments)}개 댓글"
-                    )
-
-                    # ── 3단계: 재방문 + 댓글 작성 (auto) 또는 대기 등록 (manual) ──
-                    for i, data in enumerate(batch_data):
-                        if count_today_comments(user_id=user_id) >= max_comments:
-                            logger.info(f"오늘 댓글 한도({max_comments}개) 달성 — 중단")
-                            break
-
-                        if approval_mode == "auto":
-                            # auto: 즉시 댓글 작성
-                            success, comment_text = await write_comment(
-                                page, data["url"], data["title"],
-                                dry_run=dry_run,
-                                context=context, naver_id=naver_id, naver_pw=naver_pw,
-                                comment_text=ai_comments[i],
-                            )
-                            record_comment(
-                                data["url"], blog_id, data["title"],
-                                comment_text, success,
-                                user_id=user_id,
-                            )
-
-                            if success:
-                                comments_written += 1
-                                blogger_had_comment = True
-                                # 교류 기록 저장
-                                record_interaction(
-                                    blog_id, "comment_sent",
-                                    post_url=data["url"],
-                                    content=comment_text[:200] if comment_text else None,
-                                    user_id=user_id,
+                            if approval_mode == "auto":
+                                success, comment_text = await write_comment(
+                                    _page, data["url"], data["title"],
+                                    dry_run=dry_run,
+                                    context=_context, naver_id=naver_id, naver_pw=naver_pw,
+                                    comment_text=ai_comments[i],
                                 )
-                                update_last_interaction(blog_id, user_id=user_id)
+                                record_comment(
+                                    data["url"], bid, data["title"],
+                                    comment_text, success, user_id=user_id,
+                                )
+                                if success:
+                                    w += 1
+                                    blogger_had_comment = True
+                                    record_interaction(
+                                        bid, "comment_sent",
+                                        post_url=data["url"],
+                                        content=comment_text[:200] if comment_text else None,
+                                        user_id=user_id,
+                                    )
+                                    update_last_interaction(bid, user_id=user_id)
+                                else:
+                                    f += 1
+                                    add_to_retry_queue(
+                                        blog_id=bid, post_url=data["url"],
+                                        post_title=data["title"],
+                                        fail_reason="auto 모드 작성 실패",
+                                        user_id=user_id,
+                                    )
                             else:
-                                comments_failed += 1
-                                add_to_retry_queue(
-                                    blog_id=blog_id,
-                                    post_url=data["url"],
+                                add_pending_comment_sb(
+                                    blog_id=bid, post_url=data["url"],
                                     post_title=data["title"],
-                                    fail_reason="auto 모드 작성 실패",
+                                    comment_text=ai_comments[i], user_id=user_id,
+                                )
+                                logger.info(f"승인 대기 등록: {data['url'][:60]}")
+                                blogger_had_comment = True
+                                record_interaction(
+                                    bid, "comment_sent",
+                                    post_url=data["url"],
+                                    content=ai_comments[i][:200] if ai_comments[i] else None,
                                     user_id=user_id,
                                 )
-                        else:
-                            # manual: Supabase pending에 저장 (댓글 작성 안 함)
-                            add_pending_comment_sb(
-                                blog_id=blog_id,
-                                post_url=data["url"],
-                                post_title=data["title"],
-                                comment_text=ai_comments[i],
-                                user_id=user_id,
-                            )
-                            logger.info(f"승인 대기 등록: {data['url'][:60]}")
-                            blogger_had_comment = True
-                            # 교류 기록 (pending이지만 방문은 함)
-                            record_interaction(
-                                blog_id, "comment_sent",
-                                post_url=data["url"],
-                                content=ai_comments[i][:200] if ai_comments[i] else None,
-                                user_id=user_id,
-                            )
-                            update_last_interaction(blog_id, user_id=user_id)
+                                update_last_interaction(bid, user_id=user_id)
 
-                        await delay_between_comments()
+                            await delay_between_comments()
 
-                if blogger_had_comment:
-                    mark_blogger_visited(blog_id, user_id=user_id)
-                    bloggers_visited += 1
-                    logger.info(f"✓ {blog_id} 방문 완료")
+                    if blogger_had_comment:
+                        mark_blogger_visited(bid, user_id=user_id)
+                        v = 1
+                        logger.info(f"✓ {bid} 방문 완료")
+                        upsert_neighbor(bid, user_id=user_id)
+                        if settings.get("auto_neighbor_request"):
+                            try:
+                                from src.neighbor.neighbor_checker import check_neighbor_status
+                                nb_status = await check_neighbor_status(_page, bid)
+                                if nb_status is None:
+                                    from src.neighbor.neighbor_requester import send_neighbor_request
+                                    req_msg = settings.get("neighbor_request_message", "")
+                                    max_req = settings.get("max_neighbor_requests_per_day", 10)
+                                    await send_neighbor_request(
+                                        _page, bid, req_msg, max_req, user_id=user_id,
+                                    )
+                            except Exception as e:
+                                logger.debug(f"자동 이웃 신청 실패 ({bid}): {e}")
+                finally:
+                    await _browser.close()
 
-                    # 이웃 DB 동기화 + 자동 신청
-                    upsert_neighbor(blog_id, user_id=user_id)
-                    if settings.get("auto_neighbor_request"):
-                        try:
-                            from src.neighbor.neighbor_checker import check_neighbor_status
-                            status = await check_neighbor_status(page, blog_id)
-                            if status is None:
-                                # 이웃이 아닌 경우 → 자동 신청
-                                from src.neighbor.neighbor_requester import send_neighbor_request
-                                req_msg = settings.get("neighbor_request_message", "")
-                                max_req = settings.get("max_neighbor_requests_per_day", 10)
-                                result = await send_neighbor_request(
-                                    page, blog_id, req_msg, max_req, user_id=user_id,
-                                )
-                                if result.get("success"):
-                                    logger.info(f"자동 서로이웃 신청 완료: {blog_id}")
-                        except Exception as e:
-                            logger.debug(f"자동 이웃 신청 실패 ({blog_id}): {e}")
+            return v, w, f
 
-                    await delay_between_bloggers()
+        # 병렬 실행: 유저당 할당 슬롯만큼 동시 방문
+        idx = 0
+        while idx < len(visit_queue):
+            slots = get_slots_for_user(user_id)
+            batch_size = min(slots, len(visit_queue) - idx)
+            batch_blogs = visit_queue[idx:idx + batch_size]
 
-            # ── retry_queue 재시도 처리 ──
-            retry_ok, retry_fail = await _process_retry_queue(
-                page, context, naver_id, naver_pw, my_blog_id, dry_run,
-                user_id=user_id,
+            logger.info(
+                f"[병렬 방문] {idx + 1}~{idx + batch_size}/{len(visit_queue)}명 "
+                f"(슬롯 {batch_size}/{MAX_CONCURRENT_BROWSERS})"
             )
-            comments_written += retry_ok
-            comments_failed += retry_fail
+
+            async with async_playwright() as pw_visit:
+                results = await asyncio.gather(
+                    *[_visit_one(bid, pw_visit) for bid in batch_blogs],
+                    return_exceptions=True,
+                )
+
+            for r in results:
+                if isinstance(r, Exception):
+                    logger.error(f"병렬 방문 예외: {r}")
+                    continue
+                v, w, f = r
+                bloggers_visited += v
+                comments_written += w
+                comments_failed += f
+
+            idx += batch_size
+
+            # 한도 체크
+            if bloggers_visited >= remaining_quota:
+                logger.info("오늘 방문 한도 달성 — 중단")
+                break
+            if count_today_comments(user_id=user_id) >= max_comments:
+                logger.info(f"오늘 댓글 한도({max_comments}개) 달성 — 중단")
+                break
+
+            await delay_between_bloggers()
+
+        # ── retry_queue 재시도 처리 (별도 브라우저) ──
+        async with async_playwright() as pw_retry:
+            r_browser, r_context, r_page = await create_browser(pw_retry, headless=True)
+            try:
+                if use_cookie_only:
+                    await ensure_login_cookie_only(r_context, r_page, user_id)
+                else:
+                    await ensure_login(r_context, r_page, naver_id, naver_pw)
+                retry_ok, retry_fail = await _process_retry_queue(
+                    r_page, r_context, naver_id, naver_pw, my_blog_id, dry_run,
+                    user_id=user_id,
+                )
+                comments_written += retry_ok
+                comments_failed += retry_fail
+            finally:
+                await r_browser.close()
 
     except Exception as e:
         run_error = str(e)

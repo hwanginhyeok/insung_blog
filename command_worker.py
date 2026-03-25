@@ -39,6 +39,42 @@ POLL_INTERVAL = 10  # 초
 MAX_CONCURRENT_BROWSERS = int(os.environ.get("MAX_CONCURRENT_BROWSERS", "3"))
 _browser_semaphore = asyncio.Semaphore(MAX_CONCURRENT_BROWSERS)
 
+# ── 유저별 슬롯 추적 (Elastic Semaphore) ──
+# 유저 혼자면 전체 슬롯 사용, 유저 늘면 공정 분배
+_user_active_slots: dict[str, int] = {}  # user_id → 현재 사용중 슬롯 수
+
+
+def get_slots_for_user(user_id: str | None) -> int:
+    """유저에게 할당 가능한 최대 슬롯 수 계산 (Elastic Semaphore).
+
+    유저 혼자면 전체 슬롯, 유저 늘면 공정 분배.
+    """
+    uid = user_id or "__admin__"
+    # 활성 유저 수 = 현재 슬롯 점유 중인 유저 수
+    # 신규 유저(아직 슬롯 미점유)는 자신을 포함하여 계산
+    active_set = set(_user_active_slots.keys())
+    active_set.add(uid)
+    active_users = len(active_set)
+    per_user = max(1, MAX_CONCURRENT_BROWSERS // active_users)
+    return per_user
+
+
+def acquire_user_slot(user_id: str | None) -> None:
+    """유저 슬롯 카운터 증가."""
+    uid = user_id or "__admin__"
+    _user_active_slots[uid] = _user_active_slots.get(uid, 0) + 1
+
+
+def release_user_slot(user_id: str | None) -> None:
+    """유저 슬롯 카운터 감소. 0이면 제거."""
+    uid = user_id or "__admin__"
+    count = _user_active_slots.get(uid, 1) - 1
+    if count <= 0:
+        _user_active_slots.pop(uid, None)
+    else:
+        _user_active_slots[uid] = count
+
+
 # 종료 시그널 처리
 _shutdown = False
 
