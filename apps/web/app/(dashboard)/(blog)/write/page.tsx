@@ -431,11 +431,29 @@ function WritePageContent() {
     if (!draft) return;
 
     try {
-      // 캐싱된 데이터로 즉시 HTML 생성 (네트워크 호출 없음 → user gesture 유지)
+      // 이미지 URL → base64 data URI 변환 (네이버 paste 시 이미지 포함)
+      setHtmlCopyLabel("이미지 변환중...");
+      const base64Urls = await Promise.all(
+        cachedPhotoUrls.map(async (url) => {
+          if (!url) return url;
+          try {
+            const resp = await fetch(url);
+            const blob = await resp.blob();
+            return new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.readAsDataURL(blob);
+            });
+          } catch {
+            return url; // 변환 실패 시 원본 URL 유지
+          }
+        })
+      );
+
       const html = renderPostHtml(
         draft.title,
         draft.body,
-        cachedPhotoUrls,
+        base64Urls,
         cachedFormatting
       );
 
@@ -687,6 +705,7 @@ function WritePageContent() {
             body_html: bodyHtml,
             hashtags: draft.hashtags,
             image_paths: [],
+            photo_urls: cachedPhotoUrls,
             category: category,
           },
         }),

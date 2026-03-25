@@ -759,6 +759,7 @@ async def handle_save_draft(user_id: str | None = None, payload: dict | None = N
     queue_id = payload.get("queue_id")
     hashtags = payload.get("hashtags", [])
     image_paths = payload.get("image_paths", [])
+    photo_urls = payload.get("photo_urls", [])
 
     if not title or not body_html:
         raise ValueError("title과 body_html은 필수입니다")
@@ -789,8 +790,15 @@ async def handle_save_draft(user_id: str | None = None, payload: dict | None = N
     if queue_id:
         sb.table("generation_queue").update({"status": "saving"}).eq("id", queue_id).execute()
 
+    # Supabase Storage URL → 로컬 임시 파일 다운로드
+    downloaded_paths: list[str] = []
+    if photo_urls and not image_paths:
+        from src.utils.image_downloader import download_images
+        downloaded_paths = download_images(photo_urls)
+        image_paths = downloaded_paths
+
     uid_label = user_id[:8] if user_id else "admin"
-    logger.info(f"▶ 임시저장 시작: '{title[:30]}...' (user={uid_label})")
+    logger.info(f"▶ 임시저장 시작: '{title[:30]}...' (user={uid_label}, 이미지={len(image_paths)}장)")
 
     try:
         async with _browser_semaphore:
@@ -843,6 +851,11 @@ async def handle_save_draft(user_id: str | None = None, payload: dict | None = N
                 {"status": "save_failed"}
             ).eq("id", queue_id).execute()
         raise
+    finally:
+        # 다운로드된 임시 파일 정리
+        if downloaded_paths:
+            from src.utils.image_downloader import cleanup_images
+            cleanup_images(downloaded_paths)
 
 
 async def handle_extract_blog_id(user_id: str | None = None) -> dict:
