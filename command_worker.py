@@ -898,6 +898,96 @@ async def handle_extract_blog_id(user_id: str | None = None) -> dict:
                 await browser.close()
 
 
+async def handle_recommend_neighbors(
+    user_id: str | None = None, payload: dict | None = None
+) -> dict:
+    """이웃 추천 목록 생성 (브라우저 불필요 — DB 기반)."""
+    if not user_id:
+        raise ValueError("recommend_neighbors는 user_id가 필수입니다")
+
+    from src.neighbor.recommend_engine import generate_recommendations
+
+    uid_label = user_id[:8]
+    logger.info(f"▶ 이웃 추천 생성 (user={uid_label})")
+    result = generate_recommendations(user_id=user_id)
+    logger.info(f"✓ 이웃 추천 완료: {result.get('generated', 0)}명 추천")
+    return result
+
+
+async def handle_sync_neighbors(
+    user_id: str | None = None, payload: dict | None = None
+) -> dict:
+    """이웃 상태 동기화 (브라우저 필요 — 네이버 방문)."""
+    if not user_id:
+        raise ValueError("sync_neighbors는 user_id가 필수입니다")
+
+    from playwright.async_api import async_playwright
+
+    from src.auth.naver_login import ensure_login_cookie_only
+    from src.neighbor.neighbor_sync import sync_neighbor_statuses
+    from src.utils.browser import create_browser
+
+    uid_label = user_id[:8]
+    logger.info(f"▶ 이웃 동기화 시작 (user={uid_label})")
+
+    async with _browser_semaphore:
+        async with async_playwright() as pw:
+            browser, context, page = await create_browser(pw, headless=True)
+            try:
+                logged_in = await ensure_login_cookie_only(context, page, user_id)
+                if not logged_in:
+                    raise RuntimeError("네이버 로그인 실패 — 쿠키 재업로드 필요")
+                result = await sync_neighbor_statuses(page, user_id=user_id)
+            finally:
+                await browser.close()
+
+    logger.info(f"✓ 이웃 동기화 완료: {result.get('checked', 0)}명 확인, {result.get('updated', 0)}명 갱신")
+    return result
+
+
+async def handle_analyze_theme(
+    user_id: str | None = None, payload: dict | None = None
+) -> dict:
+    """블로그 테마 분석 (브라우저 필요 — 게시물 제목 수집)."""
+    if not user_id:
+        raise ValueError("analyze_theme은 user_id가 필수입니다")
+
+    from playwright.async_api import async_playwright
+
+    from src.auth.naver_login import ensure_login_cookie_only
+    from src.collectors.post_collector import collect_posts
+    from src.neighbor.theme_analyzer import update_user_themes
+    from src.storage.supabase_client import get_user_bot_config
+    from src.utils.browser import create_browser
+
+    config = get_user_bot_config(user_id)
+    if not config:
+        raise RuntimeError("봇 설정 없음 — /bot에서 블로그 ID 설정 필요")
+    blog_id = config["naver_blog_id"]
+
+    uid_label = user_id[:8]
+    logger.info(f"▶ 테마 분석 시작: {blog_id} (user={uid_label})")
+
+    async with _browser_semaphore:
+        async with async_playwright() as pw:
+            browser, context, page = await create_browser(pw, headless=True)
+            try:
+                logged_in = await ensure_login_cookie_only(context, page, user_id)
+                if not logged_in:
+                    raise RuntimeError("네이버 로그인 실패 — 쿠키 재업로드 필요")
+                posts = await collect_posts(page, blog_id, count=20)
+                titles = [title for _, title in posts] if posts else []
+            finally:
+                await browser.close()
+
+    if not titles:
+        return {"themes": [], "message": "게시물 없음 — 테마 분석 불가"}
+
+    themes = update_user_themes(titles, user_id=user_id)
+    logger.info(f"✓ 테마 분석 완료: {themes}")
+    return {"themes": themes, "post_count": len(titles), "message": f"테마 {len(themes)}개 감지"}
+
+
 # ── 명령 핸들러 매핑 ──
 
 
@@ -912,6 +1002,9 @@ _HANDLERS = {
     "discover_neighbors": handle_discover_neighbors,
     "visit_neighbors": handle_visit_neighbors,
     "discover_and_visit": handle_discover_and_visit,
+    "recommend_neighbors": handle_recommend_neighbors,
+    "sync_neighbors": handle_sync_neighbors,
+    "analyze_theme": handle_analyze_theme,
 }
 
 
