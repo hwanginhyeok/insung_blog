@@ -93,13 +93,22 @@ async def _is_logged_in(page: Page) -> bool:
 
 
 async def _save_cookies(context: BrowserContext) -> None:
-    """현재 세션 쿠키를 파일로 저장 (소유자만 읽기/쓰기) + Supabase 동기화"""
-    COOKIES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    """
+    현재 세션 쿠키를 파일로 저장 (소유자만 읽기/쓰기) + Supabase 동기화.
+    NID_AUT가 없는 쿠키는 저장하지 않음 (기존 정상 쿠키 보호).
+    """
     cookies = await context.cookies()
+
+    has_nid_aut = any(c["name"] == "NID_AUT" for c in cookies)
+    if not has_nid_aut:
+        logger.warning("쿠키 저장 스킵 (admin): NID_AUT 없음 — 기존 쿠키 유지")
+        return
+
+    COOKIES_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(COOKIES_PATH, "w", encoding="utf-8") as f:
         json.dump(cookies, f, ensure_ascii=False, indent=2)
     os.chmod(COOKIES_PATH, 0o600)
-    logger.info(f"쿠키 저장 완료: {COOKIES_PATH}")
+    logger.info(f"쿠키 저장 완료: {COOKIES_PATH} ({len(cookies)}개, NID_AUT 포함)")
 
     # Supabase 양방향 동기화 (실패해도 로컬 저장은 이미 완료)
     try:
@@ -309,14 +318,27 @@ async def _load_cookies_for_user(context: BrowserContext, user_id: str) -> bool:
 
 
 async def _save_cookies_for_user(context: BrowserContext, user_id: str) -> None:
-    """user_id 기반 쿠키 저장 (로컬 + Supabase)."""
+    """
+    user_id 기반 쿠키 저장 (로컬 + Supabase).
+    NID_AUT가 없는 쿠키는 저장하지 않음 (기존 정상 쿠키 보호).
+    """
+    cookies = await context.cookies()
+
+    # NID_AUT 존재 여부 검증 — 없으면 저장 스킵 (이전 쿠키 유지)
+    has_nid_aut = any(c["name"] == "NID_AUT" for c in cookies)
+    if not has_nid_aut:
+        logger.warning(
+            f"쿠키 저장 스킵 (user={user_id[:8]}): NID_AUT 없음 — "
+            f"기존 쿠키 유지 (context.cookies()에서 세션 쿠키 드롭됨)"
+        )
+        return
+
     user_cookies_path = get_cookies_path(user_id)
     user_cookies_path.parent.mkdir(parents=True, exist_ok=True)
-    cookies = await context.cookies()
     with open(user_cookies_path, "w", encoding="utf-8") as f:
         json.dump(cookies, f, ensure_ascii=False, indent=2)
     os.chmod(user_cookies_path, 0o600)
-    logger.info(f"쿠키 저장 완료: {user_cookies_path}")
+    logger.info(f"쿠키 저장 완료: {user_cookies_path} ({len(cookies)}개, NID_AUT 포함)")
 
     # Supabase 동기화
     try:
