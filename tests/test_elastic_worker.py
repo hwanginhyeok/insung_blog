@@ -11,6 +11,8 @@ import os
 import sys
 import time
 
+import pytest
+
 sys.path.insert(0, str(os.path.dirname(os.path.dirname(__file__))))
 
 from command_worker import (
@@ -64,6 +66,7 @@ def test_slot_allocation():
     _user_active_slots.clear()
 
 
+@pytest.mark.asyncio
 async def test_parallel_with_elastic():
     """실제 병렬 실행 + Elastic 슬롯 시뮬레이션"""
     _user_active_slots.clear()

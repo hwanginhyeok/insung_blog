@@ -45,7 +45,7 @@ Supabase (공유 제어 평면)
 | TG-E2E | 텔레그램 봇 통합 E2E 테스트 | P0 | 대기 | 텔레그램 앱에서 수동 테스트 필요 |
 | TEST | 기능별 통합 테스트 (아래 상세) | P0 | 부분완료 | 2026-03-23 E2E 진행 — 아래 상세 |
 | BLOG-AUTO | 네이버 블로그 글 자동화 기능 (AI 글 생성 → 네이버 자동 발행 파이프라인) | P2 | 예정 | 기존 PUBLISH(수동 발행) 확장 — 주제 선정→초안 생성→발행까지 자동화 |
-| COOKIE-FIX | 쿠키 저장 시 NID_AUT 유실 방지 | P1 | 대기 | ensure_login 성공 후 context.cookies()에서 NID_AUT 빠지는 현상. _save_cookies_for_user에서 NID_AUT 검증 추가 필요 |
+| COOKIE-FIX | 쿠키 저장 시 NID_AUT 유실 방지 | P1 | ✅ 완료 | NID_AUT 없으면 저장 스킵 (기존 쿠키 보호). 테스트 3건 통과 |
 
 > **잔여 E2E 항목** (TEST 섹션에 통합)
 > - PUB-08: 저장→발행→URL E2E (워커+브라우저)
@@ -65,7 +65,7 @@ Supabase (공유 제어 평면)
 | WORKER-PARALLEL | 워커 병렬 실행 (다중 사용자 동시 처리) | P0 | ✅ 완료 | create_task + Semaphore(3) + 같은 명령만 중복 차단 |
 | SECURITY-REVIEW | 전체 기능 보안 점검 + 에러 수정 | P1 | ✅ 완료 | calendar status 화이트리스트 + payload 크기 제한 |
 | WORKER-ELASTIC | 워커 슬롯 탄력 분배 (Elastic Semaphore) | P1 | 대기 | 아래 세부 참조 |
-| WORKER-CMD | command_worker에 추천/동기화/테마분석 명령 핸들러 추가 | P1 | 대기 | 웹에서 트리거 가능하게 |
+| WORKER-CMD | command_worker에 추천/동기화/테마분석 명령 핸들러 추가 | P1 | ✅ 완료 | 3개 핸들러 + API route 등록. 테스트 5건 통과 |
 | ADMIN-BOT-DETAIL | UserDetailModal에 봇 실행 이력 탭 추가 | P2 | 대기 | 상세 일별 차트 + 로그 테이블 |
 | NAV-MOBILE | 드롭다운 메뉴 모바일 반응형 검증 및 수정 | P2 | 대기 | 야간 작업에서 NAV-LAYOUT 후속 |
 | NEIGHBOR-E2E | 이웃 연동 기능 실행 테스트 | P1 | 대기 | 브라우저 필요 — 추천/동기화/테마분석 E2E |
