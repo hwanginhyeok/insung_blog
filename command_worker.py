@@ -31,6 +31,31 @@ load_dotenv()
 from src.storage.supabase_client import get_supabase, get_admin_user_id
 from src.utils.logger import setup_logger
 
+# ── 일일 봇 실행 한도 체크 (Freemium Gate) ──
+
+# 한도가 적용되는 명령 목록 (Playwright 브라우저를 소비하는 명령)
+_RATE_LIMITED_COMMANDS = {"run", "execute", "visit_neighbors", "discover_and_visit"}
+
+
+def check_daily_bot_limit(user_id: str | None) -> dict:
+    """유저별 일일 봇 한도 체크. Supabase RPC(atomic)로 체크+증분.
+
+    Returns: {"allowed": bool, "used": int, "limit": int, "remaining": int}
+    """
+    if not user_id:
+        return {"allowed": True, "used": 0, "limit": 999, "remaining": 999}
+
+    try:
+        sb = get_supabase()
+        result = sb.rpc("check_daily_bot_limit", {"p_user_id": user_id}).execute()
+        if result.data:
+            return result.data
+    except Exception as e:
+        # 한도 체크 실패 시 실행 허용 (서비스 중단 방지)
+        setup_logger("command_worker").warning(f"일일 한도 체크 실패 (허용): {e}")
+
+    return {"allowed": True, "used": 0, "limit": 30, "remaining": 30}
+
 logger = setup_logger("command_worker")
 
 POLL_INTERVAL = 10  # 초
@@ -1097,6 +1122,26 @@ async def process_command(cmd: dict) -> None:
 
     uid_label = cmd_user_id[:8] if cmd_user_id else "admin"
     logger.info(f"━━━ 명령 실행: {command_type} (id={command_id[:8]}..., user={uid_label}) ━━━")
+
+    # 일일 한도 체크 (Freemium Gate — 브라우저 소비 명령만)
+    if command_type in _RATE_LIMITED_COMMANDS:
+        limit_result = check_daily_bot_limit(cmd_user_id)
+        if not limit_result.get("allowed", True):
+            msg = (
+                f"일일 봇 실행 한도 초과 "
+                f"({limit_result['used']}/{limit_result['limit']}회). "
+                f"내일 다시 이용해주세요."
+            )
+            mark_failed(command_id, msg)
+            logger.info(f"━━━ 한도 초과로 차단: {command_type} (user={uid_label}) ━━━")
+            # 텔레그램 알림
+            if cmd_user_id:
+                try:
+                    from src.utils.telegram_notifier import notify_command_failure
+                    await notify_command_failure(cmd_user_id, command_type, msg)
+                except Exception:
+                    pass
+            return
 
     try:
         kwargs: dict = {"user_id": cmd_user_id}

@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { renderPostHtml } from "@/lib/render/naver-html";
 import type { FormattingItem } from "@/lib/render/naver-html";
 import { compressImage } from "@/lib/image-compress";
+import { WritingFeedback } from "@/components/writing-feedback";
 
 const categories = ["맛집", "카페", "여행", "일상", "기타"];
 
@@ -87,6 +88,8 @@ function WritePageContent() {
   const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(
     null
   );
+  const [showWritingFeedback, setShowWritingFeedback] = useState(false);
+  const [currentGenerationId, setCurrentGenerationId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // isDirty: 저장되지 않은 작업 내용이 있는지 판정
@@ -407,6 +410,8 @@ function WritePageContent() {
       setUploadedPaths(paths);
       setSavedId(null);
       setQuota((prev) => (prev ? { ...prev, used: prev.used + 1 } : null));
+      setCurrentGenerationId(result.id || null);
+      setShowWritingFeedback(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "오류가 발생했습니다");
     } finally {
@@ -758,6 +763,14 @@ function WritePageContent() {
 
   return (
     <div className={`space-y-6 ${draft ? "pb-24" : ""}`}>
+      {/* 피드백 수집 (AI 글 생성 후) */}
+      {showWritingFeedback && draft && (
+        <WritingFeedback
+          generationId={currentGenerationId || undefined}
+          onClose={() => setShowWritingFeedback(false)}
+        />
+      )}
+
       <div>
         <h1 className="text-2xl font-bold">
           {editId ? "저장된 글 보기" : "새 글 쓰기"}
