@@ -21,27 +21,27 @@ import {
 interface Step {
   title: string;
   description: string;
-  icon: string;
+  stepLabel: string;
 }
 
 const STEPS: Step[] = [
   {
     title: "AI 글쓰기",
     description:
-      "사진과 메모만 올리면 당신만의 스타일로 블로그 글을 작성해드려요. 바로 시작할 수 있습니다!",
-    icon: "✍️",
+      "사진과 메모만 올리면 당신만의 스타일로 블로그 글을 작성해드려요. 쿠키 등록 없이 바로 시작할 수 있습니다.",
+    stepLabel: "1",
   },
   {
     title: "댓글봇 & 이웃관리",
     description:
-      "네이버 쿠키를 등록하면 AI가 이웃 블로그에 댓글을 달고, 서로이웃도 자동 관리해줘요. 월 무료 한도 내에서 이용 가능합니다.",
-    icon: "🤖",
+      "네이버 쿠키를 등록하면 AI가 이웃 블로그에 댓글을 달고, 서로이웃도 자동 관리합니다. 쿠키는 암호화되어 안전하게 보관됩니다.",
+    stepLabel: "2",
   },
   {
-    title: "준비 완료!",
+    title: "준비 완료",
     description:
-      "AI 글쓰기부터 시작해보세요. 궁금한 점은 '사용법' 메뉴에서 확인할 수 있어요.",
-    icon: "🎉",
+      "왼쪽 메뉴에서 '글쓰기'를 눌러 첫 글을 만들어보세요. 사용법은 상단 메뉴에서 확인할 수 있습니다.",
+    stepLabel: "3",
   },
 ];
 
@@ -91,8 +91,10 @@ export function OnboardingDialog() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <span className="text-2xl">{current.icon}</span>
+          <DialogTitle className="flex items-center gap-3 text-xl">
+            <span className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 text-sm font-semibold flex items-center justify-center">
+              {current.stepLabel}
+            </span>
             {current.title}
           </DialogTitle>
           <DialogDescription className="text-base pt-2">
