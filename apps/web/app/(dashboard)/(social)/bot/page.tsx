@@ -118,7 +118,12 @@ export default function BotPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">댓글 봇</h1>
+      <div>
+        <h1 className="text-2xl font-bold">댓글봇</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          내 블로그에 댓글 남긴 사람들의 블로그에 방문해서 AI 댓글을 남깁니다.
+        </p>
+      </div>
 
       {/* 3단계 Stepper + Step 1 봇 실행 + Step 3 댓글 게시 */}
       <BotControlPanel

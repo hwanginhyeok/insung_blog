@@ -119,7 +119,12 @@ export default function NeighborPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">이웃 관리</h1>
+      <div>
+        <h1 className="text-2xl font-bold">이웃관리</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          이웃의 새 글에 댓글을 달거나, 새로운 이웃을 찾아 관계를 넓힙니다.
+        </p>
+      </div>
 
       {/* 핵심 액션 2개 */}
       <div className="grid gap-4 sm:grid-cols-2">
