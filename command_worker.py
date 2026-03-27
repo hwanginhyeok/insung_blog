@@ -34,7 +34,7 @@ from src.utils.logger import setup_logger
 # ── 일일 봇 실행 한도 체크 (Freemium Gate) ──
 
 # 한도가 적용되는 명령 목록 (Playwright 브라우저를 소비하는 명령)
-_RATE_LIMITED_COMMANDS = {"run", "execute", "visit_neighbors", "discover_and_visit"}
+_RATE_LIMITED_COMMANDS = {"run", "execute", "visit_neighbors", "discover_and_visit", "feed_comment"}
 
 
 def check_daily_bot_limit(user_id: str | None) -> dict:
@@ -1013,6 +1013,58 @@ async def handle_analyze_theme(
     return {"themes": themes, "post_count": len(titles), "message": f"테마 {len(themes)}개 감지"}
 
 
+async def handle_feed_comment(
+    user_id: str | None = None, payload: dict | None = None
+) -> dict:
+    """이웃 새글 피드에서 최신 글에 AI 댓글 생성."""
+    if not user_id:
+        raise ValueError("feed_comment는 user_id가 필수입니다")
+
+    from playwright.async_api import async_playwright
+
+    from src.auth.naver_login import ensure_login_cookie_only
+    from src.neighbor.feed_commenter import comment_on_feed
+    from src.storage.supabase_client import get_user_bot_config
+    from src.utils.browser import create_browser
+
+    config = get_user_bot_config(user_id)
+    if not config:
+        raise RuntimeError("봇 설정 없음 — /bot에서 블로그 ID 설정 필요")
+
+    uid_label = user_id[:8]
+    logger.info(f"▶ 이웃 새글 피드 댓글 시작 (user={uid_label})")
+
+    async with _browser_semaphore:
+        async with async_playwright() as pw:
+            browser, context, page = await create_browser(pw, headless=True)
+            try:
+                logged_in = await ensure_login_cookie_only(context, page, user_id)
+                if not logged_in:
+                    raise RuntimeError("네이버 로그인 실패 — 쿠키 재업로드 필요")
+                my_blog_ids_set = set(config.get("naver_blog_ids", []))
+                my_blog_ids_set.add(config["naver_blog_id"])
+                result = await comment_on_feed(
+                    page=page, context=context, user_id=user_id,
+                    my_blog_id=config["naver_blog_id"],
+                    settings=config["settings"],
+                    my_blog_ids=my_blog_ids_set,
+                )
+            finally:
+                await browser.close()
+
+    # 실행 이력 기록
+    from src.storage.supabase_client import record_run_sb
+
+    record_run_sb(
+        bloggers_visited=result.get("posts_found", 0),
+        comments_written=result.get("comments_generated", 0),
+        comments_failed=0,
+        error_message=None,
+        user_id=user_id,
+    )
+    return result
+
+
 # ── 명령 핸들러 매핑 ──
 
 
@@ -1030,6 +1082,7 @@ _HANDLERS = {
     "recommend_neighbors": handle_recommend_neighbors,
     "sync_neighbors": handle_sync_neighbors,
     "analyze_theme": handle_analyze_theme,
+    "feed_comment": handle_feed_comment,
 }
 
 
@@ -1146,7 +1199,7 @@ async def process_command(cmd: dict) -> None:
     try:
         kwargs: dict = {"user_id": cmd_user_id}
         # publish/save_draft/neighbor_request 명령은 payload도 전달
-        if command_type in ("publish", "save_draft", "neighbor_request", "discover_neighbors", "visit_neighbors", "discover_and_visit"):
+        if command_type in ("publish", "save_draft", "neighbor_request", "discover_neighbors", "visit_neighbors", "discover_and_visit", "feed_comment"):
             kwargs["payload"] = cmd.get("payload")
         result = await handler(**kwargs)
         mark_completed(command_id, result)
