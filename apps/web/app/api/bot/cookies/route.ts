@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { encryptCookies, isEncrypted } from "@/lib/cookie-crypto";
 
 function getSupabase() {
   const cookieStore = cookies();
@@ -39,14 +40,20 @@ export async function GET() {
     return NextResponse.json({ hasCookies: false });
   }
 
+  // 암호화된 쿠키든 평문이든 존재 여부만 확인
+  const hasCookies = !!data.cookie_data;
+  const encrypted = isEncrypted(data.cookie_data);
   const cookieCount = Array.isArray(data.cookie_data)
     ? data.cookie_data.length
-    : 0;
+    : encrypted
+      ? -1  // 암호화됨, 개수 알 수 없음 (정상)
+      : 0;
 
   return NextResponse.json({
-    hasCookies: true,
+    hasCookies,
     uploadedAt: data.uploaded_at,
     cookieCount,
+    encrypted,
   });
 }
 
@@ -89,11 +96,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // 쿠키 암호화 후 저장
+  let cookieDataToStore: string | typeof naverCookies = naverCookies;
+  try {
+    cookieDataToStore = encryptCookies(naverCookies);
+  } catch (e) {
+    console.warn("쿠키 암호화 실패 (COOKIE_ENCRYPTION_KEY 미설정?), 평문 저장:", e);
+  }
+
   const admin = createAdminClient();
   const { error } = await admin.from("bot_cookies").upsert(
     {
       user_id: user.id,
-      cookie_data: naverCookies,
+      cookie_data: cookieDataToStore,
       uploaded_at: new Date().toISOString(),
     },
     { onConflict: "user_id" }

@@ -420,19 +420,22 @@ def save_bot_cookies_sb(
     cookies: list[dict],
     user_id: str | None = None,
 ) -> bool:
-    """로컬 로그인 성공 시 쿠키를 Supabase에 업로드 (양방향 동기화)."""
+    """로컬 로그인 성공 시 쿠키를 Supabase에 암호화하여 업로드."""
     try:
+        from src.utils.cookie_crypto import encrypt_cookies
+
         sb = get_supabase()
         uid = _resolve_user_id(user_id)
+        encrypted = encrypt_cookies(cookies)
         sb.table("bot_cookies").upsert(
             {
                 "user_id": uid,
-                "cookie_data": cookies,
+                "cookie_data": encrypted,
                 "uploaded_at": datetime.now(timezone.utc).isoformat(),
             },
             on_conflict="user_id",
         ).execute()
-        logger.info(f"쿠키 Supabase 업로드 완료: {len(cookies)}개")
+        logger.info(f"쿠키 Supabase 암호화 업로드 완료: {len(cookies)}개")
         return True
     except Exception as e:
         logger.error(f"쿠키 Supabase 업로드 실패: {e}")
@@ -441,10 +444,13 @@ def save_bot_cookies_sb(
 
 def get_bot_cookies_sb(user_id: str | None = None) -> list[dict] | None:
     """
-    Supabase에서 업로드된 네이버 쿠키 조회.
+    Supabase에서 쿠키 조회 + 복호화.
+    하위 호환: 평문 쿠키도 자동 처리.
     반환: 쿠키 딕셔너리 리스트 (없으면 None).
     """
     try:
+        from src.utils.cookie_crypto import decrypt_cookies
+
         sb = get_supabase()
         uid = _resolve_user_id(user_id)
 
@@ -457,9 +463,11 @@ def get_bot_cookies_sb(user_id: str | None = None) -> list[dict] | None:
         )
 
         if result.data and result.data[0].get("cookie_data"):
-            cookies = result.data[0]["cookie_data"]
-            logger.info(f"Supabase 쿠키 로드: {len(cookies)}개")
-            return cookies
+            raw = result.data[0]["cookie_data"]
+            cookies = decrypt_cookies(raw)
+            if cookies:
+                logger.info(f"Supabase 쿠키 로드: {len(cookies)}개")
+                return cookies
 
     except Exception as e:
         logger.error(f"Supabase 쿠키 조회 실패: {e}")
