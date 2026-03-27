@@ -1,53 +1,113 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { useNeighborData } from "./_hooks/useNeighborData";
-import { NeighborOverview } from "./_components/NeighborOverview";
-import { RecentInteractions } from "./_components/RecentInteractions";
-import { NeighborRecommendations } from "./_components/NeighborRecommendations";
-import { RequestHistory } from "./_components/RequestHistory";
-import { NeighborRequestForm } from "./_components/NeighborRequestForm";
-import { NeighborActions } from "./_components/NeighborActions";
-import { VisitResults } from "./_components/VisitResults";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  sendFeedComment,
+  sendDiscoverAndVisit,
+  fetchCommandStatus,
+  fetchBlogThemes,
+  saveBlogThemes,
+  fetchNeighborStats,
+  fetchNeighborList,
+  type BotCommandStatus,
+  type Neighbor,
+  type NeighborStats,
+} from "./_lib/neighbor-api";
 
-const TABS = [
-  { key: "overview", label: "현황" },
-  { key: "results", label: "결과" },
-  { key: "interactions", label: "교류" },
-  { key: "requests", label: "신청" },
-  { key: "recommend", label: "추천" },
-] as const;
-
-type TabKey = (typeof TABS)[number]["key"];
-
-const NEIGHBOR_LIST_KEY = "neighbor-list-visible";
-
+/**
+ * 이웃 관리 페이지 — 간소화 버전
+ *
+ * 2가지 핵심 액션:
+ * 1. 이웃 새글 댓글 (feed_comment) — 기존 이웃의 새 글에 댓글
+ * 2. 새 이웃 찾기 (discover_and_visit) — 키워드로 찾아서 댓글+이웃 신청
+ *
+ * + 이웃 현황 (간단 통계 + 목록)
+ */
 export default function NeighborPage() {
-  const [activeTab, setActiveTab] = useState<TabKey>("overview");
-  const [listVisible, setListVisible] = useState(true);
+  const [stats, setStats] = useState<NeighborStats | null>(null);
+  const [neighbors, setNeighbors] = useState<Neighbor[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // localStorage에서 토글 상태 복원
+  // 자동화 상태
+  const [sending, setSending] = useState(false);
+  const [activeCmd, setActiveCmd] = useState<BotCommandStatus | null>(null);
+  const [lastResult, setLastResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // 테마
+  const [themes, setThemes] = useState<string[]>([]);
+  const [editingThemes, setEditingThemes] = useState(false);
+  const [themeInput, setThemeInput] = useState("");
+
+  // 이웃 목록 토글
+  const [listVisible, setListVisible] = useState(false);
+
   useEffect(() => {
-    const saved = localStorage.getItem(NEIGHBOR_LIST_KEY);
-    if (saved !== null) setListVisible(saved === "true");
+    Promise.all([
+      fetchNeighborStats(),
+      fetchNeighborList(),
+      fetchBlogThemes(),
+    ]).then(([s, n, t]) => {
+      setStats(s);
+      setNeighbors(n);
+      setThemes(t);
+      setLoading(false);
+    });
   }, []);
 
-  function toggleListVisible() {
-    const next = !listVisible;
-    setListVisible(next);
-    localStorage.setItem(NEIGHBOR_LIST_KEY, String(next));
+  function refresh() {
+    fetchNeighborStats().then(setStats);
+    fetchNeighborList().then(setNeighbors);
   }
 
-  const {
-    stats,
-    neighbors,
-    requests,
-    interactions,
-    recommendations,
-    loading,
-    refresh,
-  } = useNeighborData();
+  // 명령 폴링
+  const pollStatus = useCallback(async () => {
+    const res = await fetchCommandStatus();
+    setActiveCmd(res.activeCommand);
+    if (!res.activeCommand && sending) {
+      setSending(false);
+      const commands = (res as { commands?: BotCommandStatus[] }).commands;
+      const last = commands?.find((c) => c.status === "completed" || c.status === "failed");
+      if (last?.result) {
+        const r = last.result as Record<string, unknown>;
+        setLastResult((r.message as string) || null);
+      }
+      refresh();
+    }
+  }, [sending]);
+
+  useEffect(() => {
+    if (!sending) return;
+    const timer = setInterval(pollStatus, 3000);
+    return () => clearInterval(timer);
+  }, [sending, pollStatus]);
+
+  async function runCommand(fn: () => Promise<{ success: boolean; error?: string }>) {
+    setError(null);
+    setLastResult(null);
+    setSending(true);
+    const result = await fn();
+    if (!result.success) {
+      setError(result.error || "명령 전송 실패");
+      setSending(false);
+    }
+  }
+
+  async function handleSaveThemes() {
+    const newThemes = themeInput.split(",").map((t) => t.trim()).filter(Boolean);
+    const ok = await saveBlogThemes(newThemes);
+    if (ok) {
+      setThemes(newThemes);
+      setEditingThemes(false);
+    }
+  }
+
+  const isRunning = sending || !!activeCmd;
+  const statusLabel = activeCmd
+    ? `${activeCmd.command === "feed_comment" ? "이웃 새글 댓글" : "새 이웃 찾기"} ${activeCmd.status === "running" ? "실행 중..." : "대기 중..."}`
+    : null;
 
   if (loading) {
     return (
@@ -59,118 +119,163 @@ export default function NeighborPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">서로이웃 관리</h1>
+      <h1 className="text-2xl font-bold">이웃 관리</h1>
 
-      {/* 자동화 (이웃 찾기 / 방문) */}
-      <NeighborActions onComplete={refresh} />
+      {/* 핵심 액션 2개 */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        {/* 1. 이웃 새글 댓글 */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">이웃 새글 댓글</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              이웃들이 올린 새 글에 AI 댓글을 생성합니다.
+            </p>
+            <Button
+              onClick={() => runCommand(sendFeedComment)}
+              disabled={isRunning}
+              className="w-full"
+            >
+              새글에 댓글 달기
+            </Button>
+          </CardContent>
+        </Card>
 
-      {/* 통계 카드 */}
-      <NeighborOverview stats={stats} />
+        {/* 2. 새 이웃 찾기 */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">새 이웃 찾기</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              테마 키워드로 블로거를 찾고 댓글 + 이웃 신청합니다.
+            </p>
 
-      {/* 탭 네비게이션 */}
-      <div className="flex flex-wrap gap-1.5">
-        {TABS.map((tab) => (
-          <Button
-            key={tab.key}
-            size="sm"
-            variant={activeTab === tab.key ? "default" : "outline"}
-            onClick={() => setActiveTab(tab.key)}
-          >
-            {tab.label}
-          </Button>
-        ))}
+            {/* 테마 표시/수정 */}
+            {editingThemes ? (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={themeInput}
+                  onChange={(e) => setThemeInput(e.target.value)}
+                  placeholder="맛집, 육아, 여행"
+                  className="flex-1 rounded border bg-background px-3 py-1.5 text-sm"
+                  onKeyDown={(e) => e.key === "Enter" && handleSaveThemes()}
+                />
+                <Button size="sm" onClick={handleSaveThemes}>저장</Button>
+                <Button size="sm" variant="ghost" onClick={() => setEditingThemes(false)}>취소</Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div className="flex flex-wrap gap-1.5">
+                  {themes.length > 0 ? (
+                    themes.map((t) => (
+                      <span key={t} className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                        {t}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground">테마 미등록</span>
+                  )}
+                </div>
+                <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setThemeInput(themes.join(", ")); setEditingThemes(true); }}>
+                  수정
+                </Button>
+              </div>
+            )}
+
+            <Button
+              onClick={() => {
+                const kws = themes.length > 0 ? themes : [];
+                if (kws.length === 0) {
+                  setError("테마를 먼저 등록해주세요");
+                  return;
+                }
+                runCommand(() => sendDiscoverAndVisit(kws));
+              }}
+              disabled={isRunning || themes.length === 0}
+              className="w-full"
+              variant="outline"
+            >
+              찾기 + 댓글 + 이웃 신청
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* 탭 콘텐츠 */}
-      {activeTab === "overview" && (
-        <div className="space-y-4">
-          {/* 이웃 목록 (토글) */}
-          <div className="rounded-lg border">
-            <button
-              onClick={toggleListVisible}
-              className="flex w-full items-center justify-between border-b px-4 py-3 text-left hover:bg-muted/50 transition-colors"
+      {/* 상태 표시 */}
+      {statusLabel && (
+        <div className="rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          {statusLabel}
+        </div>
+      )}
+      {lastResult && (
+        <div className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">
+          {lastResult}
+        </div>
+      )}
+      {error && (
+        <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
+          {error}
+        </div>
+      )}
+
+      {/* 이웃 현황 */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">
+              이웃 현황
+              {stats && (
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  서로이웃 {stats.neighbors.byType.mutual}명 · 전체 {stats.neighbors.total}명
+                </span>
+              )}
+            </CardTitle>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs"
+              onClick={() => setListVisible(!listVisible)}
             >
-              <h3 className="text-sm font-medium">
-                이웃 목록 ({neighbors.length}명)
-              </h3>
-              <span className={`text-muted-foreground text-xs transition-transform duration-200 ${listVisible ? "rotate-180" : ""}`}>
-                ▼
-              </span>
-            </button>
-            {listVisible && (
-              neighbors.length === 0 ? (
-                <div className="p-4 text-sm text-muted-foreground">
-                  등록된 이웃이 없습니다
-                </div>
-              ) : (
-                <div className="divide-y">
-                  {neighbors.slice(0, 30).map((n) => (
-                    <div
-                      key={n.id}
-                      className="flex items-center justify-between px-4 py-2.5 text-sm"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{n.blog_name || n.blog_id}</span>
-                        {n.blog_name && (
-                          <span className="text-muted-foreground text-xs">
-                            {n.blog_id}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {n.category && (
-                          <span className="text-xs text-muted-foreground">
-                            {n.category}
-                          </span>
-                        )}
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                            n.neighbor_type === "mutual"
-                              ? "bg-green-100 text-green-700"
-                              : n.neighbor_type === "one_way_following"
-                                ? "bg-blue-100 text-blue-700"
-                                : n.neighbor_type === "discovered"
-                                  ? "bg-yellow-100 text-yellow-700"
-                                  : "bg-gray-100 text-gray-600"
-                          }`}
-                        >
-                          {n.neighbor_type === "mutual"
-                            ? "서로이웃"
-                            : n.neighbor_type === "one_way_following"
-                              ? "내가 추가"
-                              : n.neighbor_type === "discovered"
-                                ? "발견"
-                                : "팔로워"}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )
-            )}
+              {listVisible ? "접기" : "목록 보기"}
+            </Button>
           </div>
-        </div>
-      )}
+        </CardHeader>
 
-      {activeTab === "results" && <VisitResults />}
-
-      {activeTab === "interactions" && (
-        <RecentInteractions interactions={interactions} />
-      )}
-
-      {activeTab === "requests" && (
-        <div className="space-y-4">
-          <NeighborRequestForm onSuccess={refresh} />
-          <RequestHistory requests={requests} />
-        </div>
-      )}
-
-      {activeTab === "recommend" && (
-        <NeighborRecommendations
-          recommendations={recommendations}
-          onUpdate={refresh}
-        />
-      )}
+        {listVisible && (
+          <CardContent className="pt-0">
+            {neighbors.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">
+                등록된 이웃이 없습니다. &lsquo;새 이웃 찾기&rsquo;를 실행해보세요.
+              </p>
+            ) : (
+              <div className="divide-y max-h-96 overflow-y-auto">
+                {neighbors.slice(0, 50).map((n) => (
+                  <div key={n.id} className="flex items-center justify-between py-2 text-sm">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-medium truncate">{n.blog_name || n.blog_id}</span>
+                      {n.category && (
+                        <span className="text-xs text-muted-foreground flex-shrink-0">{n.category}</span>
+                      )}
+                    </div>
+                    <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+                      n.neighbor_type === "mutual"
+                        ? "bg-green-100 text-green-700"
+                        : n.neighbor_type === "one_way_following"
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-gray-100 text-gray-600"
+                    }`}>
+                      {n.neighbor_type === "mutual" ? "서로이웃" : n.neighbor_type === "one_way_following" ? "팔로잉" : "발견"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        )}
+      </Card>
     </div>
   );
 }

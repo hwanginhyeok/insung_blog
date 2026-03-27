@@ -143,6 +143,22 @@ export async function saveBlogThemes(themes: string[]): Promise<boolean> {
   return res.ok;
 }
 
+// ── 이웃 새글 피드 댓글 ──
+
+export async function sendFeedComment(): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  const res = await fetch("/api/bot/command", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ command: "feed_comment" }),
+  });
+  const data = await res.json();
+  if (!res.ok) return { success: false, error: data.error };
+  return { success: true };
+}
+
 // ── 이웃 발견/방문 명령 ──
 
 export async function sendDiscoverNeighbors(
