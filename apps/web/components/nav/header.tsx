@@ -13,7 +13,7 @@ const blogPaths = ["/dashboard", "/write", "/calendar", "/persona", "/analytics"
 // 소셜봇 탭으로 묶인 경로들
 const socialPaths = ["/bot", "/neighbor"];
 
-// 글쓰기 드롭다운 하위 항목 (글쓰기/캘린더가 상단)
+// 글쓰기 드롭다운 하위 항목
 const writeSubItems = [
   { href: "/write", label: "글쓰기" },
   { href: "/calendar", label: "캘린더" },
@@ -22,8 +22,13 @@ const writeSubItems = [
   { href: "/analytics", label: "성과분석" },
 ];
 
+// 소셜봇 드롭다운 하위 항목
+const socialSubItems = [
+  { href: "/bot", label: "댓글봇" },
+  { href: "/neighbor", label: "이웃관리" },
+];
+
 const navItems = [
-  { href: "/bot", label: "소셜봇" },
   { href: "/guide", label: "사용법" },
 ];
 
@@ -35,7 +40,9 @@ export function Header() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [socialDropdownOpen, setSocialDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const socialDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     async function loadUser() {
@@ -61,6 +68,9 @@ export function Header() {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
       }
+      if (socialDropdownRef.current && !socialDropdownRef.current.contains(e.target as Node)) {
+        setSocialDropdownOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -84,7 +94,7 @@ export function Header() {
     <header className="border-b border-primary/10 bg-primary/5">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
         <div className="flex items-center gap-6">
-          <Link href="/calendar" className="text-lg font-bold text-primary">
+          <Link href="/write" className="text-lg font-bold text-primary">
             인성이
           </Link>
           <nav className="flex items-center gap-1">
@@ -124,6 +134,54 @@ export function Header() {
                       key={item.href}
                       href={item.href}
                       onClick={() => setDropdownOpen(false)}
+                      className={cn(
+                        "block px-4 py-2 text-sm transition-colors",
+                        pathname.startsWith(item.href)
+                          ? "bg-primary/10 text-primary font-medium"
+                          : "text-foreground/70 hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* 소셜봇 드롭다운 */}
+            <div className="relative" ref={socialDropdownRef}>
+              <button
+                onClick={() => setSocialDropdownOpen((prev) => !prev)}
+                className={cn(
+                  "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                  socialPaths.some((p) => pathname.startsWith(p))
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-foreground/70 hover:bg-primary/10 hover:text-primary"
+                )}
+              >
+                소셜봇
+                <span className={cn(
+                  "ml-1 inline-block text-[10px] transition-transform duration-200",
+                  socialDropdownOpen ? "rotate-180" : ""
+                )}>
+                  ▼
+                </span>
+              </button>
+              <div
+                className={cn(
+                  "absolute left-0 top-full mt-1 z-50 min-w-[120px] overflow-hidden rounded-lg border bg-card shadow-lg",
+                  "origin-top transition-all duration-200 ease-out",
+                  socialDropdownOpen
+                    ? "scale-y-100 opacity-100"
+                    : "pointer-events-none scale-y-0 opacity-0"
+                )}
+              >
+                <div className="py-1">
+                  {socialSubItems.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setSocialDropdownOpen(false)}
                       className={cn(
                         "block px-4 py-2 text-sm transition-colors",
                         pathname.startsWith(item.href)
