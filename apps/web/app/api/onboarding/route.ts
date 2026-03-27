@@ -1,12 +1,25 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase-server";
+import { createServerClient } from "@supabase/auth-helpers-nextjs";
+import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase-admin";
 
 /**
  * POST /api/onboarding — 온보딩 완료 상태 저장
  */
 export async function POST() {
-  const supabase = await createClient();
+  const cookieStore = cookies();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+      },
+    }
+  );
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -33,7 +46,19 @@ export async function POST() {
  * GET /api/onboarding — 온보딩 완료 여부 조회
  */
 export async function GET() {
-  const supabase = await createClient();
+  const cookieStore = cookies();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+      },
+    }
+  );
+
   const {
     data: { user },
   } = await supabase.auth.getUser();

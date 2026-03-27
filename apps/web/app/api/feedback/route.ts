@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase-server";
+import { createServerClient } from "@supabase/auth-helpers-nextjs";
+import { cookies } from "next/headers";
 
 /**
  * POST /api/feedback — AI 글쓰기 후 피드백 저장
@@ -7,7 +8,19 @@ import { createClient } from "@/lib/supabase-server";
  * Body: { generationId?: string, wouldUseAgain: boolean, feedbackText?: string }
  */
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
+  const cookieStore = cookies();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+      },
+    }
+  );
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
