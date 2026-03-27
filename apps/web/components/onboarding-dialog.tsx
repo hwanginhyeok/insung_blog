@@ -2,20 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 /**
- * 온보딩 다이얼로그 — 신규 유저 첫 방문 시 3단계 안내
+ * 온보딩 오버레이 — 신규 유저 첫 방문 시 3단계 안내
  *
- * 1단계: AI 글쓰기 안내 (쿠키 없이도 사용 가능)
- * 2단계: 댓글봇 안내 (쿠키 필요)
- * 3단계: 완료 + CTA
+ * Dialog 대신 Card + overlay 패턴 사용 (shadcn/ui dialog 미설치)
  */
 
 interface Step {
@@ -51,7 +43,6 @@ export function OnboardingDialog() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 온보딩 완료 여부 확인
     fetch("/api/onboarding")
       .then((r) => r.json())
       .then((data) => {
@@ -59,9 +50,7 @@ export function OnboardingDialog() {
           setOpen(true);
         }
       })
-      .catch(() => {
-        // 실패 시 표시하지 않음 (기존 유저 보호)
-      })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
@@ -78,51 +67,53 @@ export function OnboardingDialog() {
     try {
       await fetch("/api/onboarding", { method: "POST" });
     } catch {
-      // 저장 실패해도 다이얼로그는 닫힘 (다음 방문 시 다시 표시)
+      // 저장 실패해도 닫힘 (다음 방문 시 다시 표시)
     }
   };
 
-  if (loading) return null;
+  if (loading || !open) return null;
 
   const current = STEPS[step];
   const isLast = step === STEPS.length - 1;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-3 text-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <Card className="w-full max-w-md mx-4 shadow-xl">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-3 text-xl">
             <span className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 text-sm font-semibold flex items-center justify-center">
               {current.stepLabel}
             </span>
             {current.title}
-          </DialogTitle>
-          <DialogDescription className="text-base pt-2">
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-base text-gray-600 leading-relaxed">
             {current.description}
-          </DialogDescription>
-        </DialogHeader>
+          </p>
 
-        {/* 단계 표시 */}
-        <div className="flex justify-center gap-2 py-2">
-          {STEPS.map((_, i) => (
-            <div
-              key={i}
-              className={`w-2 h-2 rounded-full ${
-                i === step ? "bg-emerald-600" : "bg-gray-200"
-              }`}
-            />
-          ))}
-        </div>
+          {/* 단계 표시 */}
+          <div className="flex justify-center gap-2 py-1">
+            {STEPS.map((_, i) => (
+              <div
+                key={i}
+                className={`w-2 h-2 rounded-full ${
+                  i === step ? "bg-emerald-600" : "bg-gray-200"
+                }`}
+              />
+            ))}
+          </div>
 
-        <div className="flex justify-between pt-2">
-          <Button variant="ghost" onClick={handleComplete}>
-            건너뛰기
-          </Button>
-          <Button onClick={handleNext}>
-            {isLast ? "시작하기" : "다음"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+          <div className="flex justify-between">
+            <Button variant="ghost" onClick={handleComplete}>
+              건너뛰기
+            </Button>
+            <Button onClick={handleNext}>
+              {isLast ? "시작하기" : "다음"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
