@@ -22,7 +22,7 @@ export default function LandingPage() {
               체험단 리뷰, 맛집 후기, 일상 기록까지.
             </p>
             <div className="mt-8 flex items-center gap-4">
-              <Link href="/login">
+              <Link href="/login?mode=signup">
                 <Button size="lg" className="text-base px-8 bg-emerald-600 hover:bg-emerald-700">
                   무료로 시작하기
                 </Button>
@@ -110,7 +110,7 @@ export default function LandingPage() {
             글쓰기에 쏟는 시간을 줄이고, 실제 경험에 집중하세요.
           </p>
           <div className="mt-6">
-            <Link href="/login">
+            <Link href="/login?mode=signup">
               <Button size="lg" className="text-base px-8 bg-emerald-600 hover:bg-emerald-700">
                 무료로 시작하기
               </Button>

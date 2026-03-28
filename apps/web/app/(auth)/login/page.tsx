@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,9 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  // ?mode=signup 이면 기본을 회원가입으로 (랜딩 CTA → 회원가입 흐름)
+  const initialMode = useSearchParams().get("mode") === "signup" ? "signup" : "login";
+  const [mode, setMode] = useState<"login" | "signup">(initialMode);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -57,7 +60,8 @@ function LoginForm() {
         return;
       }
       // 회원가입 후 users 테이블에 레코드 생성은 DB 트리거로 처리
-      setError(null);
+      // 이메일 인증이 필요할 수 있으므로 안내 메시지 표시
+      setError("✓ 가입 완료! 이메일을 확인해 인증을 완료하세요.");
       setMode("login");
       setIsLoading(false);
       return;
@@ -83,7 +87,9 @@ function LoginForm() {
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-stone-50 to-stone-100 p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">인성이</CardTitle>
+          <CardTitle className="text-2xl font-bold">
+            <Link href="/" className="hover:opacity-80">인성이</Link>
+          </CardTitle>
           <CardDescription>
             {mode === "login"
               ? "블로그 AI 파트너에 로그인"
@@ -115,7 +121,7 @@ function LoginForm() {
             </div>
 
             {error && (
-              <p className="text-sm text-red-600">{error}</p>
+              <p className={`text-sm ${error.startsWith("✓") ? "text-green-600" : "text-red-600"}`}>{error}</p>
             )}
 
             <Button
