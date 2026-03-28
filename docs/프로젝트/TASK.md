@@ -59,7 +59,7 @@ Supabase (공유 제어 평면)
 
 | # | 작업 | 중요도 | 상태 | 비고 |
 |---|------|--------|------|------|
-| UX-C01 | 카카오 JS SDK integrity 해시 업데이트 | P0 | 대기 | kakao.min.js v2.7.4 해시 불일치로 카카오 로그인 차단됨 — 프로덕션 확인 필요 |
+| UX-C01 | 카카오 로그인 프로덕션 실동작 검증 | P1 | 대기 | SDK 에러는 로컬 dev 세션 캐시였음. 프로덕션 OAuth redirect는 SDK 없이 작동. 실제 카카오 로그인 직접 클릭 테스트 필요 |
 | UX-C02 | Vercel insights 404 (dev 환경) | P2 | 대기 | localhost:3001에서 3098 포트 참조 — next.config 환경 분기 추가 |
 | UX-H01 | CTA → 회원가입 기본 | P1 | ✅ 완료 | 랜딩 CTA → `/login?mode=signup`, login.tsx mode 초기화 추가 (2026-03-28) |
 | UX-H02 | 로그인 후 기본 화면 = /write | P1 | 대기 | 신규 사용자는 `/write` 로, 재방문은 `/calendar` 로. 현재 모두 `/calendar` |
@@ -70,7 +70,8 @@ Supabase (공유 제어 평면)
 | UX-M01 | 삭제 confirm → AlertDialog | P2 | 대기 | dashboard/page.tsx window.confirm() → shadcn AlertDialog |
 | UX-M02 | 헤더 이메일 길이 처리 | P2 | 대기 | user.email → @ 앞만 표시 또는 아이콘화 |
 | UX-M03 | 모바일 스탯 카드 표시 | P2 | 대기 | 랜딩 히어로 스탯(1분/30개/24/7) 모바일에서도 인라인 배지로 표시 |
-| UX-ONLINE | 배포된 Vercel 프로덕션 URL UX 검토 | P1 | 대기 | 온라인 버전에서 카카오/네이버 소셜 로그인 실제 동작 확인 필요 |
+| UX-M04 | 이웃관리 "새 이웃 찾기" disabled 안내 개선 | P2 | 대기 | 테마 미등록 시 버튼 disabled 이유 명확히 안내. "테마를 먼저 등록하세요" 인라인 안내 추가 |
+| UX-ONLINE | 프로덕션 UX 검토 (insungblog.vercel.app) | P1 | ✅ 완료 | 2026-03-28 검토. 이웃관리/모바일 헤더 이슈 수정 완료. 카카오 OAuth 작동 여부 수동 테스트 필요 |
 
 ### 기능 개선 (코드 작업)
 
