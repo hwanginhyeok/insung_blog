@@ -232,30 +232,40 @@ export default function NeighborPage() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">
               이웃 현황
-              {stats && (
+              {loading ? (
+                <span className="ml-2 text-sm font-normal text-muted-foreground">불러오는 중...</span>
+              ) : stats ? (
                 <span className="ml-2 text-sm font-normal text-muted-foreground">
                   서로이웃 {stats.neighbors.byType.mutual}명 · 전체 {stats.neighbors.total}명
                 </span>
-              )}
+              ) : null}
             </CardTitle>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 text-xs"
-              onClick={() => setListVisible(!listVisible)}
-            >
-              {listVisible ? "접기" : "목록 보기"}
-            </Button>
+            {/* 이웃 0명이면 목록 보기 없이 바로 안내 표시 */}
+            {!loading && neighbors.length > 0 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs"
+                onClick={() => setListVisible(!listVisible)}
+              >
+                {listVisible ? "접기" : "목록 보기"}
+              </Button>
+            )}
           </div>
         </CardHeader>
 
-        {listVisible && (
+        {/* 이웃 없을 때 빈 상태 안내 — 목록 보기 전에도 표시 */}
+        {!loading && neighbors.length === 0 && (
           <CardContent className="pt-0">
-            {neighbors.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4">
-                등록된 이웃이 없습니다. &lsquo;새 이웃 찾기&rsquo;를 실행해보세요.
-              </p>
-            ) : (
+            <p className="text-sm text-muted-foreground py-3">
+              아직 이웃이 없어요. &lsquo;새 이웃 찾기&rsquo;로 시작해보세요.
+            </p>
+          </CardContent>
+        )}
+
+        {listVisible && neighbors.length > 0 && (
+          <CardContent className="pt-0">
+            {neighbors.length === 0 ? null : (
               <div className="divide-y max-h-96 overflow-y-auto">
                 {neighbors.slice(0, 50).map((n) => (
                   <div key={n.id} className="flex items-center justify-between py-2 text-sm">

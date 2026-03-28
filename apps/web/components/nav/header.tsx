@@ -94,7 +94,7 @@ export function Header() {
     <header className="border-b border-primary/10 bg-primary/5">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
         <div className="flex items-center gap-6">
-          <Link href="/write" className="text-lg font-bold text-primary" title="대시보드로">
+          <Link href="/write" className="text-lg font-bold text-primary whitespace-nowrap" title="대시보드로">
             인성이
           </Link>
           <nav className="flex items-center gap-1">
