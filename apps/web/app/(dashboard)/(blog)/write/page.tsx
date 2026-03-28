@@ -1246,7 +1246,7 @@ function WritePageContent() {
       {/* 플로팅 피드백 바 */}
       {draft && (
         <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-          <div className="mx-auto flex max-w-5xl items-end gap-3 px-4 py-3">
+          <div className="mx-auto flex max-w-5xl items-end gap-3 px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))]">
             <Textarea
               className="min-h-[40px] flex-1 resize-none"
               placeholder="수정 요청: 예) 두번째 문단 더 자세하게, 이모지 줄여줘"
