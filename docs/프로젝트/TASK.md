@@ -53,6 +53,25 @@ Supabase (공유 제어 평면)
 > - NEIGHBOR: 서로이웃 신청 E2E (웹 폼 → 워커 실행 → DB 기록)
 > - TG-E2E: 텔레그램 봇 통합 E2E (`.claude/skills/telegram-bot-test.md`)
 
+### UX/UI 개선 (2026-03-28 디자인 리뷰 결과)
+
+> 상세 리포트: `docs/design-audit-20260328/ux-review-report.md`
+
+| # | 작업 | 중요도 | 상태 | 비고 |
+|---|------|--------|------|------|
+| UX-C01 | 카카오 JS SDK integrity 해시 업데이트 | P0 | 대기 | kakao.min.js v2.7.4 해시 불일치로 카카오 로그인 차단됨 — 프로덕션 확인 필요 |
+| UX-C02 | Vercel insights 404 (dev 환경) | P2 | 대기 | localhost:3001에서 3098 포트 참조 — next.config 환경 분기 추가 |
+| UX-H01 | CTA → 회원가입 기본 | P1 | ✅ 완료 | 랜딩 CTA → `/login?mode=signup`, login.tsx mode 초기화 추가 (2026-03-28) |
+| UX-H02 | 로그인 후 기본 화면 = /write | P1 | 대기 | 신규 사용자는 `/write` 로, 재방문은 `/calendar` 로. 현재 모두 `/calendar` |
+| UX-H03 | 온보딩 "왼쪽 메뉴" → "상단 메뉴" | P1 | ✅ 완료 | onboarding-dialog.tsx 카피 수정 (2026-03-28) |
+| UX-H04 | 회원가입 후 이메일 인증 안내 | P1 | ✅ 완료 | signUp 성공 후 초록 성공 메시지 표시 (2026-03-28) |
+| UX-H05 | 비밀번호 찾기 기능 추가 | P1 | 대기 | Supabase resetPasswordForEmail() 연동 |
+| UX-H06 | 로그인 페이지 홈 링크 | P1 | ✅ 완료 | "인성이" 제목에 `href="/"` 추가 (2026-03-28) |
+| UX-M01 | 삭제 confirm → AlertDialog | P2 | 대기 | dashboard/page.tsx window.confirm() → shadcn AlertDialog |
+| UX-M02 | 헤더 이메일 길이 처리 | P2 | 대기 | user.email → @ 앞만 표시 또는 아이콘화 |
+| UX-M03 | 모바일 스탯 카드 표시 | P2 | 대기 | 랜딩 히어로 스탯(1분/30개/24/7) 모바일에서도 인라인 배지로 표시 |
+| UX-ONLINE | 배포된 Vercel 프로덕션 URL UX 검토 | P1 | 대기 | 온라인 버전에서 카카오/네이버 소셜 로그인 실제 동작 확인 필요 |
+
 ### 기능 개선 (코드 작업)
 
 | # | 작업 | 중요도 | 상태 | 비고 |
