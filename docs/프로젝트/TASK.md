@@ -68,7 +68,7 @@ Supabase (공유 제어 평면)
 | UX-H05 | 비밀번호 찾기 기능 추가 | P1 | 대기 | Supabase resetPasswordForEmail() 연동 |
 | UX-H06 | 로그인 페이지 홈 링크 | P1 | ✅ 완료 | "인성이" 제목에 `href="/"` 추가 (2026-03-28) |
 | UX-M01 | 삭제 confirm → AlertDialog | P2 | 대기 | dashboard/page.tsx window.confirm() → shadcn AlertDialog |
-| UX-M02 | 헤더 이메일 길이 처리 | P2 | 대기 | user.email → @ 앞만 표시 또는 아이콘화 |
+| UX-M02 | 헤더 이메일 길이 처리 | P2 | ✅ 완료 | 모바일 hidden, sm+에서 @앞 ID만 표시 (2026-03-28) |
 | UX-M03 | 모바일 스탯 카드 표시 | P2 | 대기 | 랜딩 히어로 스탯(1분/30개/24/7) 모바일에서도 인라인 배지로 표시 |
 | UX-M04 | 이웃관리 "새 이웃 찾기" disabled 안내 개선 | P2 | 대기 | 테마 미등록 시 버튼 disabled 이유 명확히 안내. "테마를 먼저 등록하세요" 인라인 안내 추가 |
 | UX-ONLINE | 프로덕션 UX 검토 (insungblog.vercel.app) | P1 | ✅ 완료 | 2026-03-28 검토. 이웃관리/모바일 헤더 이슈 수정 완료. 카카오 OAuth 작동 여부 수동 테스트 필요 |
@@ -87,7 +87,7 @@ Supabase (공유 제어 평면)
 | WORKER-ELASTIC | 워커 슬롯 탄력 분배 (Elastic Semaphore) | P1 | 대기 | 아래 세부 참조 |
 | WORKER-CMD | command_worker에 추천/동기화/테마분석 명령 핸들러 추가 | P1 | ✅ 완료 | 3개 핸들러 + API route 등록. 테스트 5건 통과 |
 | ADMIN-BOT-DETAIL | UserDetailModal에 봇 실행 이력 탭 추가 | P2 | 대기 | 상세 일별 차트 + 로그 테이블 |
-| NAV-MOBILE | 드롭다운 메뉴 모바일 반응형 검증 및 수정 | P2 | 대기 | 야간 작업에서 NAV-LAYOUT 후속 |
+| NAV-MOBILE | 모바일 반응형 전체 개선 | P2 | ✅ 완료 | 헤더 오버플로우·이메일, 글쓰기 버튼 wrap, 사진 삭제 터치, 뱃지 shrink, 탭 스크롤 fade, iPhone safe-area (2026-03-28) |
 | NEIGHBOR-E2E | 이웃 연동 기능 실행 테스트 | P1 | 대기 | 브라우저 필요 — 추천/동기화/테마분석 E2E |
 
 ### 자동화 파이프라인
