@@ -827,7 +827,7 @@ function WritePageContent() {
                       </div>
                       <button
                         onClick={() => removePhoto(i)}
-                        className="absolute right-1 top-1 hidden rounded bg-black/60 px-1.5 py-0.5 text-xs text-white group-hover:block"
+                        className="absolute right-1 top-1 block rounded bg-black/60 px-1.5 py-0.5 text-xs text-white sm:hidden group-hover:block"
                       >
                         X
                       </button>
@@ -960,7 +960,7 @@ function WritePageContent() {
             <>
               <Card>
                 <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2">
                       <CardTitle className="text-base">AI 초안</CardTitle>
                       <button
@@ -974,7 +974,7 @@ function WritePageContent() {
                         {isEditMode ? "미리보기" : "편집"}
                       </button>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" onClick={handleCopy}>
                         {copyLabel}
                       </Button>

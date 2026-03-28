@@ -233,8 +233,8 @@ export function Header() {
         </div>
         <div className="flex items-center gap-2">
           {user && (
-            <span className="text-sm text-foreground/50">
-              {user.email}
+            <span className="hidden sm:inline text-sm text-foreground/50">
+              {user.email?.split("@")[0]}
             </span>
           )}
           <Button

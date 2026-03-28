@@ -117,14 +117,14 @@ export default function DashboardPage() {
                 className="transition-shadow hover:shadow-md"
               >
                 <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1 space-y-1">
                       <CardTitle className="text-base">
                         {post.generated_title || "(제목 생성 중...)"}
                       </CardTitle>
                       <CardDescription>{dateStr}</CardDescription>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-shrink-0 items-center gap-2">
                       {post.source === "telegram" && (
                         <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
                           TG
