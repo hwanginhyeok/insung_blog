@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
   const status = req.nextUrl.searchParams.get("status") || "pending";
   const limit = Math.min(
     Number(req.nextUrl.searchParams.get("limit")) || 50,
-    200
+    500
   );
   const descending = req.nextUrl.searchParams.get("order") === "desc";
 
