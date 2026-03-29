@@ -380,18 +380,16 @@ async def _fill_and_submit(
     except Exception:
         pass
     
-    # 등록 버튼 클릭 - 보이는 버튼만 선택
+    # 등록 버튼 대기 — 댓글 모듈이 비동기로 로그인 상태를 확인하므로
+    # 타이핑 후 최대 10초까지 버튼이 visible 해질 때까지 기다림
     submit_btn = None
     for selector in _SUBMIT_SELECTORS:
         try:
-            btn = await frame.query_selector(selector)
+            btn = await frame.wait_for_selector(selector, state="visible", timeout=10_000)
             if btn:
-                is_visible = await btn.is_visible()
-                is_enabled = await btn.is_enabled()
-                if is_visible and is_enabled:
-                    submit_btn = btn
-                    logger.debug(f"등록 버튼 선택: {selector}")
-                    break
+                submit_btn = btn
+                logger.debug(f"등록 버튼 선택: {selector}")
+                break
         except Exception:
             continue
 
