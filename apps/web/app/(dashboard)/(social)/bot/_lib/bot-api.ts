@@ -162,8 +162,14 @@ export async function apiFetchStatus(): Promise<BotStatusResponse> {
   return res.json();
 }
 
-export async function apiFetchPending(status = "pending"): Promise<{ comments: PendingComment[] }> {
-  const res = await fetch(`/api/bot/pending?status=${status}`);
+export async function apiFetchPending(
+  status = "pending",
+  options?: { order?: "asc" | "desc"; limit?: number }
+): Promise<{ comments: PendingComment[] }> {
+  const params = new URLSearchParams({ status });
+  if (options?.order) params.set("order", options.order);
+  if (options?.limit) params.set("limit", String(options.limit));
+  const res = await fetch(`/api/bot/pending?${params}`);
   if (!res.ok) throw new Error("대기 댓글 조회 실패");
   return res.json();
 }

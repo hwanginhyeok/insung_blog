@@ -178,9 +178,9 @@ export function useBotStatus(): BotStatusState {
       const [statusData, pendingData, cookieData, approvedData] =
         await Promise.all([
           apiFetchStatus(),
-          apiFetchPending("pending"),
+          apiFetchPending("pending", { order: "desc", limit: 200 }),
           apiFetchCookieStatus(),
-          apiFetchPending("approved"),
+          apiFetchPending("approved", { order: "desc", limit: 200 }),
         ]);
 
       setRuns(statusData.recentRuns || []);
