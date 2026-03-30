@@ -309,10 +309,15 @@ async def _open_comment_area(frame: Frame) -> None:
 
 
 async def _find_comment_input(frame: Frame) -> object | None:
-    """댓글 입력창(contenteditable div 또는 textarea) 탐색."""
-    for selector in _INPUT_SELECTORS:
+    """댓글 입력창(contenteditable div 또는 textarea) 탐색.
+    첫 번째(주력) 셀렉터에 ELEMENT_TIMEOUT 사용, 나머지 폴백은 2초.
+    입력창 없는 게시물에서 ~60초 대기 -> ~14초로 단축."""
+    FALLBACK_TIMEOUT = 2000  # 폴백 셀렉터 타임아웃 (2초)
+
+    for idx, selector in enumerate(_INPUT_SELECTORS):
+        timeout = ELEMENT_TIMEOUT if idx == 0 else FALLBACK_TIMEOUT
         try:
-            el = await frame.wait_for_selector(selector, timeout=ELEMENT_TIMEOUT)
+            el = await frame.wait_for_selector(selector, timeout=timeout)
             if el:
                 logger.debug(f"댓글 입력창 발견: {selector}")
                 return el
