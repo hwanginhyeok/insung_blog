@@ -239,7 +239,7 @@ async def handle_execute(user_id: str | None = None) -> dict:
 
     from src.auth.naver_login import ensure_login, ensure_login_cookie_only
     from src.commenter.comment_writer import write_comment
-    from src.storage.database import add_to_retry_queue, init_db
+    from src.storage.database import add_to_retry_queue, init_db, record_comment
     from src.storage.supabase_client import (
         get_pending_comments_sb,
         update_pending_status_sb,
@@ -283,6 +283,14 @@ async def handle_execute(user_id: str | None = None) -> dict:
             pw_instance = await async_playwright().start()
 
             for i, comment in enumerate(approved, 1):
+                # 종료 시그널 수신 시 즉시 중단 — 남은 댓글 approved 롤백 (재시도 가능)
+                if _shutdown:
+                    remaining = approved[i - 1:]
+                    logger.info(f"종료 시그널로 중단 — {len(remaining)}개 approved 롤백")
+                    for rc in remaining:
+                        update_pending_status_sb(rc["id"], "approved", decided_by="worker")
+                    break
+
                 # 브라우저 시작 또는 BATCH_SIZE마다 재시작
                 if browser is None or ((i - 1) % BATCH_SIZE == 0 and i > 1):
                     if browser:
@@ -313,9 +321,17 @@ async def handle_execute(user_id: str | None = None) -> dict:
                     )
                     if ok:
                         update_pending_status_sb(comment_id, "posted", decided_by="worker")
+                        # SQLite comment_history 기록 — is_post_commented() 중복 방지용
+                        record_comment(post_url, blog_id, post_title, comment_text, True, user_id=user_id)
                         success_count += 1
                         consecutive_failures = 0
                         logger.info(f"✓ [{i}/{total}] 성공: {blog_id}")
+                    elif ok is None:
+                        # 댓글 입력창 없음 — 게시물 자체 문제 (비공개/설정 차단)
+                        # 연속 실패 카운터 증가 안 함 (브라우저 크래시와 무관)
+                        update_pending_status_sb(comment_id, "failed", decided_by="worker")
+                        failed_count += 1
+                        logger.warning(f"✗ [{i}/{total}] 스킵 (입력창 없음): {blog_id}")
                     else:
                         update_pending_status_sb(comment_id, "failed", decided_by="worker")
                         add_to_retry_queue(
@@ -335,19 +351,19 @@ async def handle_execute(user_id: str | None = None) -> dict:
                     consecutive_failures += 1
                     logger.error(f"✗ [{i}/{total}] 예외: {e}")
 
-                # 연속 실패 한도 초과 → 브라우저 크래시로 판단, 중단
+                # 연속 실패 한도 초과 → 셀렉터 깨짐 또는 브라우저 크래시로 판단, 중단
                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                    remaining = total - i
+                    remaining_count = total - i
                     logger.error(
-                        f"연속 {MAX_CONSECUTIVE_FAILURES}회 실패 — 브라우저 크래시 판단, "
-                        f"나머지 {remaining}개 중단"
+                        f"연속 {MAX_CONSECUTIVE_FAILURES}회 실패 — 셀렉터 깨짐 또는 브라우저 크래시 판단, "
+                        f"나머지 {remaining_count}개 approved 롤백 (수정 후 재시도 가능)"
                     )
-                    # 남은 댓글을 failed 처리
+                    # 미처리 댓글을 approved로 롤백 — failed로 처리하지 않음
+                    # 셀렉터 수정 후 재실행 시 자동 재시도 가능
                     for remaining_comment in approved[i:]:
                         update_pending_status_sb(
-                            remaining_comment["id"], "failed", decided_by="worker"
+                            remaining_comment["id"], "approved", decided_by="worker"
                         )
-                        failed_count += 1
                     break
 
                 if i < total:

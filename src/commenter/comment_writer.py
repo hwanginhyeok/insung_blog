@@ -111,40 +111,39 @@ async def _check_my_comment(frame: Frame, my_blog_ids: set[str]) -> bool:
     댓글 영역에서 내 blog_id(들)로 작성된 댓글이 있는지 확인.
     다중 블로그 ID를 지원하여 모든 부계정 댓글도 감지.
     """
-    import json
-    # JS에 안전하게 전달하기 위해 JSON 배열로 변환
-    ids_json = json.dumps(list(my_blog_ids))
     try:
-        found = await frame.evaluate(f'''() => {{
-            const myIds = {ids_json};
-            // 댓글 영역의 모든 프로필 링크 검색
-            const links = document.querySelectorAll(
-                '.u_cbox_info a[href], .u_cbox_nick a[href], ' +
-                '.u_cbox_comment_box a[href*="blog.naver.com"]'
-            );
-            for (const link of links) {{
-                const href = link.getAttribute('href') || '';
-                for (const myId of myIds) {{
-                    if (href.includes('blog.naver.com/' + myId) ||
-                        href.includes('/' + myId)) {{
-                        return true;
-                    }}
-                }}
-            }}
-            // 닉네임 텍스트에서도 검색 (프로필 링크 없는 경우)
-            const nicks = document.querySelectorAll(
-                '.u_cbox_nick, .u_cbox_name'
-            );
-            for (const nick of nicks) {{
-                const onclick = nick.getAttribute('onclick') || '';
-                for (const myId of myIds) {{
-                    if (onclick.includes(myId)) {{
-                        return true;
-                    }}
-                }}
-            }}
-            return false;
-        }}''')
+        found = await frame.evaluate(
+            """(myIds) => {
+                // 댓글 영역의 모든 프로필 링크 검색
+                const links = document.querySelectorAll(
+                    '.u_cbox_info a[href], .u_cbox_nick a[href], ' +
+                    '.u_cbox_comment_box a[href*="blog.naver.com"]'
+                );
+                for (const link of links) {
+                    const href = link.getAttribute('href') || '';
+                    for (const myId of myIds) {
+                        if (href.includes('blog.naver.com/' + myId) ||
+                            href.includes('/' + myId)) {
+                            return true;
+                        }
+                    }
+                }
+                // 닉네임 텍스트에서도 검색 (프로필 링크 없는 경우)
+                const nicks = document.querySelectorAll(
+                    '.u_cbox_nick, .u_cbox_name'
+                );
+                for (const nick of nicks) {
+                    const onclick = nick.getAttribute('onclick') || '';
+                    for (const myId of myIds) {
+                        if (onclick.includes(myId)) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }""",
+            list(my_blog_ids),
+        )
         return bool(found)
     except Exception as e:
         logger.debug(f"내 댓글 확인 실패 (무시): {e}")
@@ -212,7 +211,7 @@ async def write_comment(
             input_el = await _find_comment_input(target_frame)
             if input_el is None:
                 logger.warning(f"댓글 입력창 없음 — 게시물 스킵: {post_url}")
-                return False, comment_text
+                return None, comment_text  # None = 게시물 자체 문제 (연속 실패 카운터 제외)
 
             success = await _fill_and_submit(target_frame, input_el, comment_text, dry_run)
             if success:
@@ -414,13 +413,26 @@ async def _fill_and_submit(
 
     # 실제 제출 성공 여부 확인
     # 방법 1: 입력창이 비워졌는지 확인 (제출 성공 시 초기화됨)
-    try:
-        current_text = await input_el.evaluate("e => e.textContent || e.value || ''")
-        if current_text and len(current_text.strip()) > 0:
-            logger.warning(f"댓글 제출 후 입력창이 비워지지 않음: '{current_text[:30]}...'")
-            return False
-    except Exception as e:
-        logger.debug(f"입력창 확인 중 오류 (무시): {e}")
+    # 네이버 cbox가 비동기로 처리하므로 최대 3회(3초 간격) 재확인
+    input_cleared = None
+    for check in range(3):
+        try:
+            current_text = await input_el.evaluate("e => e.textContent || e.value || ''")
+            if not current_text or len(current_text.strip()) == 0:
+                input_cleared = True
+                break
+            if check < 2:
+                logger.debug(f"입력창 미비워짐 — {check+1}회 재확인 대기")
+                await asyncio.sleep(3)
+        except Exception as e:
+            # 입력창 요소 자체가 사라진 경우 → 제출 성공으로 간주
+            logger.debug(f"입력창 확인 중 오류 (성공으로 간주): {e}")
+            input_cleared = True
+            break
+    if input_cleared is None:
+        # 3회 확인 후에도 비워지지 않음 → 제출 실패
+        logger.warning("댓글 제출 후 입력창이 비워지지 않음 — 제출 실패로 처리")
+        return False
     
     # 방법 2: 성공 메시지 확인
     try:
