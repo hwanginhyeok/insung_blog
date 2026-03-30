@@ -168,15 +168,40 @@ def _conn(user_id: str | None = None, timeout: int = 30):
 def is_post_commented(post_url: str, user_id: str | None = None) -> bool:
     """
     해당 URL에 이미 댓글이 달렸는지 확인.
-    - success=1: 이미 댓글 작성됨
-    (거부 상태는 Supabase pending_comments에서 관리)
+    1) SQLite comment_history (success=1) 체크
+    2) SQLite에 없으면 Supabase pending_comments도 체크 (pending/approved/posted)
+    Supabase 조회 실패 시 경고 로그 후 SQLite 결과만 사용.
     """
+    # 1단계: SQLite 체크
     with _conn(user_id) as conn:
         row = conn.execute(
             "SELECT 1 FROM comment_history WHERE post_url = ? AND success = 1",
             (post_url,),
         ).fetchone()
-    return row is not None
+    if row is not None:
+        return True
+
+    # 2단계: Supabase 체크 — pending/approved/posted 상태 확인
+    try:
+        from src.storage.supabase_client import get_supabase, _resolve_user_id
+
+        sb = get_supabase()
+        uid = _resolve_user_id(user_id)
+        result = (
+            sb.table("pending_comments")
+            .select("id", count="exact")
+            .eq("user_id", uid)
+            .eq("post_url", post_url)
+            .in_("status", ["pending", "approved", "posted"])
+            .execute()
+        )
+        if (result.count or 0) > 0:
+            logger.info(f"Supabase에서 중복 발견: {post_url[:60]}")
+            return True
+    except Exception as e:
+        logger.warning(f"Supabase 중복 체크 실패 (SQLite 결과만 사용): {e}")
+
+    return False
 
 
 @_retry_on_db_lock(max_retries=3)

@@ -253,6 +253,29 @@ async def handle_execute(user_id: str | None = None) -> dict:
     if not approved:
         return {"message": "승인된 댓글 없음", "total": 0, "success": 0, "failed": 0}
 
+    # post_url 기준 중복 제거 — 같은 게시물에 여러 approved가 있으면 첫 번째만 유지
+    seen_urls: set[str] = set()
+    unique_approved: list[dict] = []
+    for comment in approved:
+        if comment["post_url"] not in seen_urls:
+            unique_approved.append(comment)
+            seen_urls.add(comment["post_url"])
+        else:
+            update_pending_status_sb(
+                comment["id"], "rejected",
+                decided_by="worker",
+                fail_reason="중복 자동 제거 (게시 전 필터)",
+            )
+            logger.warning(
+                f"중복 제거: {comment['blog_id']} / {comment['post_url'][:50]} → rejected"
+            )
+    if len(approved) != len(unique_approved):
+        logger.info(
+            f"중복 제거: {len(approved)}개 → {len(unique_approved)}개 "
+            f"({len(approved) - len(unique_approved)}건 rejected)"
+        )
+    approved = unique_approved
+
     total = len(approved)
     success_count = 0
     failed_count = 0

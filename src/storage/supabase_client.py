@@ -289,11 +289,30 @@ def add_pending_comment_sb(
 ) -> str | None:
     """
     승인 대기 댓글 추가 (봇 → Supabase).
-    반환: 생성된 row UUID (실패 시 None).
+    INSERT 전 (post_url, user_id) + status IN ('pending', 'approved') 중복 체크.
+    이미 존재하면 기존 id 반환 (재삽입 안 함).
+    반환: 생성된(또는 기존) row UUID (실패 시 None).
     """
     try:
         sb = get_supabase()
         uid = _resolve_user_id(user_id)
+
+        # 중복 사전 체크: 같은 게시물에 대기/승인 상태가 이미 있으면 재삽입 방지
+        existing = (
+            sb.table("pending_comments")
+            .select("id, status")
+            .eq("user_id", uid)
+            .eq("post_url", post_url)
+            .in_("status", ["pending", "approved"])
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            existing_id = existing.data[0]["id"]
+            logger.warning(
+                f"중복 방지: {post_url[:60]} 이미 대기/승인 중 (id={existing_id[:8]})"
+            )
+            return existing_id
 
         row = {
             "user_id": uid,
