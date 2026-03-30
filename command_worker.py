@@ -287,14 +287,39 @@ async def handle_execute(user_id: str | None = None) -> dict:
     consecutive_failures = 0  # 연속 실패 카운터
     MAX_CONSECUTIVE_FAILURES = 5  # 연속 실패 한도 — 초과 시 브라우저 크래시로 판단
 
+    async def _verify_nid_aut(context) -> bool:
+        """로그인 후 NID_AUT 쿠키 존재 여부 검증."""
+        all_cookies = await context.cookies()
+        return any(c["name"] == "NID_AUT" for c in all_cookies)
+
     async def _login(context, page):
         if user_id:
-            return await ensure_login_cookie_only(context, page, user_id)
+            logged_in = await ensure_login_cookie_only(context, page, user_id)
+            if logged_in and not await _verify_nid_aut(context):
+                logger.warning(
+                    f"로그인 성공했으나 NID_AUT 없음 (user={user_id[:8]}) — 1회 재시도"
+                )
+                # 쿠키 캐시 무효화 후 재시도
+                logged_in = await ensure_login_cookie_only(context, page, user_id)
+                if logged_in and not await _verify_nid_aut(context):
+                    logger.error(
+                        f"재시도 후에도 NID_AUT 없음 (user={user_id[:8]}) — "
+                        f"댓글 입력창 미노출 가능"
+                    )
+            return logged_in
         naver_id = os.environ.get("NAVER_ID", "")
         naver_pw = os.environ.get("NAVER_PW", "")
         if not all([naver_id, naver_pw]):
             raise RuntimeError(".env 인증 정보 누락 (NAVER_ID, NAVER_PW)")
-        return await ensure_login(context, page, naver_id, naver_pw)
+        logged_in = await ensure_login(context, page, naver_id, naver_pw)
+        if logged_in and not await _verify_nid_aut(context):
+            logger.warning("로그인 성공했으나 NID_AUT 없음 (admin) — 1회 재로그인 시도")
+            logged_in = await ensure_login(context, page, naver_id, naver_pw)
+            if logged_in and not await _verify_nid_aut(context):
+                logger.error(
+                    "재로그인 후에도 NID_AUT 없음 (admin) — 댓글 입력창 미노출 가능"
+                )
+        return logged_in
 
     async with _browser_semaphore:
         browser = None

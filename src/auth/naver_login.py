@@ -356,18 +356,31 @@ async def ensure_login_cookie_only(
     """
     다중 사용자용 쿠키 전용 로그인.
     ID/PW 폴백 없음 — 쿠키가 없거나 만료되면 False 반환.
+    NID_AUT 없으면 Supabase에서 쿠키 재로드 1회 시도.
     """
     cookie_loaded = await _load_cookies_for_user(context, user_id)
     if not cookie_loaded:
         logger.warning(f"사용자 {user_id[:8]} 쿠키 없음 — 웹에서 쿠키 업로드 필요")
         return False
 
-    # NID_AUT 사전 검증 — 없으면 댓글 영역에서 로그아웃 상태
+    # NID_AUT 사전 검증 — 없으면 Supabase에서 최신 쿠키 재로드 1회 시도
     all_cookies = await context.cookies()
     has_nid_aut = any(c["name"] == "NID_AUT" for c in all_cookies)
     if not has_nid_aut:
-        logger.warning(f"사용자 {user_id[:8]} 쿠키에 NID_AUT 없음 — 웹에서 재업로드 필요")
-        return False
+        logger.warning(
+            f"사용자 {user_id[:8]} 쿠키에 NID_AUT 없음 — Supabase에서 최신 쿠키 재로드 시도"
+        )
+        # 기존 쿠키 초기화 후 재로드
+        await context.clear_cookies()
+        retry_loaded = await _load_cookies_for_user(context, user_id)
+        if retry_loaded:
+            all_cookies = await context.cookies()
+            has_nid_aut = any(c["name"] == "NID_AUT" for c in all_cookies)
+        if not has_nid_aut:
+            logger.warning(
+                f"사용자 {user_id[:8]} 재로드 후에도 NID_AUT 없음 — 웹에서 재업로드 필요"
+            )
+            return False
 
     if await _is_logged_in(page):
         logger.info(f"쿠키 로그인 확인 (user={user_id[:8]})")
