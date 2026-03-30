@@ -49,6 +49,56 @@ Supabase (공유 제어 평면)
 | DUPLICATE-FIX | 중복 댓글 다층 방어 (사전 체크 + Supabase 이중 체크 + 게시 전 필터) | P0 | ✅ 완료 | 154그룹 237건 정리 + 4단계 방어 코드. 마이그레이션 SQL 수동 실행 필요 (2026-03-30) |
 | COOKIE-REFRESH | NID_AUT 없음 감지 시 재로그인 로직 강화 | P1 | ✅ 완료 | Supabase 쿠키 재로드 + 워커 NID_AUT 검증 + 1회 재시도 (2026-03-30) |
 | FAIL-FAST | 댓글 입력창 탐색 타임아웃 최적화 (~70초 -> ~20초) | P1 | ✅ 완료 | 주력 셀렉터 10초 + 폴백 2초 (2026-03-30) |
+| MIGRATION-UNIQUE | pending_comments UNIQUE partial index 적용 | P0 | 🔴 집에서 수동 실행 필요 | **dev 환경 없음 — prod 직접 적용 (순서 지켜야 함)** → 아래 절차 참고 |
+
+#### MIGRATION-UNIQUE 실행 절차 (집에서 직접 수행)
+
+> dev 환경이 없으므로 prod Supabase에 직접 적용. 단계별로 확인하면서 진행.
+
+**STEP 1 — 중복 현황 확인 (Supabase Dashboard → SQL Editor)**
+```sql
+SELECT post_url, user_id, COUNT(*) AS cnt
+FROM pending_comments
+WHERE status IN ('pending', 'approved', 'posted')
+GROUP BY post_url, user_id
+HAVING COUNT(*) > 1;
+```
+- 결과 0건이면 STEP 2 스킵, 바로 STEP 3
+- 결과 있으면 STEP 2 진행
+
+**STEP 2 — 중복 정리 스크립트 실행 (로컬)**
+```bash
+cd ~/insung_blog
+source .venv/bin/activate
+# dry-run 먼저 (실제 변경 없이 대상 확인)
+python tools/fix_duplicate_comments.py --dry-run
+# 결과 확인 후 실제 실행
+python tools/fix_duplicate_comments.py
+```
+
+**STEP 3 — UNIQUE index 적용 (Supabase Dashboard → SQL Editor)**
+```sql
+-- 파일 위치: supabase/migrations/20260329_add_unique_pending_comments.sql
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pending_comments_active_unique
+ON pending_comments (post_url, user_id)
+WHERE status IN ('pending', 'approved', 'posted');
+```
+
+**STEP 4 — 검증**
+```sql
+-- 인덱스 생성 확인
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'pending_comments' AND indexname = 'idx_pending_comments_active_unique';
+```
+- 결과 1행 나오면 성공
+
+**STEP 5 — push (검증 완료 후)**
+```bash
+git push
+```
+
+> **롤백**: `DROP INDEX IF EXISTS idx_pending_comments_active_unique;` 으로 즉시 되돌릴 수 있음
 
 > **잔여 E2E 항목** (TEST 섹션에 통합)
 > - PUB-08: 저장→발행→URL E2E (워커+브라우저)
