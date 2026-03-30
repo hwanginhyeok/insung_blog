@@ -45,9 +45,40 @@ python -c "import py_compile; py_compile.compile('파일.py', doraise=True)"
 
 ## 세션 시작 프로토콜 (필수)
 
-1. **TASK 현황 점검** — `docs/프로젝트/TASK.md` 읽기
-2. **브리핑 보고** — 최근 완료 + 오늘 할 일 + 블로커
-3. **방향성 논의** — 사용자와 우선순위 합의
+### STEP 0 — 서비스 상태 확인 + 자동 재시작 (매 세션 필수)
+
+```bash
+systemctl --user status blog-api blog-worker blog-telegram | grep -E "●|Active:"
+```
+
+- 3개 모두 `active (running)` → 정상, 다음 단계로
+- **inactive/failed 있으면 즉시 재시작** (확인 없이 바로 실행):
+  ```bash
+  systemctl --user restart blog-api blog-worker blog-telegram
+  sleep 2
+  systemctl --user status blog-api blog-worker blog-telegram | grep -E "●|Active:"
+  ```
+- 재시작 후에도 failed이면 로그 확인:
+  ```bash
+  journalctl --user -u blog-worker -n 20 --no-pager
+  ```
+- 워커 중복 프로세스 체크:
+  ```bash
+  ps aux | grep command_worker | grep -v grep | wc -l  # 반드시 1
+  ```
+  2 이상이면: `systemctl --user stop blog-worker && pkill -f command_worker.py 2>/dev/null && sleep 2 && systemctl --user start blog-worker`
+
+### STEP 1 — TASK 현황 점검
+
+`docs/프로젝트/TASK.md` 읽기
+
+### STEP 2 — 브리핑 보고
+
+최근 완료 + 오늘 할 일 + 블로커
+
+### STEP 3 — 방향성 논의
+
+사용자와 우선순위 합의
 
 ---
 

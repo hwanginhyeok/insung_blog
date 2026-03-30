@@ -490,6 +490,13 @@ async def _process_retry_queue(
 
     for target in targets:
         try:
+            # 이미 성공한 포스트는 재시도 스킵 (중복 댓글 방지)
+            if is_post_commented(target["post_url"], user_id=user_id):
+                logger.info(f"이미 댓글 완료된 포스트 — retry 제거: {target['post_url'][:60]}")
+                remove_from_retry_queue(target["post_url"], user_id=user_id)
+                success += 1
+                continue
+
             ok, _ = await write_comment(
                 page,
                 target["post_url"],

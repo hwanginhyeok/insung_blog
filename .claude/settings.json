@@ -1,2 +1,15 @@
 {
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "systemctl --user is-active blog-api blog-worker blog-telegram | grep -q inactive && systemctl --user restart blog-api blog-worker blog-telegram && sleep 2; systemctl --user status blog-api blog-worker blog-telegram | grep -E '●|Active:'"
+          }
+        ]
+      }
+    ]
+  }
 }
