@@ -299,12 +299,19 @@ async def handle_execute(user_id: str | None = None) -> dict:
                 logger.warning(
                     f"로그인 성공했으나 NID_AUT 없음 (user={user_id[:8]}) — 1회 재시도"
                 )
-                # 쿠키 캐시 무효화 후 재시도
                 logged_in = await ensure_login_cookie_only(context, page, user_id)
                 if logged_in and not await _verify_nid_aut(context):
-                    logger.error(
-                        f"재시도 후에도 NID_AUT 없음 (user={user_id[:8]}) — "
-                        f"댓글 입력창 미노출 가능"
+                    # NID_AUT 없으면 댓글 제출 버튼 미활성화 — 계속 실행해도 전량 실패
+                    # 즉시 중단하고 쿠키 재업로드 요청 알림 전송
+                    from src.utils.telegram_notifier import notify_login_failure
+                    await notify_login_failure(
+                        f"NID_AUT 쿠키가 없습니다 (user={user_id[:8]})\n"
+                        "네이버 세션이 만료됐습니다.\n\n"
+                        "조치: 웹 대시보드 → [봇 설정] → 쿠키 업로드에서\n"
+                        "새 쿠키를 업로드한 뒤 다시 실행해주세요."
+                    )
+                    raise RuntimeError(
+                        "쿠키 만료: NID_AUT 없음 — 웹 대시보드에서 쿠키를 재업로드하세요"
                     )
             return logged_in
         naver_id = os.environ.get("NAVER_ID", "")
@@ -316,8 +323,14 @@ async def handle_execute(user_id: str | None = None) -> dict:
             logger.warning("로그인 성공했으나 NID_AUT 없음 (admin) — 1회 재로그인 시도")
             logged_in = await ensure_login(context, page, naver_id, naver_pw)
             if logged_in and not await _verify_nid_aut(context):
-                logger.error(
-                    "재로그인 후에도 NID_AUT 없음 (admin) — 댓글 입력창 미노출 가능"
+                from src.utils.telegram_notifier import notify_login_failure
+                await notify_login_failure(
+                    "NID_AUT 쿠키가 없습니다 (admin)\n"
+                    "NAVER_ID/NAVER_PW 로 재로그인해도 NID_AUT가 발급되지 않습니다.\n\n"
+                    "조치: .env 인증 정보 확인 후 봇을 재시작하세요."
+                )
+                raise RuntimeError(
+                    "쿠키 만료: NID_AUT 없음 — .env 인증 정보를 확인하고 봇을 재시작하세요"
                 )
         return logged_in
 

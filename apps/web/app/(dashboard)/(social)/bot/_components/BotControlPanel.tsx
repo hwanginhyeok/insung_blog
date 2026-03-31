@@ -11,6 +11,60 @@ import {
   timeAgo,
 } from "../_lib/bot-api";
 
+// ── 에러 분류 ────────────────────────────────────────────────
+
+type ErrorClass = {
+  badge: string;
+  badgeColor: string;
+  remedy: string;
+};
+
+function classifyError(msg: string | null | undefined): ErrorClass {
+  if (!msg) return { badge: "오류", badgeColor: "text-red-500", remedy: "로그를 확인하세요." };
+  const m = msg.toLowerCase();
+  if (m.includes("nid_aut") || m.includes("쿠키 만료") || m.includes("쿠키를 재업로드")) {
+    return {
+      badge: "쿠키 만료",
+      badgeColor: "text-orange-600",
+      remedy: "웹 대시보드 → [봇 설정] → 쿠키 업로드",
+    };
+  }
+  if (m.includes("로그인 실패") || m.includes("login") || m.includes("인증")) {
+    return {
+      badge: "로그인 실패",
+      badgeColor: "text-orange-600",
+      remedy: "쿠키를 재업로드하거나 봇을 재시작하세요.",
+    };
+  }
+  if (
+    m.includes("셀렉터") ||
+    m.includes("제출 버튼") ||
+    m.includes("입력창") ||
+    m.includes("selector")
+  ) {
+    return {
+      badge: "셀렉터 오류",
+      badgeColor: "text-yellow-600",
+      remedy: "네이버 DOM 변경 가능성 — 개발자 확인 필요",
+    };
+  }
+  if (m.includes("연속") && m.includes("실패")) {
+    return {
+      badge: "연속 실패",
+      badgeColor: "text-yellow-600",
+      remedy: "잠시 후 재시도하거나 쿠키 상태를 확인하세요.",
+    };
+  }
+  if (m.includes("timeout") || m.includes("타임아웃")) {
+    return {
+      badge: "타임아웃",
+      badgeColor: "text-yellow-600",
+      remedy: "네트워크 상태를 확인하고 재시도하세요.",
+    };
+  }
+  return { badge: "오류", badgeColor: "text-red-500", remedy: "로그를 확인하세요." };
+}
+
 // ── 3단계 Stepper ───────────────────────────────────────────
 
 const STEPS = [
@@ -326,27 +380,51 @@ export function BotControlPanel({
                 .map((c) => (
                   <div
                     key={c.id}
-                    className="flex items-center justify-between rounded border px-3 py-1.5 text-sm"
+                    className="rounded border px-3 py-2 text-sm"
                   >
-                    <span className="text-muted-foreground">
-                      {timeAgo(c.created_at)}
-                    </span>
-                    <span>
-                      {c.status === "completed" ? (
-                        <span className="text-green-600">
-                          {COMMAND_LABELS[c.command]} 완료
-                        </span>
-                      ) : (
-                        <span className="text-red-500">
-                          {COMMAND_LABELS[c.command]} 실패
+                    {/* 1행: 시간 / 명령 결과 / 배지 */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">
+                        {timeAgo(c.created_at)}
+                      </span>
+                      <span>
+                        {c.status === "completed" ? (
+                          <span className="text-green-600">
+                            {COMMAND_LABELS[c.command]} 완료
+                          </span>
+                        ) : (
+                          <span className="text-red-500">
+                            {COMMAND_LABELS[c.command]} 실패
+                          </span>
+                        )}
+                      </span>
+                      {c.status === "failed" && (
+                        <span
+                          className={`text-xs font-medium ${classifyError(c.error_message).badgeColor}`}
+                        >
+                          [{classifyError(c.error_message).badge}]
                         </span>
                       )}
-                    </span>
-                    <span className="max-w-[200px] truncate text-xs text-muted-foreground">
-                      {c.status === "completed" && c.result
-                        ? ((c.result as Record<string, unknown>).message as string) || ""
-                        : c.error_message || ""}
-                    </span>
+                      {c.status === "completed" && c.result && (
+                        <span className="max-w-[160px] truncate text-xs text-muted-foreground">
+                          {((c.result as Record<string, unknown>).message as string) || ""}
+                        </span>
+                      )}
+                    </div>
+                    {/* 2행: 실패 시 원인 + 조치 방안 */}
+                    {c.status === "failed" && (
+                      <div className="mt-1 space-y-0.5">
+                        <p
+                          className="text-xs text-muted-foreground"
+                          title={c.error_message ?? ""}
+                        >
+                          {c.error_message || "알 수 없는 오류"}
+                        </p>
+                        <p className="text-xs font-medium text-blue-600">
+                          → {classifyError(c.error_message).remedy}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 ))}
             </div>
