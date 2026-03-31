@@ -14,6 +14,10 @@
 -- 2. UNIQUE 제약 추가
 -- 주의: 전체 행에 대한 UNIQUE가 아닌, 활성 상태만 대상으로 하는 partial unique index 사용
 -- rejected/failed 상태는 동일 post_url 허용 (재시도 가능하도록)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_pending_comments_active_unique
+-- CONCURRENTLY: 인덱스 생성 중 다른 INSERT/UPDATE 블로킹 없음 (트랜잭션 밖에서 실행)
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_pending_comments_active_unique
 ON pending_comments (post_url, user_id)
 WHERE status IN ('pending', 'approved', 'posted');
+
+-- 롤백 시:
+-- DROP INDEX CONCURRENTLY IF EXISTS idx_pending_comments_active_unique;

@@ -395,6 +395,7 @@ class TestHandleExecuteRecordComment:
         # 나머지(미처리)는 approved 롤백
         approved_calls = [(cid, st) for cid, st in update_calls if st == "approved"]
 
-        assert len(approved_calls) >= 1, "미처리 댓글이 approved로 롤백되어야 함"
+        # 8개 중 5개 처리(failed) + 3개 미처리(approved 롤백)
+        assert len(approved_calls) == 3, "미처리 3개가 approved로 롤백되어야 함"
         # failed는 실제 처리된 것들만 (5개)
         assert len(failed_calls) == 5

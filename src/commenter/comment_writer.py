@@ -289,15 +289,18 @@ async def _open_comment_area(frame: Frame) -> None:
     .btn_comment를 JS로 클릭해서 댓글 입력 UI를 활성화."""
     for selector in _COMMENT_OPEN_SELECTORS:
         try:
-            clicked = await frame.evaluate(f'''() => {{
-                const btn = document.querySelector("{selector}");
-                if (btn) {{
-                    btn.scrollIntoView({{behavior: "instant", block: "center"}});
-                    btn.click();
-                    return true;
-                }}
-                return false;
-            }}''')
+            clicked = await frame.evaluate(
+                """(sel) => {
+                    const btn = document.querySelector(sel);
+                    if (btn) {
+                        btn.scrollIntoView({behavior: "instant", block: "center"});
+                        btn.click();
+                        return true;
+                    }
+                    return false;
+                }""",
+                selector,
+            )
             if clicked:
                 logger.debug(f"댓글 영역 열기 성공: {selector}")
                 await asyncio.sleep(2)  # 댓글 UI 로드 대기
