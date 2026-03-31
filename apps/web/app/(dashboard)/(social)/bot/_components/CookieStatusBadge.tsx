@@ -149,8 +149,11 @@ export function CookieStatusBadge({
               </span>
             )}
           </div>
+          <div className="rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
+            ⚠️ <strong>PC에서만 가능</strong> — 모바일에서는 쿠키 업로드 불가
+          </div>
           <p className="text-xs text-muted-foreground">
-            Chrome &quot;EditThisCookie&quot; 확장 설치 &rarr; naver.com 로그인 &rarr; 확장
+            <strong>PC Chrome</strong>에서: EditThisCookie 확장 설치 &rarr; naver.com 로그인 &rarr; 확장
             아이콘 클릭 &rarr; Export &rarr; 여기에 붙여넣기
           </p>
         </CardContent>

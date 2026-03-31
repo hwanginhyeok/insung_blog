@@ -403,8 +403,8 @@ export function BotControlPanel({
                     key={c.id}
                     className="rounded border px-3 py-2 text-sm"
                   >
-                    {/* 1행: 시간 / 명령 결과 / 배지 */}
-                    <div className="flex items-center justify-between">
+                    {/* 1행: 시간 + 명령 결과 + 배지 (모바일: 2줄) */}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span className="text-xs text-muted-foreground">
                         {timeAgo(c.created_at)}
                       </span>

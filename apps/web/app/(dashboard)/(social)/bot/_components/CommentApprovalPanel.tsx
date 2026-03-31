@@ -133,7 +133,7 @@ export function CommentApprovalPanel({
           <div className="space-y-3">
             {pending.map((c) => (
               <div key={c.id} className="rounded-lg border p-3 space-y-2">
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">
                       [{c.blog_id}]{" "}
@@ -156,10 +156,11 @@ export function CommentApprovalPanel({
                       {timeAgo(c.created_at)} · {c.comment_text.length}자
                     </p>
                   </div>
-                  <div className="flex shrink-0 gap-1.5">
+                  <div className="flex shrink-0 gap-2">
                     <Button
                       size="sm"
                       variant="outline"
+                      className="flex-1 sm:flex-none"
                       onClick={() => handleAction(c.id, "approve")}
                       disabled={processingIds.has(c.id)}
                     >
@@ -168,6 +169,7 @@ export function CommentApprovalPanel({
                     <Button
                       size="sm"
                       variant="ghost"
+                      className="flex-1 sm:flex-none"
                       onClick={() => {
                         if (editingId === c.id) {
                           setEditingId(null);
@@ -183,7 +185,7 @@ export function CommentApprovalPanel({
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-muted-foreground"
+                      className="flex-1 text-muted-foreground sm:flex-none"
                       onClick={() => handleAction(c.id, "reject")}
                       disabled={processingIds.has(c.id)}
                     >
