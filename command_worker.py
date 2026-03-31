@@ -233,7 +233,7 @@ async def handle_run(user_id: str | None = None) -> dict:
     return {"message": "봇 실행 완료"}
 
 
-async def handle_execute(user_id: str | None = None) -> dict:
+async def handle_execute(user_id: str | None = None, command_id: str | None = None) -> dict:
     """승인된 댓글 일괄 게시."""
     from playwright.async_api import async_playwright
 
@@ -286,6 +286,8 @@ async def handle_execute(user_id: str | None = None) -> dict:
     BATCH_SIZE = 30  # 브라우저 재시작 간격
     consecutive_failures = 0  # 연속 실패 카운터
     MAX_CONSECUTIVE_FAILURES = 5  # 연속 실패 한도 — 초과 시 브라우저 크래시로 판단
+    WARN_CONSECUTIVE_FAILURES = 3  # 이 시점에 텔레그램 조기 경고
+    PROGRESS_UPDATE_INTERVAL = 5  # N개 처리마다 웹 진행 상황 업데이트
 
     async def _verify_nid_aut(context) -> bool:
         """로그인 후 NID_AUT 쿠키 존재 여부 검증."""
@@ -412,6 +414,22 @@ async def handle_execute(user_id: str | None = None) -> dict:
                     consecutive_failures += 1
                     logger.error(f"✗ [{i}/{total}] 예외: {e}")
 
+                # 3연속 실패 시 텔레그램 조기 경고 (abort 2회 전)
+                if consecutive_failures == WARN_CONSECUTIVE_FAILURES and user_id:
+                    try:
+                        from src.utils.telegram_notifier import send_telegram_message
+                        from src.storage.supabase_client import get_chat_id_for_user
+                        chat_id = get_chat_id_for_user(user_id)
+                        if chat_id:
+                            await send_telegram_message(
+                                f"⚠️ 댓글 게시 중 연속 {WARN_CONSECUTIVE_FAILURES}회 실패\n"
+                                f"진행: {i}/{total} (성공 {success_count}, 실패 {failed_count})\n"
+                                f"계속 진행 중입니다. {MAX_CONSECUTIVE_FAILURES}회 연속 실패 시 자동 중단됩니다.",
+                                chat_id=chat_id,
+                            )
+                    except Exception as warn_err:
+                        logger.warning(f"조기 경고 전송 실패: {warn_err}")
+
                 # 연속 실패 한도 초과 → 셀렉터 깨짐 또는 브라우저 크래시로 판단, 중단
                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                     remaining_count = total - i
@@ -426,6 +444,18 @@ async def handle_execute(user_id: str | None = None) -> dict:
                             remaining_comment["id"], "approved", decided_by="worker"
                         )
                     break
+
+                # N개마다 웹 진행 상황 업데이트 (폴링으로 실시간 표시)
+                if command_id and i % PROGRESS_UPDATE_INTERVAL == 0:
+                    update_command(
+                        command_id,
+                        result={
+                            "progress": i,
+                            "total": total,
+                            "success": success_count,
+                            "failed": failed_count,
+                        },
+                    )
 
                 if i < total:
                     await asyncio.sleep(3)
@@ -443,7 +473,7 @@ async def handle_execute(user_id: str | None = None) -> dict:
     }
 
 
-async def handle_retry(user_id: str | None = None) -> dict:
+async def handle_retry(user_id: str | None = None, command_id: str | None = None) -> dict:
     """재시도 큐 처리."""
     from playwright.async_api import async_playwright
 
@@ -1278,6 +1308,9 @@ async def process_command(cmd: dict) -> None:
         # publish/save_draft/neighbor_request 명령은 payload도 전달
         if command_type in ("publish", "save_draft", "neighbor_request", "discover_neighbors", "visit_neighbors", "discover_and_visit", "feed_comment"):
             kwargs["payload"] = cmd.get("payload")
+        # execute/retry는 진행 상황 업데이트용 command_id 전달
+        if command_type in ("execute", "retry"):
+            kwargs["command_id"] = command_id
         result = await handler(**kwargs)
         mark_completed(command_id, result)
         logger.info(f"━━━ 명령 완료: {command_type} → {result.get('message', '')} ━━━")

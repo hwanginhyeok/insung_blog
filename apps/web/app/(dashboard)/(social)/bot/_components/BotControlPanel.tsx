@@ -360,6 +360,27 @@ export function BotControlPanel({
                       ({formatElapsed(elapsed)})
                     </span>
                   </p>
+                  {activeCommand.result?.progress != null && (
+                    <div className="space-y-1">
+                      <p className="text-sm font-mono">
+                        {activeCommand.result.progress as number}/{activeCommand.result.total as number}개 처리
+                        <span className="ml-2 text-green-600">
+                          성공 {activeCommand.result.success as number}
+                        </span>
+                        <span className="ml-1 text-red-500">
+                          실패 {activeCommand.result.failed as number}
+                        </span>
+                      </p>
+                      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-primary transition-all"
+                          style={{
+                            width: `${Math.round(((activeCommand.result.progress as number) / (activeCommand.result.total as number)) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     서버에서 실행 중 — 브라우저를 닫아도 작업이 계속됩니다
                   </p>
