@@ -48,11 +48,33 @@ export interface CookieStatus {
   cookieCount?: number;
 }
 
+export interface ProgressResult {
+  progress: number;
+  total: number;
+  success: number;
+  failed: number;
+}
+
+export interface MessageResult {
+  message: string;
+}
+
+export function isProgressResult(val: unknown): val is ProgressResult {
+  if (!val || typeof val !== "object") return false;
+  const v = val as Record<string, unknown>;
+  return (
+    typeof v.progress === "number" &&
+    typeof v.total === "number" &&
+    typeof v.success === "number" &&
+    typeof v.failed === "number"
+  );
+}
+
 export interface BotCommandRecord {
   id: string;
   command: "run" | "execute" | "retry";
   status: "pending" | "running" | "completed" | "failed";
-  result: Record<string, unknown> | null;
+  result: ProgressResult | MessageResult | null;
   error_message: string | null;
   created_at: string;
   started_at: string | null;

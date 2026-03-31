@@ -6,10 +6,34 @@ import {
   BotCommandRecord,
   BotSettings,
   PendingComment,
+  ProgressResult,
   COMMAND_LABELS,
   formatElapsed,
   timeAgo,
+  isProgressResult,
 } from "../_lib/bot-api";
+
+// ── 진행률 바 ─────────────────────────────────────────────────
+
+function ProgressBar({ result }: { result: ProgressResult }) {
+  const { progress, total, success, failed } = result;
+  const pct = total > 0 ? Math.round((progress / total) * 100) : 0;
+  return (
+    <div className="space-y-1">
+      <p className="text-sm font-mono">
+        {progress}/{total}개 처리
+        <span className="ml-2 text-green-600">성공 {success}</span>
+        <span className="ml-1 text-red-500">실패 {failed}</span>
+      </p>
+      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+        <div
+          className="h-full rounded-full bg-primary transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
 // ── 에러 분류 ────────────────────────────────────────────────
 
@@ -360,26 +384,8 @@ export function BotControlPanel({
                       ({formatElapsed(elapsed)})
                     </span>
                   </p>
-                  {activeCommand.result?.progress != null && (
-                    <div className="space-y-1">
-                      <p className="text-sm font-mono">
-                        {activeCommand.result.progress as number}/{activeCommand.result.total as number}개 처리
-                        <span className="ml-2 text-green-600">
-                          성공 {activeCommand.result.success as number}
-                        </span>
-                        <span className="ml-1 text-red-500">
-                          실패 {activeCommand.result.failed as number}
-                        </span>
-                      </p>
-                      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-primary transition-all"
-                          style={{
-                            width: `${Math.round(((activeCommand.result.progress as number) / (activeCommand.result.total as number)) * 100)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
+                  {isProgressResult(activeCommand.result) && (
+                    <ProgressBar result={activeCommand.result} />
                   )}
                   <p className="text-xs text-muted-foreground">
                     서버에서 실행 중 — 브라우저를 닫아도 작업이 계속됩니다
@@ -426,9 +432,9 @@ export function BotControlPanel({
                           [{classifyError(c.error_message).badge}]
                         </span>
                       )}
-                      {c.status === "completed" && c.result && (
+                      {c.status === "completed" && c.result && "message" in c.result && (
                         <span className="max-w-[160px] truncate text-xs text-muted-foreground">
-                          {((c.result as Record<string, unknown>).message as string) || ""}
+                          {(c.result as { message: string }).message || ""}
                         </span>
                       )}
                     </div>

@@ -122,9 +122,9 @@ export function useBotStatus(): BotStatusState {
       if (interval) clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-    // activeCommand 변경 시 폴링 간격 조정
+    // activeCommand ID 변경 시 폴링 간격 조정 (불필요한 재실행 방지)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchCommands, !!activeCommand]);
+  }, [fetchCommands, activeCommand?.id]);
 
   // running 상태일 때 경과 시간 카운터
   useEffect(() => {
@@ -175,28 +175,37 @@ export function useBotStatus(): BotStatusState {
   // 데이터 로드
   const fetchData = useCallback(async () => {
     try {
-      const [statusData, pendingData, cookieData, approvedData] =
-        await Promise.all([
+      const [statusResult, pendingResult, cookieResult, approvedResult] =
+        await Promise.allSettled([
           apiFetchStatus(),
           apiFetchPending("pending", { order: "desc", limit: 500 }),
           apiFetchCookieStatus(),
           apiFetchPending("approved", { order: "desc", limit: 500 }),
         ]);
 
-      setRuns(statusData.recentRuns || []);
-      setTodayStats(statusData.todayStats || { bloggers: 0, comments: 0, failed: 0 });
-      setPendingCount(statusData.pendingCount || 0);
-      if (statusData.settings) {
-        setSettings(statusData.settings);
+      if (statusResult.status === "fulfilled") {
+        const statusData = statusResult.value;
+        setRuns(statusData.recentRuns || []);
+        setTodayStats(statusData.todayStats || { bloggers: 0, comments: 0, failed: 0 });
+        setPendingCount(statusData.pendingCount || 0);
+        if (statusData.settings) {
+          setSettings(statusData.settings);
+        }
+      } else {
+        console.error("상태 조회 실패:", statusResult.reason);
       }
 
-      setPending(pendingData.comments || []);
+      if (pendingResult.status === "fulfilled") {
+        setPending(pendingResult.value.comments || []);
+      }
 
-      setCookieStatus(cookieData);
-      // 쿠키 없으면 기본 열림 (CookieStatusBadge에서 사용)
-      // open 상태는 컴포넌트 자체에서 관리
+      if (cookieResult.status === "fulfilled") {
+        setCookieStatus(cookieResult.value);
+      }
 
-      setApprovedComments(approvedData.comments || []);
+      if (approvedResult.status === "fulfilled") {
+        setApprovedComments(approvedResult.value.comments || []);
+      }
     } catch (e) {
       console.error("데이터 로드 실패:", e);
     } finally {

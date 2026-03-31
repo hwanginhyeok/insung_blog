@@ -559,6 +559,18 @@ async def handle_retry(user_id: str | None = None, command_id: str | None = None
                         failed_count += 1
                         logger.error(f"✗ 재시도 [{i}/{total}] 예외: {e}")
 
+                    # N개마다 웹 진행 상황 업데이트 (폴링으로 실시간 표시)
+                    if command_id and i % PROGRESS_UPDATE_INTERVAL == 0:
+                        update_command(
+                            command_id,
+                            result={
+                                "progress": i,
+                                "total": total,
+                                "success": success_count,
+                                "failed": failed_count,
+                            },
+                        )
+
                     if i < total:
                         await asyncio.sleep(3)
             finally:

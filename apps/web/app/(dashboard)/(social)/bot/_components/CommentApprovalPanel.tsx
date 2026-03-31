@@ -216,7 +216,7 @@ export function CommentApprovalPanel({
                     </div>
                   </div>
                 ) : (
-                  <p className="text-sm whitespace-pre-wrap">
+                  <p className="text-sm whitespace-pre-wrap break-words">
                     &ldquo;{c.comment_text}&rdquo;
                   </p>
                 )}

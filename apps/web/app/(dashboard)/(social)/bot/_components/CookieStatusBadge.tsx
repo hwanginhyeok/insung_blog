@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -30,6 +30,16 @@ export function CookieStatusBadge({
   const [cookieJson, setCookieJson] = useState("");
   const [cookieUploading, setCookieUploading] = useState(false);
   const [cookieMsg, setCookieMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const settingsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 타이머 정리 (언마운트 시)
+  useEffect(() => {
+    return () => {
+      if (settingsTimeoutRef.current) clearTimeout(settingsTimeoutRef.current);
+      if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+    };
+  }, []);
 
   async function handleCookieUpload() {
     setCookieUploading(true);
@@ -59,6 +69,9 @@ export function CookieStatusBadge({
         });
         setCookieJson("");
 
+        // 2초 후 패널 자동 닫힘
+        closeTimeoutRef.current = setTimeout(() => setCookieOpen(false), 2000);
+
         // 상태 새로고침
         try {
           const refreshed = await apiFetchCookieStatus();
@@ -68,7 +81,7 @@ export function CookieStatusBadge({
         }
 
         // 15초 후 settings 재로딩 (extract_blog_id 워커 처리 대기)
-        setTimeout(async () => {
+        settingsTimeoutRef.current = setTimeout(async () => {
           try {
             if (onSettingsRefresh) {
               await onSettingsRefresh();
