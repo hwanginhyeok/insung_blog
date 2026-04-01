@@ -69,7 +69,8 @@ export function CookieStatusBadge({
         });
         setCookieJson("");
 
-        // 2초 후 패널 자동 닫힘
+        // 2초 후 패널 자동 닫힘 (이전 타이머 취소 후 재설정)
+        if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
         closeTimeoutRef.current = setTimeout(() => setCookieOpen(false), 2000);
 
         // 상태 새로고침

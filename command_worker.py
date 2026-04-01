@@ -520,6 +520,8 @@ async def handle_retry(user_id: str | None = None, command_id: str | None = None
                 if not logged_in:
                     raise RuntimeError("네이버 로그인 실패")
 
+                consecutive_failures = 0
+
                 for i, target in enumerate(targets, 1):
                     logger.info(f"▶ 재시도 [{i}/{total}] {target['blog_id']}")
                     try:
@@ -541,6 +543,7 @@ async def handle_retry(user_id: str | None = None, command_id: str | None = None
                                 user_id=user_id,
                             )
                             success_count += 1
+                            consecutive_failures = 0
                             logger.info(f"✓ 재시도 [{i}/{total}] 성공")
                         else:
                             add_to_retry_queue(
@@ -549,6 +552,7 @@ async def handle_retry(user_id: str | None = None, command_id: str | None = None
                                 user_id=user_id,
                             )
                             failed_count += 1
+                            consecutive_failures += 1
                             logger.warning(f"✗ 재시도 [{i}/{total}] 실패")
                     except Exception as e:
                         add_to_retry_queue(
@@ -557,7 +561,32 @@ async def handle_retry(user_id: str | None = None, command_id: str | None = None
                             user_id=user_id,
                         )
                         failed_count += 1
+                        consecutive_failures += 1
                         logger.error(f"✗ 재시도 [{i}/{total}] 예외: {e}")
+
+                    # 3연속 실패 시 텔레그램 조기 경고
+                    if consecutive_failures == WARN_CONSECUTIVE_FAILURES and user_id:
+                        try:
+                            from src.utils.telegram_notifier import send_telegram_message
+                            from src.storage.supabase_client import get_chat_id_for_user
+                            chat_id = get_chat_id_for_user(user_id)
+                            if chat_id:
+                                await send_telegram_message(
+                                    f"⚠️ 재시도 중 연속 {WARN_CONSECUTIVE_FAILURES}회 실패\n"
+                                    f"진행: {i}/{total} (성공 {success_count}, 실패 {failed_count})\n"
+                                    f"계속 진행 중입니다. {MAX_CONSECUTIVE_FAILURES}회 연속 실패 시 자동 중단됩니다.",
+                                    chat_id=chat_id,
+                                )
+                        except Exception as warn_err:
+                            logger.warning(f"조기 경고 전송 실패: {warn_err}")
+
+                    # 5연속 실패 시 abort — 셀렉터 깨짐 또는 브라우저 크래시 판단
+                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                        logger.error(
+                            f"연속 {MAX_CONSECUTIVE_FAILURES}회 실패 — 재시도 중단 "
+                            f"(진행: {i}/{total}, 성공 {success_count})"
+                        )
+                        break
 
                     # N개마다 웹 진행 상황 업데이트 (폴링으로 실시간 표시)
                     if command_id and i % PROGRESS_UPDATE_INTERVAL == 0:
