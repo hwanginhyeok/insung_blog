@@ -130,6 +130,8 @@ git push
 
 | # | 작업 | 중요도 | 상태 | 비고 |
 |---|------|--------|------|------|
+| PERSONA-CONNECT | 페르소나 → 댓글 생성 연결 | P1 | ✅ 완료 | persona_builder.py 신규 + ai_comment/orchestrator/supabase_client 연결. commit a2428a2 (2026-04-01) |
+| BOT-PROGRESS | 봇 대시보드 P1~P3 버그 수정 (Promise.allSettled, division-by-zero, 메모리 리크, handle_retry progress, 폴링 deps, 타입 안전성) | P1 | ✅ 완료 | commit 07dba19 (2026-04-01) |
 | SAVE-DRAFT | 네이버 블로그 임시저장 기능 (HTML 주입 + 임시저장) | P1 | ✅ 구현완료 | E2E 테스트 필요 (브라우저+워커). 이미지 업로드 지원 추가 (2026-03-26) |
 | COMMENT-QUALITY | 댓글 품질 개선 — 배치 글자수 검증 + 프롬프트 강화 + 마케팅 감지 | P1 | ✅ 완료 | 배치 80자 미만 필터→단건 재시도, 시스템톤/BASE_RULES 강화, 마케팅 메타댓글 차단 (2026-03-26) |
 | IMG-COPY | HTML 복사 시 이미지 base64 인라인 + 임시저장 이미지 업로드 | P1 | ✅ 완료 | handleCopyHtml base64 변환, command_worker photo_urls 다운로드, image_downloader.py 신규 (2026-03-26) |
