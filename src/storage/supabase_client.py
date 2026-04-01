@@ -155,12 +155,17 @@ def get_user_bot_config(user_id: str) -> dict | None:
         if naver_blog_id and naver_blog_id not in naver_blog_ids:
             naver_blog_ids.append(naver_blog_id)
 
+        # 기본 페르소나 프롬프트 로드 (없으면 None → _SYSTEM_TONE 사용)
+        from src.persona.persona_builder import load_default_persona_prompt
+        persona_prompt = load_default_persona_prompt(user_id)
+
         return {
             "user_id": user_id,
             "naver_blog_id": naver_blog_id,
             "naver_blog_ids": naver_blog_ids,
             "cookies": cookies,
             "has_cookies": cookies is not None,
+            "persona_prompt": persona_prompt,
             "settings": {
                 "approval_mode": settings_row["approval_mode"],
                 "is_active": settings_row["is_active"],

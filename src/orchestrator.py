@@ -113,6 +113,7 @@ async def run(
         settings = config["settings"]
         my_blog_id = config["naver_blog_id"]
         comment_prompt = settings.get("comment_prompt")
+        persona_prompt = config.get("persona_prompt")
         use_cookie_only = True
         naver_id = ""
         naver_pw = ""
@@ -120,6 +121,7 @@ async def run(
         # 레거시: .env 기반
         settings = _load_settings()
         comment_prompt = None
+        persona_prompt = None
         naver_id = os.environ.get("NAVER_ID", "")
         naver_pw = os.environ.get("NAVER_PW", "")
         my_blog_id = os.environ.get("MY_BLOG_ID", "")
@@ -304,6 +306,7 @@ async def run(
                         ai_comments = generate_comments_batch(
                             [{"body": d["body"], "title": d["title"]} for d in batch_data],
                             custom_prompt=comment_prompt,
+                            persona_tone=persona_prompt,
                         )
                         logger.info(
                             f"배치 처리: {len(batch_data)}개 게시물 → "

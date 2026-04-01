@@ -183,6 +183,7 @@ def _build_system_prompt(
     tone_hint: str | None = None,
     avoid_starters: list[str] | None = None,
     category_hint: str | None = None,
+    persona_tone: str | None = None,
 ) -> str:
     """
     시스템 프롬프트 조합.
@@ -192,12 +193,13 @@ def _build_system_prompt(
         tone_hint: 톤 힌트 문자열 (D-1 랜덤 톤).
         avoid_starters: 시작어 중복 방지 목록 (D-1 최근 댓글 시작어).
         category_hint: 카테고리별 힌트 (D-2).
+        persona_tone: 사용자 블로그 분석 기반 페르소나. 있으면 _SYSTEM_TONE 대체.
 
     Returns:
         완성된 시스템 프롬프트 문자열
     """
     rules = custom_rules if custom_rules else _BASE_RULES
-    parts = [_SYSTEM_TONE, rules]
+    parts = [persona_tone or _SYSTEM_TONE, rules]
 
     if category_hint:
         parts.append(f"\n카테고리 힌트: {category_hint}")
@@ -275,6 +277,7 @@ def generate_comment(
     post_title: str,
     recent_comments: list[str] | None = None,
     custom_prompt: str | None = None,
+    persona_tone: str | None = None,
 ) -> str:
     """
     게시물 본문+제목을 바탕으로 AI 댓글 생성.
@@ -325,6 +328,7 @@ def generate_comment(
                 tone_hint=tone_hint,
                 avoid_starters=avoid_starters,
                 category_hint=category_hint,
+                persona_tone=persona_tone,
             )
             user_message = (
                 f"[제목] {post_title}\n\n[본문]\n{body}\n\n"
@@ -422,6 +426,7 @@ def generate_comments_batch(
     posts: list[dict],
     recent_comments: list[str] | None = None,
     custom_prompt: str | None = None,
+    persona_tone: str | None = None,
 ) -> list[str]:
     """
     여러 게시물의 댓글을 한 번의 API 호출로 배치 생성.
@@ -444,6 +449,7 @@ def generate_comments_batch(
         comment = generate_comment(
             posts[0]["body"], posts[0]["title"], recent_comments_local,
             custom_prompt=custom_prompt,
+            persona_tone=persona_tone,
         )
         return [comment]
 
@@ -501,6 +507,7 @@ def generate_comments_batch(
                 tone_hint=tone_hint,
                 avoid_starters=avoid_starters,
                 category_hint=category_hint,
+                persona_tone=persona_tone,
             )
             response = client.messages.create(
                 model=COMMENT_AI_MODEL,
@@ -538,6 +545,7 @@ def generate_comments_batch(
                     retry_comment = generate_comment(
                         posts[i]["body"], posts[i]["title"],
                         recent_comments_local, custom_prompt=custom_prompt,
+                        persona_tone=persona_tone,
                     )
                     if len(retry_comment) >= 80:
                         results[i] = retry_comment
