@@ -10,7 +10,7 @@
 ## 배경
 
 네이버 쿠키(NID_AUT 등)가 만료되면 댓글 봇과 게시 발행이 모두 중단된다.
-W7에서 구현한 **Supabase 양방향 동기화**(Command Queue 패턴)로 로컬과 웹앱 간 쿠키를 공유하므로, 갱신 시 양쪽 모두 반영해야 한다.
+**Supabase 양방향 동기화**(Command Queue 패턴)로 로컬과 웹앱 간 쿠키를 공유하므로, 갱신 시 양쪽 모두 반영해야 한다.
 
 ---
 
@@ -19,7 +19,7 @@ W7에서 구현한 **Supabase 양방향 동기화**(Command Queue 패턴)로 로
 ### STEP 1 — 현재 쿠키 상태 확인
 
 ```bash
-cd /home/gint_pcd/projects/인성이프로젝트
+cd /home/window11/insung_blog
 source .venv/bin/activate
 
 # 로컬 쿠키 파일 확인
@@ -42,6 +42,8 @@ for c in json.load(open('cookies/naver_cookies.json')):
 만료됐으면 headed 모드로 네이버 로그인을 수행한다:
 
 ```bash
+cd /home/window11/insung_blog
+source .venv/bin/activate
 python -c "
 from src.auth.naver_login import NaverLogin
 import asyncio
@@ -58,7 +60,7 @@ asyncio.run(NaverLogin(headless=False).login())
 ### STEP 3 — 로컬 쿠키 저장 확인
 
 ```bash
-# 갱신된 쿠키 확인
+cd /home/window11/insung_blog
 python3 -c "
 import json, time
 for c in json.load(open('cookies/naver_cookies.json')):
@@ -76,7 +78,8 @@ NID_AUT가 갱신됐는지 확인 (보통 720h = 30일).
 로컬 쿠키를 Supabase에 업로드하여 웹앱에서도 사용 가능하게 한다:
 
 ```bash
-# 쿠키 → Supabase 동기화 (W7 Command Queue)
+cd /home/window11/insung_blog
+source .venv/bin/activate
 python -c "
 from src.storage.database import Database
 db = Database()
@@ -90,7 +93,8 @@ db.sync_cookies_to_supabase()
 ### STEP 5 — 검증
 
 ```bash
-# 봇으로 실제 접속 테스트
+cd /home/window11/insung_blog
+source .venv/bin/activate
 python main.py --run-once --dry-run
 ```
 
@@ -99,15 +103,15 @@ dry-run에서 "로그인 성공" 확인.
 ### STEP 6 — 결과 보고
 
 ```
-🍪 쿠키 갱신 — {날짜}
+쿠키 갱신 — {날짜}
 
 | 항목 | 상태 |
 |------|------|
-| NID_AUT | ✅ 갱신 완료 (720h 남음) |
-| NID_SES | ✅ 갱신 완료 |
-| 로컬 저장 | ✅ cookies/naver_cookies.json |
-| Supabase 동기화 | ✅ 업로드 완료 |
-| dry-run 검증 | ✅ 로그인 성공 |
+| NID_AUT | 갱신 완료 (720h 남음) |
+| NID_SES | 갱신 완료 |
+| 로컬 저장 | cookies/naver_cookies.json |
+| Supabase 동기화 | 업로드 완료 |
+| dry-run 검증 | 로그인 성공 |
 ```
 
 ---

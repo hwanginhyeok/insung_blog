@@ -34,7 +34,7 @@
 ### STEP 2 — 디버그 도구 실행
 
 ```bash
-cd /home/gint_pcd/projects/인성이프로젝트
+cd /home/window11/insung_blog
 source .venv/bin/activate
 python debug_publisher.py
 ```
@@ -75,13 +75,13 @@ page.goto("https://blog.naver.com/{blogId}/postwrite")
 변경 전/후 셀렉터를 대조한다:
 
 ```
-📋 셀렉터 변경 감지 — {날짜}
+셀렉터 변경 감지 — {날짜}
 
 | 기능 | 기존 셀렉터 | 현재 DOM | 상태 |
 |------|------------|----------|------|
-| 댓글 버튼 | [class*="comment_btn"] | {확인된 셀렉터} | ✅/❌ |
-| 블로그 ID | blogId= 파라미터 | {확인된 방식} | ✅/❌ |
-| 에디터 제목 | {기존} | {확인된 셀렉터} | ✅/❌ |
+| 댓글 버튼 | [class*="comment_btn"] | {확인된 셀렉터} | OK/NG |
+| 블로그 ID | blogId= 파라미터 | {확인된 방식} | OK/NG |
+| 에디터 제목 | {기존} | {확인된 셀렉터} | OK/NG |
 ```
 
 ### STEP 5 — 코드 업데이트 (확인 후)
@@ -102,6 +102,8 @@ page.goto("https://blog.naver.com/{blogId}/postwrite")
 
 수정 후 dry-run으로 동작 확인:
 ```bash
+cd /home/window11/insung_blog
+source .venv/bin/activate
 python main.py --run-once --dry-run
 ```
 

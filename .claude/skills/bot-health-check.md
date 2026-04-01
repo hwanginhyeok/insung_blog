@@ -3,72 +3,61 @@
 > **트리거**: 아래 표현이 나오면 이 스킬을 즉시 실행한다.
 > - "봇 상태" / "봇 확인" / "댓글봇 체크"
 > - "봇 살아있어?" / "봇 정상이야?"
-> - "크론 확인" / "cron 상태"
 > - 세션 시작 시 운영 상태 점검으로 자동 제안 가능
 
 ---
 
 ## 목적
 
-Cron으로 매일 실행되는 댓글 봇(평일 20:30, 주말 13:30)의 상태를 점검한다.
-실패 알림이 별도로 없기 때문에 수동 점검이 유일한 모니터링 수단이다.
+systemd로 관리되는 3개 서비스(blog-api, blog-worker, blog-telegram)의 상태를 점검한다.
 
 ---
 
 ## 실행 순서 (순서 준수 필수)
 
-### STEP 1 — tmux 세션 확인
+### STEP 1 — systemd 서비스 상태 확인
 
 ```bash
-tmux ls 2>/dev/null | grep blog
+systemctl --user status blog-api blog-worker blog-telegram | grep -E "●|Active:|Main PID:"
 ```
 
 | 결과 | 의미 |
 |------|------|
-| `blog: 4 windows` | 정상 (api, telegram, worker, web) |
-| `blog: N windows` (N≠4) | 일부 프로세스 누락 |
-| 세션 없음 | 봇 미실행 — 재시작 필요 |
+| 3개 모두 `active (running)` | 정상 |
+| inactive/failed 있음 | 해당 서비스 재시작 필요 |
 
-### STEP 2 — 각 프로세스 생존 확인
+### STEP 2 — API 서버 응답 확인
 
-```bash
-# tmux blog 세션의 각 윈도우 상태 확인
-tmux list-windows -t blog 2>/dev/null
-```
-
-예상 윈도우:
-- `api` — FastAPI 서버 (포트 8001)
-- `telegram` — 텔레그램 봇
-- `worker` — 댓글 봇 워커
-- `web` — Next.js 웹앱 (포트 3002)
-
-프로세스 직접 확인:
 ```bash
 # API 서버
 curl -s http://localhost:8001/health 2>/dev/null || echo "API DOWN"
-
-# 웹 서버
-curl -s http://localhost:3002 2>/dev/null | head -1 || echo "WEB DOWN"
 ```
 
-### STEP 3 — 최근 실행 로그 확인
+### STEP 3 — 워커 프로세스 중복 확인
 
 ```bash
-# 최근 로그 파일 확인
-ls -lt logs/ 2>/dev/null | head -5
+# 워커가 정확히 1개만 실행 중인지 확인 (2개 이상이면 문제)
+ps aux | grep command_worker | grep -v grep | wc -l  # 반드시 1
+```
 
-# 최근 로그에서 에러 확인
-tail -50 logs/latest.log 2>/dev/null | grep -i "error\|fail\|exception"
+### STEP 4 — 최근 실행 로그 확인
+
+```bash
+# systemd 저널에서 최근 워커 로그 확인
+journalctl --user -u blog-worker -n 20 --no-pager
+
+# 에러만 필터링
+journalctl --user -u blog-worker --since "24 hours ago" --no-pager | grep -i "error\|fail\|exception"
 ```
 
 확인 포인트:
-- 마지막 실행 시각이 예상 Cron 시각과 일치하는가
 - ERROR/FAIL 로그가 있는가
 - "댓글 작성 완료" 같은 성공 로그가 있는가
 
-### STEP 4 — DB 최근 기록 확인
+### STEP 5 — DB 최근 기록 확인
 
 ```bash
+cd /home/window11/insung_blog
 sqlite3 data/comments.db "SELECT * FROM comment_log ORDER BY created_at DESC LIMIT 5;"
 ```
 
@@ -78,9 +67,10 @@ sqlite3 data/comments.db "SELECT * FROM comment_log ORDER BY created_at DESC LIM
 | 댓글 수 | 0이면 실행은 됐으나 대상 없었거나 실패 |
 | 에러 기록 | error 컬럼에 값이 있으면 분석 필요 |
 
-### STEP 5 — 쿠키 유효성 확인
+### STEP 6 — 쿠키 유효성 확인
 
 ```bash
+cd /home/window11/insung_blog
 # 쿠키 파일 존재 + 수정일 확인
 ls -la cookies/ 2>/dev/null
 
@@ -100,21 +90,19 @@ for f in os.listdir('cookies'):
 
 NID_AUT 만료 = 로그인 무효 → `cookie-refresh` 스킬로 전환.
 
-### STEP 6 — 결과 요약
+### STEP 7 — 결과 요약
 
 ```
-🤖 댓글 봇 상태 — {날짜}
+댓글 봇 상태 — {날짜}
 
 | 항목 | 상태 | 상세 |
 |------|------|------|
-| tmux 세션 | ✅ 정상 | blog: 4 windows |
-| API 서버 | ✅ 정상 | :8001 응답 |
-| 웹 서버 | ✅ 정상 | :3002 응답 |
-| 최근 실행 | ✅ 정상 | 어제 20:30 실행, 댓글 12건 |
-| 쿠키 | ⚠️ 주의 | NID_AUT 48h 남음 |
-| DB 기록 | ✅ 정상 | 최근 24h 내 기록 존재 |
-
-종합: ✅ 정상 운영 (쿠키 갱신 2일 내 필요)
+| blog-api | OK/NG | :8001 응답 여부 |
+| blog-worker | OK/NG | active (running), PID 1개 |
+| blog-telegram | OK/NG | active (running) |
+| 최근 실행 | OK/NG | 마지막 실행 시각 + 결과 |
+| 쿠키 | OK/주의 | NID_AUT 잔여 시간 |
+| DB 기록 | OK/NG | 최근 24h 내 기록 존재 여부 |
 ```
 
 ---
@@ -124,10 +112,10 @@ NID_AUT 만료 = 로그인 무효 → `cookie-refresh` 스킬로 전환.
 | 상황 | 행동 |
 |------|------|
 | 전체 정상 | 요약 한 줄 |
-| 쿠키 48h 미만 | ⚠️ 경고 + `cookie-refresh` 스킬 제안 |
-| tmux 세션 없음 | ❌ 재시작 절차 안내 |
-| DB 24h+ 미기록 | ❌ 로그 분석 → 원인 파악 |
-| API/웹 다운 | ❌ 해당 프로세스 재시작 안내 |
+| 쿠키 48h 미만 | 경고 + `cookie-refresh` 스킬 제안 |
+| 서비스 inactive/failed | 즉시 `systemctl --user restart` |
+| DB 24h+ 미기록 | 로그 분석 → 원인 파악 |
+| API 다운 | `systemctl --user restart blog-api` |
 | 로그에 셀렉터 에러 | `selector-debug` 스킬로 전환 제안 |
 
 ---
@@ -135,6 +123,5 @@ NID_AUT 만료 = 로그인 무효 → `cookie-refresh` 스킬로 전환.
 ## 주의사항
 
 - 이 스킬은 읽기 전용이다. 프로세스를 재시작하거나 파일을 수정하지 않는다
-- Cron 스케줄 확인: `crontab -l | grep main.py`
 - DB 경로: `data/comments.db` (프로젝트 루트 기준)
 - 쿠키 경로: `cookies/` (프로젝트 루트 기준)

@@ -3,14 +3,40 @@
 ## Project Overview
 
 **인성이프로젝트** — 네이버 블로그 운영 전 과정 자동화 시스템.
-댓글 봇 + 게시물 자동 발행 + AI 글쓰기 스킬 개선을 단계적으로 구축한다.
+댓글 봇 + 게시물 자동 발행 + AI 글쓰기 + 텔레그램 제어를 구축하여 운영 중.
 
 | Phase | 내용 | 상태 |
 |-------|------|------|
 | 1 | 댓글 봇 (AI 댓글 + 답방) | 완료 |
-| 2 | 게시물 자동 발행 | 구현 완료, 테스트 필요 |
-| 3 | n8n + 텔레그램 연동 | 80% |
+| 2 | 게시물 자동 발행 | 완료 |
+| 3 | 텔레그램 봇 + Supabase 제어 평면 | 완료 |
 | 4 | 피드백 루프 (스킬 개선) | 완료 |
+
+---
+
+## 서비스 운영 (systemd)
+
+3개 서비스를 `systemd --user`로 관리한다. tmux는 로그 관찰용으로만 사용.
+
+| 서비스 | 설명 | 포트 |
+|--------|------|------|
+| `blog-api` | FastAPI 서버 (uvicorn) | 8001 |
+| `blog-worker` | 명령 큐 워커 (command_worker.py) | — |
+| `blog-telegram` | 텔레그램 봇 (telegram_bot.py) | — |
+
+```bash
+# 상태 확인
+systemctl --user status blog-api blog-worker blog-telegram
+
+# 재시작
+systemctl --user restart blog-api blog-worker blog-telegram
+
+# 로그 확인
+journalctl --user -u blog-worker -n 20 --no-pager
+```
+
+> **주의**: `pkill -f command_worker.py` 금지 — systemd가 자동 재시작해서 충돌.
+> `start_services.sh` 실행 금지 — tmux 기반 구버전, 삭제됨.
 
 ---
 
@@ -38,7 +64,9 @@ python -c "import py_compile; py_compile.compile('파일.py', doraise=True)"
 - **Python 3.12+** — async/await, type hints (`str | None` 신문법)
 - **Playwright** — 브라우저 자동화 (headless/headed)
 - **Claude API** — Vision(Sonnet) + Text(Haiku) 조합
-- **SQLite** — 로컬 DB (data/comments.db)
+- **Supabase** — 제어 평면 (pending_comments, bot_settings, bot_run_log)
+- **SQLite** — 로컬 운영 DB (data/comments.db)
+- **Next.js 14** — 웹 플랫폼 (apps/web, Vercel 배포)
 - **dotenv** — 환경변수 관리
 
 ---
@@ -86,10 +114,9 @@ systemctl --user status blog-api blog-worker blog-telegram | grep -E "●|Active
 
 | 파일 | 내용 |
 |------|------|
-| `.claude/rules/coding.md` | 코딩 컨벤션 (상수, 네이밍, 비동기, 셀렉터, 에러 처리, 로깅) |
-| `.claude/rules/workflow.md` | 작업 순서, 코드리뷰, 커밋 규칙, CODE_MAP 관리 |
-| `.claude/rules/task-management.md` | TASK.md 갱신 규칙, 역할 전환 |
-| `.claude/rules/critical-thinking.md` | 비판적 사고 파트너 원칙 |
+| `.claude/rules/security.md` | 보안 규칙 (Playwright 인젝션 방지, 쿠키/세션, API 인가) |
+| `.claude/rules/supabase.md` | Supabase 규칙 (DDL 금지, RLS, 마이그레이션) |
+| `.claude/rules/testing.md` | 테스트 규칙 (구문 검증, E2E 브라우저, pytest) |
 
 ## Skills (트리거 시 참조)
 
@@ -109,3 +136,4 @@ systemctl --user status blog-api blog-worker blog-telegram | grep -E "●|Active
 - 모든 로그, 주석, 메시지는 **한국어**.
 - API 키는 `.env`에만. 소스코드 하드코딩 금지.
 - 네이버 셀렉터는 언제든 바뀔 수 있다 — `debug_publisher.py`로 확인 후 업데이트.
+- 서비스 관리는 **systemd만** 사용. tmux로 직접 프로세스 실행/중지 금지.
