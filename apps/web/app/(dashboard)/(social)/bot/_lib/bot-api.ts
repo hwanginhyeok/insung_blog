@@ -48,11 +48,18 @@ export interface CookieStatus {
   cookieCount?: number;
 }
 
+export interface FailReasons {
+  cookie: number;   // 쿠키/로그인 만료
+  no_input: number; // 댓글창 미탐지
+  other: number;    // 기타 예외
+}
+
 export interface ProgressResult {
   progress: number;
   total: number;
   success: number;
   failed: number;
+  fail_reasons?: FailReasons;
 }
 
 export interface MessageResult {

@@ -16,8 +16,17 @@ import {
 // ── 진행률 바 ─────────────────────────────────────────────────
 
 function ProgressBar({ result }: { result: ProgressResult }) {
-  const { progress, total, success, failed } = result;
+  const { progress, total, success, failed, fail_reasons } = result;
   const pct = total > 0 ? Math.round((progress / total) * 100) : 0;
+
+  // fail_reasons breakdown — 존재하고 실패가 있을 때만 표시
+  const reasonParts: string[] = [];
+  if (fail_reasons) {
+    if (fail_reasons.cookie > 0) reasonParts.push(`쿠키 만료 ${fail_reasons.cookie}건`);
+    if (fail_reasons.no_input > 0) reasonParts.push(`댓글창 미탐지 ${fail_reasons.no_input}건`);
+    if (fail_reasons.other > 0) reasonParts.push(`기타 ${fail_reasons.other}건`);
+  }
+
   return (
     <div className="space-y-1">
       <p className="text-sm font-mono">
@@ -31,6 +40,11 @@ function ProgressBar({ result }: { result: ProgressResult }) {
           style={{ width: `${pct}%` }}
         />
       </div>
+      {reasonParts.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          🔍 {reasonParts.join(" / ")}
+        </p>
+      )}
     </div>
   );
 }

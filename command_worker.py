@@ -64,6 +64,12 @@ POLL_INTERVAL = 10  # 초
 MAX_CONCURRENT_BROWSERS = int(os.environ.get("MAX_CONCURRENT_BROWSERS", "3"))
 _browser_semaphore = asyncio.Semaphore(MAX_CONCURRENT_BROWSERS)
 
+# 댓글 실행 루프 상수 (handle_execute + handle_retry 공용)
+BATCH_SIZE = 30                  # 브라우저 재시작 간격
+MAX_CONSECUTIVE_FAILURES = 5     # 연속 실패 한도 — 초과 시 브라우저 크래시로 판단
+WARN_CONSECUTIVE_FAILURES = 3    # 이 시점에 텔레그램 조기 경고
+PROGRESS_UPDATE_INTERVAL = 5     # N개 처리마다 웹 진행 상황 업데이트
+
 # ── 유저별 슬롯 추적 (Elastic Semaphore) ──
 # 유저 혼자면 전체 슬롯 사용, 유저 늘면 공정 분배
 _user_active_slots: dict[str, int] = {}  # user_id → 현재 사용중 슬롯 수
@@ -279,15 +285,12 @@ async def handle_execute(user_id: str | None = None, command_id: str | None = No
     total = len(approved)
     success_count = 0
     failed_count = 0
+    fail_reasons: dict[str, int] = {"cookie": 0, "no_input": 0, "other": 0}
 
     uid_label = user_id[:8] if user_id else "admin"
     logger.info(f"▶ 댓글 게시 시작: 총 {total}개 (user={uid_label})")
 
-    BATCH_SIZE = 30  # 브라우저 재시작 간격
     consecutive_failures = 0  # 연속 실패 카운터
-    MAX_CONSECUTIVE_FAILURES = 5  # 연속 실패 한도 — 초과 시 브라우저 크래시로 판단
-    WARN_CONSECUTIVE_FAILURES = 3  # 이 시점에 텔레그램 조기 경고
-    PROGRESS_UPDATE_INTERVAL = 5  # N개 처리마다 웹 진행 상황 업데이트
 
     async def _verify_nid_aut(context) -> bool:
         """로그인 후 NID_AUT 쿠키 존재 여부 검증."""
@@ -394,6 +397,7 @@ async def handle_execute(user_id: str | None = None, command_id: str | None = No
                         # 연속 실패 카운터 증가 안 함 (브라우저 크래시와 무관)
                         update_pending_status_sb(comment_id, "failed", decided_by="worker")
                         failed_count += 1
+                        fail_reasons["no_input"] += 1
                         logger.warning(f"✗ [{i}/{total}] 스킵 (입력창 없음): {blog_id}")
                     else:
                         update_pending_status_sb(comment_id, "failed", decided_by="worker")
@@ -403,6 +407,7 @@ async def handle_execute(user_id: str | None = None, command_id: str | None = No
                         )
                         failed_count += 1
                         consecutive_failures += 1
+                        fail_reasons["cookie"] += 1
                         logger.warning(f"✗ [{i}/{total}] 실패: {blog_id}")
                 except Exception as e:
                     update_pending_status_sb(comment_id, "failed", decided_by="worker")
@@ -412,6 +417,7 @@ async def handle_execute(user_id: str | None = None, command_id: str | None = No
                     )
                     failed_count += 1
                     consecutive_failures += 1
+                    fail_reasons["other"] += 1
                     logger.error(f"✗ [{i}/{total}] 예외: {e}")
 
                 # 3연속 실패 시 텔레그램 조기 경고 (abort 2회 전)
@@ -454,8 +460,37 @@ async def handle_execute(user_id: str | None = None, command_id: str | None = No
                             "total": total,
                             "success": success_count,
                             "failed": failed_count,
+                            "fail_reasons": fail_reasons,
                         },
                     )
+
+                # 30개마다 텔레그램 중간 보고 (마지막 배치 제외하여 최종 알림과 중복 방지)
+                if user_id and i % 30 == 0 and i < total:
+                    try:
+                        from src.utils.telegram_notifier import send_telegram_message
+                        from src.storage.supabase_client import get_chat_id_for_user
+                        chat_id = get_chat_id_for_user(user_id)
+                        if chat_id:
+                            reason_parts = []
+                            if fail_reasons["cookie"]:
+                                reason_parts.append(f"쿠키 만료 {fail_reasons['cookie']}건")
+                            if fail_reasons["no_input"]:
+                                reason_parts.append(f"댓글창 미탐지 {fail_reasons['no_input']}건")
+                            if fail_reasons["other"]:
+                                reason_parts.append(f"기타 {fail_reasons['other']}건")
+                            reason_str = ", ".join(reason_parts) if reason_parts else "없음"
+                            await send_telegram_message(
+                                f"📊 진행 중 ({i}/{total})\n"
+                                f"✅ 성공: {success_count} | ❌ 실패: {failed_count}\n"
+                                f"🔍 실패 원인: {reason_str}",
+                                chat_id=chat_id,
+                            )
+                        else:
+                            logger.warning(
+                                f"텔레그램 중간 보고 스킵: chat_id 미설정 (user={user_id[:8]})"
+                            )
+                    except Exception as tg_err:
+                        logger.warning(f"텔레그램 중간 보고 전송 실패 (loop 계속): {tg_err}")
 
                 if i < total:
                     await asyncio.sleep(3)
@@ -498,6 +533,7 @@ async def handle_retry(user_id: str | None = None, command_id: str | None = None
     total = len(targets)
     success_count = 0
     failed_count = 0
+    fail_reasons: dict[str, int] = {"cookie": 0, "no_input": 0, "other": 0}
 
     uid_label = user_id[:8] if user_id else "admin"
     logger.info(f"▶ 재시도 실행 시작: 총 {total}건 (user={uid_label})")
@@ -545,6 +581,16 @@ async def handle_retry(user_id: str | None = None, command_id: str | None = None
                             success_count += 1
                             consecutive_failures = 0
                             logger.info(f"✓ 재시도 [{i}/{total}] 성공")
+                        elif ok is None:
+                            # 댓글 입력창 없음 — 연속 실패 카운터 증가 안 함
+                            add_to_retry_queue(
+                                target["blog_id"], target["post_url"],
+                                target["post_title"], "입력창 없음",
+                                user_id=user_id,
+                            )
+                            failed_count += 1
+                            fail_reasons["no_input"] += 1
+                            logger.warning(f"✗ 재시도 [{i}/{total}] 스킵 (입력창 없음)")
                         else:
                             add_to_retry_queue(
                                 target["blog_id"], target["post_url"],
@@ -553,6 +599,7 @@ async def handle_retry(user_id: str | None = None, command_id: str | None = None
                             )
                             failed_count += 1
                             consecutive_failures += 1
+                            fail_reasons["cookie"] += 1
                             logger.warning(f"✗ 재시도 [{i}/{total}] 실패")
                     except Exception as e:
                         add_to_retry_queue(
@@ -562,6 +609,7 @@ async def handle_retry(user_id: str | None = None, command_id: str | None = None
                         )
                         failed_count += 1
                         consecutive_failures += 1
+                        fail_reasons["other"] += 1
                         logger.error(f"✗ 재시도 [{i}/{total}] 예외: {e}")
 
                     # 3연속 실패 시 텔레그램 조기 경고
@@ -597,8 +645,37 @@ async def handle_retry(user_id: str | None = None, command_id: str | None = None
                                 "total": total,
                                 "success": success_count,
                                 "failed": failed_count,
+                                "fail_reasons": fail_reasons,
                             },
                         )
+
+                    # 30개마다 텔레그램 중간 보고 (마지막 배치 제외)
+                    if user_id and i % 30 == 0 and i < total:
+                        try:
+                            from src.utils.telegram_notifier import send_telegram_message
+                            from src.storage.supabase_client import get_chat_id_for_user
+                            chat_id = get_chat_id_for_user(user_id)
+                            if chat_id:
+                                reason_parts = []
+                                if fail_reasons["cookie"]:
+                                    reason_parts.append(f"쿠키 만료 {fail_reasons['cookie']}건")
+                                if fail_reasons["no_input"]:
+                                    reason_parts.append(f"댓글창 미탐지 {fail_reasons['no_input']}건")
+                                if fail_reasons["other"]:
+                                    reason_parts.append(f"기타 {fail_reasons['other']}건")
+                                reason_str = ", ".join(reason_parts) if reason_parts else "없음"
+                                await send_telegram_message(
+                                    f"📊 재시도 진행 중 ({i}/{total})\n"
+                                    f"✅ 성공: {success_count} | ❌ 실패: {failed_count}\n"
+                                    f"🔍 실패 원인: {reason_str}",
+                                    chat_id=chat_id,
+                                )
+                            else:
+                                logger.warning(
+                                    f"텔레그램 중간 보고 스킵: chat_id 미설정 (user={user_id[:8]})"
+                                )
+                        except Exception as tg_err:
+                            logger.warning(f"텔레그램 중간 보고 전송 실패 (loop 계속): {tg_err}")
 
                     if i < total:
                         await asyncio.sleep(3)

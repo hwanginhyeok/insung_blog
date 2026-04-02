@@ -72,6 +72,10 @@ export function useBotStatus(): BotStatusState {
   const [commandError, setCommandError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // 폴링 interval ref — handleVisibility 클로저 stale 방지
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // running 상태 ref — visibilitychange 핸들러에서 안전하게 참조
+  const isRunningRef = useRef(false);
 
   // 재실행 경고
   const [showRunWarning, setShowRunWarning] = useState(false);
@@ -97,29 +101,38 @@ export function useBotStatus(): BotStatusState {
     }
   }, []);
 
-  // 탭 비활성 시 폴링 중지 + 활성 명령 없으면 30초 간격
+  // running 상태 ref 동기화 — visibilitychange 핸들러에서 stale closure 없이 참조
+  // activeCommand가 null이면 status는 undefined → false → ref 자동 해제
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
+    isRunningRef.current = activeCommand?.status === "running";
+  }, [activeCommand?.status]);
 
+  // 탭 비활성 시 폴링 제어 + 활성 명령 없으면 30초 간격
+  // interval + isRunning 모두 ref로 관리 → handleVisibility 클로저 stale 방지
+  useEffect(() => {
     const startPolling = () => {
-      if (interval) clearInterval(interval);
+      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
       const ms = activeCommand ? 5000 : 30000;
       fetchCommands();
-      interval = setInterval(fetchCommands, ms);
+      pollingIntervalRef.current = setInterval(fetchCommands, ms);
     };
 
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
         startPolling();
-      } else {
-        if (interval) clearInterval(interval);
+      } else if (!isRunningRef.current) {
+        // running 아닐 때만 폴링 중단 (배터리 절약)
+        if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
       }
+      // running 중에는 background여도 폴링 유지
     };
 
     startPolling();
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
-      if (interval) clearInterval(interval);
+      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
       document.removeEventListener("visibilitychange", handleVisibility);
     };
     // activeCommand ID 변경 시 폴링 간격 조정 (불필요한 재실행 방지)
