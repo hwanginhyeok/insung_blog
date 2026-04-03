@@ -34,7 +34,32 @@ interface NeighborRow {
   neighbor_type: string;
 }
 
-type Tab = "comments" | "persona" | "neighbors";
+interface BotRunRow {
+  id: string;
+  run_at: string;
+  bloggers_visited: number;
+  comments_written: number;
+  comments_failed: number;
+  duration_seconds: number | null;
+  error_message: string | null;
+}
+
+interface BotStats {
+  summary: {
+    totalRuns: number;
+    totalBloggers: number;
+    totalComments: number;
+    totalFailed: number;
+    botStatus: "active" | "inactive" | "error";
+    lastRunAt: string | null;
+    isActive: boolean;
+    approvalMode: string;
+  };
+  commentCounts: Record<string, number>;
+  recentRuns: BotRunRow[];
+}
+
+type Tab = "comments" | "persona" | "neighbors" | "bot";
 
 const STATUS_LABELS: Record<string, string> = {
   posted: "게시완료",
@@ -59,14 +84,16 @@ export function UserDetailModal({ userId, userName, onClose }: Props) {
   const [personas, setPersonas] = useState<PersonaRow[]>([]);
   const [neighbors, setNeighbors] = useState<NeighborRow[]>([]);
   const [neighborStats, setNeighborStats] = useState<Record<string, number>>({});
+  const [botStats, setBotStats] = useState<BotStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [commentsRes, personaRes, neighborsRes] = await Promise.all([
+    const [commentsRes, personaRes, neighborsRes, botRes] = await Promise.all([
       fetch(`/api/admin/users/${userId}/comments`),
       fetch(`/api/admin/users/${userId}/persona`),
       fetch(`/api/admin/users/${userId}/neighbors`),
+      fetch(`/api/admin/users/${userId}/bot-stats`),
     ]);
 
     if (commentsRes.ok) {
@@ -81,6 +108,9 @@ export function UserDetailModal({ userId, userName, onClose }: Props) {
       const d = await neighborsRes.json();
       setNeighbors(d.neighbors || []);
       setNeighborStats(d.stats?.byType || {});
+    }
+    if (botRes.ok) {
+      setBotStats(await botRes.json());
     }
     setLoading(false);
   }, [userId]);
@@ -120,6 +150,7 @@ export function UserDetailModal({ userId, userName, onClose }: Props) {
               { key: "comments" as Tab, label: `댓글 (${comments.length})` },
               { key: "persona" as Tab, label: `페르소나 (${personas.length})` },
               { key: "neighbors" as Tab, label: `이웃 (${neighbors.length})` },
+              { key: "bot" as Tab, label: `봇 이력 (${botStats?.summary.totalRuns || 0})` },
             ] as const
           ).map((t) => (
             <Button
@@ -232,6 +263,91 @@ export function UserDetailModal({ userId, userName, onClose }: Props) {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* 봇 이력 탭 */}
+            {tab === "bot" && botStats && (
+              <div className="space-y-4">
+                {/* 요약 카드 */}
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded border p-3 text-center">
+                    <p className="text-lg font-bold">{botStats.summary.totalRuns}</p>
+                    <p className="text-xs text-muted-foreground">실행 횟수</p>
+                  </div>
+                  <div className="rounded border p-3 text-center">
+                    <p className="text-lg font-bold">{botStats.summary.totalBloggers}</p>
+                    <p className="text-xs text-muted-foreground">방문 블로거</p>
+                  </div>
+                  <div className="rounded border p-3 text-center">
+                    <p className="text-lg font-bold text-green-600">{botStats.summary.totalComments}</p>
+                    <p className="text-xs text-muted-foreground">작성 댓글</p>
+                  </div>
+                  <div className="rounded border p-3 text-center">
+                    <p className="text-lg font-bold text-red-600">{botStats.summary.totalFailed}</p>
+                    <p className="text-xs text-muted-foreground">실패</p>
+                  </div>
+                </div>
+
+                {/* 상태 정보 */}
+                <div className="flex flex-wrap gap-2 text-sm">
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                    botStats.summary.botStatus === "active" ? "bg-green-100 text-green-700" :
+                    botStats.summary.botStatus === "error" ? "bg-red-100 text-red-700" :
+                    "bg-gray-100 text-gray-600"
+                  }`}>
+                    {botStats.summary.botStatus === "active" ? "활성" :
+                     botStats.summary.botStatus === "error" ? "에러" : "비활성"}
+                  </span>
+                  <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs">
+                    {botStats.summary.approvalMode === "auto" ? "자동 승인" : "수동 승인"}
+                  </span>
+                  {botStats.summary.lastRunAt && (
+                    <span className="text-xs text-muted-foreground">
+                      마지막 실행: {formatDate(botStats.summary.lastRunAt)}
+                    </span>
+                  )}
+                </div>
+
+                {/* 댓글 상태 분포 */}
+                {Object.keys(botStats.commentCounts).length > 0 && (
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    {Object.entries(botStats.commentCounts).map(([status, count]) => (
+                      <span key={status} className="rounded border px-2 py-0.5">
+                        {STATUS_LABELS[status] || status}: {count}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* 최근 실행 로그 */}
+                <div className="space-y-1.5">
+                  <h4 className="text-sm font-medium">최근 실행 (30일)</h4>
+                  {botStats.recentRuns.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">실행 이력 없음</p>
+                  ) : (
+                    botStats.recentRuns.map((r) => (
+                      <div key={r.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">{formatDate(r.run_at)}</span>
+                          {r.error_message && (
+                            <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-600">에러</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span>방문 {r.bloggers_visited}</span>
+                          <span className="text-green-600">댓글 {r.comments_written}</span>
+                          {r.comments_failed > 0 && (
+                            <span className="text-red-600">실패 {r.comments_failed}</span>
+                          )}
+                          {r.duration_seconds != null && (
+                            <span>{Math.round(r.duration_seconds / 60)}분</span>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             )}
           </>

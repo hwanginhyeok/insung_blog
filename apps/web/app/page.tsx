@@ -29,9 +29,15 @@ export default function LandingPage() {
               </Link>
               <span className="text-sm text-gray-400">월 10회 무료</span>
             </div>
+            {/* 모바일 — 인라인 스탯 배지 */}
+            <div className="mt-6 flex flex-wrap gap-2 md:hidden">
+              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">1분 완성</span>
+              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">일 30개 댓글</span>
+              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">24/7 이웃관리</span>
+            </div>
           </div>
 
-          {/* 우측 — 요약 스탯 카드 (2/5) */}
+          {/* 데스크톱 — 요약 스탯 카드 (2/5) */}
           <div className="hidden md:block md:col-span-2">
             <div className="bg-gray-50 rounded-2xl p-8 space-y-6">
               <StatItem number="1분" label="글 하나 완성까지" />

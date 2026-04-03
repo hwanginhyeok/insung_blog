@@ -205,6 +205,11 @@ export default function NeighborPage() {
             >
               찾기 + 댓글 + 이웃 신청
             </Button>
+            {themes.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center">
+                위에서 테마를 먼저 등록하면 이웃 찾기를 시작할 수 있어요
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
