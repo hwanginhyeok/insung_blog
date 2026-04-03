@@ -343,13 +343,8 @@ def generate_comment(
     Returns:
         생성된 댓글 문자열. API 실패 시 phrases 폰백.
     """
-    client = _get_client()
-
     # 카테고리 감지 (D-2)
     category = _detect_category(post_title, post_text)
-
-    if client is None:
-        return pick_phrase(post_title, category=category)
 
     # 본문이 비거나 너무 짧으면 폰백
     body = post_text.strip()
@@ -372,76 +367,68 @@ def generate_comment(
     # D-2: 카테고리 힌트
     category_hint = _CATEGORY_PROMPT_HINTS.get(category) if category else None
 
-    # 최대 3번 시도 (중복 시 재생성)
-    for attempt in range(3):
-        try:
-            system_prompt = _build_system_prompt(
-                custom_rules=custom_prompt,
-                tone_hint=tone_hint,
-                avoid_starters=avoid_starters,
-                category_hint=category_hint,
-                persona_tone=persona_tone,
-            )
-            user_message = (
-                f"[제목] {post_title}\n\n[본문]\n{body}\n\n"
-                "위 게시물에 3줄 이상, 120자 이상의 댓글을 작성해.\n"
-                "예시: 와 여기 분위기 진짜 좋네요! 사진 보니까 바로 가고 싶어졌어요 ㅎㅎ\\n"
-                "가격도 합리적이고 메뉴도 다양해서 선택 장애 올 것 같아요\\n"
-                "다음에 친구들이랑 꼭 가봐야겠어요 좋은 정보 감사합니다 ❤️"
-            )
-
-            response = client.messages.create(
-                model=COMMENT_AI_MODEL,
-                max_tokens=300,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_message}],
-            )
-            comment = response.content[0].text.strip()
-
-            # 빈 응답이거나 너무 짧은 경우 (최소 80자)
-            if len(comment) < 80:
-                logger.warning(f"AI 응답 너무 짧음 ({len(comment)}자, 최소 80자, 시도 {attempt + 1}/3)")
-                continue
-
-            # 따옴표 래핑 제거
-            if comment.startswith('"') and comment.endswith('"'):
-                comment = comment[1:-1]
-
-            # 최대 길이 제한
-            if len(comment) > 300:
-                comment = comment[:297] + "..."
-
-            # 비정상 응답 체크
-            if not _is_valid_comment(comment):
-                logger.warning(f"비정상 응답, 재시도 (시도 {attempt + 1}/3)")
-                continue
-
-            # 중복 체크
-            is_duplicate = any(_is_similar(comment, rc) for rc in recent_comments)
-            if is_duplicate:
-                logger.debug(f"중복 댓글 감지, 재생성 (시도 {attempt + 1}/3)")
-                # 재시도 시 새 톤으로 교체
-                _, tone_hint = _pick_tone()
-                continue
-
-            # D-3: 후처리 적용
-            comment = post_process(comment)
-
-            logger.info(f"AI 댓글 생성 완료 ({len(comment)}자): {comment[:40]}...")
-            return comment
-
-        except Exception as e:
-            logger.warning(f"AI 댓글 생성 오류 (시도 {attempt + 1}/3): {e}")
-            continue
-
-    # 3번 모두 실패 → Ollama 폴백 시도
+    # ── 1차: Ollama 우선 시도 (크레딧 불필요) ──
     ollama_comment = _try_ollama_comment(body, post_title, tone_hint, category_hint, persona_tone)
     if ollama_comment and len(ollama_comment) >= 80 and _is_valid_comment(ollama_comment):
-        comment = post_process(_clean_comment(ollama_comment))
-        logger.info(f"Ollama 댓글 생성 완료 ({len(comment)}자): {comment[:40]}...")
-        return comment
+        if not any(_is_similar(ollama_comment, rc) for rc in recent_comments):
+            comment = post_process(_clean_comment(ollama_comment))
+            logger.info(f"Ollama 댓글 생성 완료 ({len(comment)}자): {comment[:40]}...")
+            return comment
 
-    logger.warning("AI+Ollama 모두 실패 — phrases 폰백")
+    # ── 2차: Anthropic API 시도 ──
+    client = _get_client()
+    if client is not None:
+        for attempt in range(3):
+            try:
+                system_prompt = _build_system_prompt(
+                    custom_rules=custom_prompt,
+                    tone_hint=tone_hint,
+                    avoid_starters=avoid_starters,
+                    category_hint=category_hint,
+                    persona_tone=persona_tone,
+                )
+                user_message = (
+                    f"[제목] {post_title}\n\n[본문]\n{body}\n\n"
+                    "위 게시물에 3줄 이상, 120자 이상의 댓글을 작성해.\n"
+                    "예시: 와 여기 분위기 진짜 좋네요! 사진 보니까 바로 가고 싶어졌어요 ㅎㅎ\\n"
+                    "가격도 합리적이고 메뉴도 다양해서 선택 장애 올 것 같아요\\n"
+                    "다음에 친구들이랑 꼭 가봐야겠어요 좋은 정보 감사합니다 ❤️"
+                )
+
+                response = client.messages.create(
+                    model=COMMENT_AI_MODEL,
+                    max_tokens=300,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_message}],
+                )
+                comment = response.content[0].text.strip()
+
+                if len(comment) < 80:
+                    logger.warning(f"AI 응답 너무 짧음 ({len(comment)}자, 시도 {attempt + 1}/3)")
+                    continue
+
+                if comment.startswith('"') and comment.endswith('"'):
+                    comment = comment[1:-1]
+                if len(comment) > 300:
+                    comment = comment[:297] + "..."
+
+                if not _is_valid_comment(comment):
+                    continue
+
+                if any(_is_similar(comment, rc) for rc in recent_comments):
+                    _, tone_hint = _pick_tone()
+                    continue
+
+                comment = post_process(comment)
+                logger.info(f"AI 댓글 생성 완료 ({len(comment)}자): {comment[:40]}...")
+                return comment
+
+            except Exception as e:
+                logger.warning(f"AI 댓글 생성 오류 (시도 {attempt + 1}/3): {e}")
+                continue
+
+    # ── 3차: phrases 폰백 ──
+    logger.warning("Ollama+Anthropic 모두 실패 — phrases 폰백")
     return pick_phrase(post_title, category=category)
 
 
@@ -539,13 +526,41 @@ def generate_comments_batch(
         )
         return [comment]
 
-    client = _get_client()
-
     # 배치 전체의 카테고리는 첫 번째 유효 게시물 기준으로 감지 (대표값)
     first_title = posts[0].get("title", "")
     first_body = posts[0].get("body", "")
     category = _detect_category(first_title, first_body)
 
+    # D-1: 톤 랜덤화 + 시작어 중복 방지 (배치 Ollama에서도 사용)
+    _, tone_hint = _pick_tone()
+
+    # ── 1차: Ollama로 개별 생성 (크레딧 불필요) ──
+    if _check_ollama():
+        results: list[str] = []
+        all_ok = True
+        for p in posts:
+            body = p["body"].strip()
+            cat = _detect_category(p.get("title", ""), body)
+            cat_hint = _CATEGORY_PROMPT_HINTS.get(cat) if cat else None
+            if len(body) >= 20:
+                ollama_comment = _try_ollama_comment(
+                    body[:_MAX_BODY_CHARS], p["title"],
+                    tone_hint=tone_hint, category_hint=cat_hint,
+                    persona_tone=persona_tone,
+                )
+                if ollama_comment and len(ollama_comment) >= 80 and _is_valid_comment(ollama_comment):
+                    comment = post_process(_clean_comment(ollama_comment))
+                    results.append(comment)
+                    recent_comments_local.append(comment)
+                    continue
+            all_ok = False
+            results.append(pick_phrase(p["title"], category=cat))
+        if all_ok or any(len(r) >= 80 for r in results):
+            logger.info(f"Ollama 배치 생성: {sum(1 for r in results if len(r) >= 80)}개 성공")
+            return results
+
+    # ── 2차: Anthropic API 배치 ──
+    client = _get_client()
     if client is None:
         return [pick_phrase(p["title"], category=_detect_category(p.get("title", ""), p.get("body", ""))) for p in posts]
 
