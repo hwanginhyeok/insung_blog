@@ -28,7 +28,7 @@ function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   // ?mode=signup 이면 기본을 회원가입으로 (랜딩 CTA → 회원가입 흐름)
   const initialMode = useSearchParams().get("mode") === "signup" ? "signup" : "login";
-  const [mode, setMode] = useState<"login" | "signup">(initialMode);
+  const [mode, setMode] = useState<"login" | "signup" | "reset">(initialMode);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -49,6 +49,21 @@ function LoginForm() {
 
     const supabase = createClient();
 
+    if (mode === "reset") {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (resetError) {
+        setError(resetError.message);
+        setIsLoading(false);
+        return;
+      }
+      setError("✓ 비밀번호 재설정 링크를 이메일로 보냈습니다. 확인해주세요.");
+      setMode("login");
+      setIsLoading(false);
+      return;
+    }
+
     if (mode === "signup") {
       const { error: signUpError } = await supabase.auth.signUp({
         email,
@@ -59,8 +74,6 @@ function LoginForm() {
         setIsLoading(false);
         return;
       }
-      // 회원가입 후 users 테이블에 레코드 생성은 DB 트리거로 처리
-      // 이메일 인증이 필요할 수 있으므로 안내 메시지 표시
       setError("✓ 가입 완료! 이메일을 확인해 인증을 완료하세요.");
       setMode("login");
       setIsLoading(false);
@@ -79,7 +92,16 @@ function LoginForm() {
       return;
     }
 
-    router.push(redirect);
+    // 신규 사용자는 /write, 재방문은 /calendar (명시적 redirect 없을 때만)
+    let target = redirect;
+    if (redirect === "/calendar") {
+      try {
+        const res = await fetch("/api/onboarding");
+        const data = await res.json();
+        if (!data.completed) target = "/write";
+      } catch {}
+    }
+    router.push(target);
     router.refresh();
   }
 
@@ -93,7 +115,9 @@ function LoginForm() {
           <CardDescription>
             {mode === "login"
               ? "블로그 AI 파트너에 로그인"
-              : "새 계정 만들기"}
+              : mode === "signup"
+                ? "새 계정 만들기"
+                : "비밀번호 재설정"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -108,17 +132,19 @@ function LoginForm() {
                 required
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">비밀번호</label>
-              <Input
-                type="password"
-                placeholder="비밀번호를 입력하세요"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-              />
-            </div>
+            {mode !== "reset" && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">비밀번호</label>
+                <Input
+                  type="password"
+                  placeholder="비밀번호를 입력하세요"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                />
+              </div>
+            )}
 
             {error && (
               <p className={`text-sm ${error.startsWith("✓") ? "text-green-600" : "text-red-600"}`}>{error}</p>
@@ -131,45 +157,56 @@ function LoginForm() {
               disabled={isLoading}
             >
               {isLoading
-                ? mode === "login"
-                  ? "로그인 중..."
-                  : "가입 중..."
-                : mode === "login"
-                  ? "로그인"
-                  : "회원가입"}
+                ? mode === "reset"
+                  ? "전송 중..."
+                  : mode === "login"
+                    ? "로그인 중..."
+                    : "가입 중..."
+                : mode === "reset"
+                  ? "재설정 링크 보내기"
+                  : mode === "login"
+                    ? "로그인"
+                    : "회원가입"}
             </Button>
 
-            <p className="text-center text-sm text-muted-foreground">
-              {mode === "login" ? (
-                <>
-                  계정이 없으신가요?{" "}
+            <div className="space-y-2 text-center text-sm text-muted-foreground">
+              {mode === "login" && (
+                <p>
                   <button
                     type="button"
                     className="font-medium text-foreground underline"
-                    onClick={() => {
-                      setMode("signup");
-                      setError(null);
-                    }}
+                    onClick={() => { setMode("reset"); setError(null); }}
                   >
-                    회원가입
+                    비밀번호를 잊으셨나요?
                   </button>
-                </>
-              ) : (
-                <>
-                  이미 계정이 있으신가요?{" "}
-                  <button
-                    type="button"
-                    className="font-medium text-foreground underline"
-                    onClick={() => {
-                      setMode("login");
-                      setError(null);
-                    }}
-                  >
-                    로그인
-                  </button>
-                </>
+                </p>
               )}
-            </p>
+              <p>
+                {mode === "login" ? (
+                  <>
+                    계정이 없으신가요?{" "}
+                    <button
+                      type="button"
+                      className="font-medium text-foreground underline"
+                      onClick={() => { setMode("signup"); setError(null); }}
+                    >
+                      회원가입
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {mode === "reset" ? "비밀번호가 기억나셨나요?" : "이미 계정이 있으신가요?"}{" "}
+                    <button
+                      type="button"
+                      className="font-medium text-foreground underline"
+                      onClick={() => { setMode("login"); setError(null); }}
+                    >
+                      로그인
+                    </button>
+                  </>
+                )}
+              </p>
+            </div>
           </form>
 
           {/* 소셜 로그인 */}

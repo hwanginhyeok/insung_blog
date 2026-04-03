@@ -125,8 +125,21 @@ export async function GET(req: NextRequest) {
 
   const tokenHash = linkData.properties.hashed_token;
 
+  // 신규 사용자는 /write, 재방문은 /calendar (명시적 redirect 없을 때만)
+  let finalRedirect = redirect;
+  if (redirect === "/calendar") {
+    const { data: onboardData } = await admin
+      .from("users")
+      .select("onboarding_completed")
+      .eq("email", userEmail)
+      .maybeSingle();
+    if (onboardData && !onboardData.onboarding_completed) {
+      finalRedirect = "/write";
+    }
+  }
+
   // 리다이렉트 응답 준비
-  const redirectUrl = new URL(redirect, req.url);
+  const redirectUrl = new URL(finalRedirect, req.url);
   const res = NextResponse.redirect(redirectUrl);
 
   // OAuth 쿠키 정리

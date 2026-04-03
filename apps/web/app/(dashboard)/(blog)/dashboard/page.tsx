@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 import type { Database } from "@/lib/database.types";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Card,
   CardContent,
@@ -27,6 +28,7 @@ export default function DashboardPage() {
   const [posts, setPosts] = useState<QueueRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchPosts() {
@@ -55,16 +57,20 @@ export default function DashboardPage() {
     fetchPosts();
   }, []);
 
-  async function handleDelete(postId: string, e: React.MouseEvent) {
+  function requestDelete(postId: string, e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    if (!window.confirm("이 글을 삭제하시겠습니까? 복구할 수 없습니다.")) return;
+    setConfirmTarget(postId);
+  }
 
-    setDeletingId(postId);
+  async function executeDelete() {
+    if (!confirmTarget) return;
+    setConfirmTarget(null);
+    setDeletingId(confirmTarget);
     try {
-      const res = await fetch(`/api/posts?id=${postId}`, { method: "DELETE" });
+      const res = await fetch(`/api/posts?id=${confirmTarget}`, { method: "DELETE" });
       if (res.ok) {
-        setPosts((prev) => prev.filter((p) => p.id !== postId));
+        setPosts((prev) => prev.filter((p) => p.id !== confirmTarget));
       }
     } finally {
       setDeletingId(null);
@@ -139,7 +145,7 @@ export default function DashboardPage() {
                         {status.label}
                       </span>
                       <button
-                        onClick={(e) => handleDelete(post.id, e)}
+                        onClick={(e) => requestDelete(post.id, e)}
                         disabled={deletingId === post.id}
                         className="ml-1 rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                         title="삭제"
@@ -183,6 +189,16 @@ export default function DashboardPage() {
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmTarget}
+        onConfirm={executeDelete}
+        onCancel={() => setConfirmTarget(null)}
+        title="글 삭제"
+        description="이 글을 삭제하시겠습니까? 복구할 수 없습니다."
+        confirmLabel="삭제"
+        variant="danger"
+      />
     </div>
   );
 }

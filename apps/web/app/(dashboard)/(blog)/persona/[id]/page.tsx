@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Card,
   CardContent,
@@ -383,10 +384,11 @@ export default function PersonaDetailPage() {
 
   // ── 페르소나 삭제 ──
 
-  async function handleDelete() {
-    if (!persona) return;
-    if (!window.confirm("이 페르소나를 삭제하시겠습니까? 모든 스타일 항목도 함께 삭제됩니다.")) return;
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  async function executeDelete() {
+    if (!persona) return;
+    setShowDeleteConfirm(false);
     const supabase = createClient();
     await supabase.from("user_personas").delete().eq("id", persona.id);
     router.push("/persona");
@@ -816,11 +818,21 @@ export default function PersonaDetailPage() {
         <Button
           variant="ghost"
           className="text-red-500 hover:text-red-600 hover:bg-red-50"
-          onClick={handleDelete}
+          onClick={() => setShowDeleteConfirm(true)}
         >
           이 페르소나 삭제
         </Button>
       </div>
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onConfirm={executeDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+        title="페르소나 삭제"
+        description="이 페르소나를 삭제하시겠습니까? 모든 스타일 항목도 함께 삭제됩니다."
+        confirmLabel="삭제"
+        variant="danger"
+      />
     </div>
   );
 }

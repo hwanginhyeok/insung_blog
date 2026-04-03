@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Card,
   CardContent,
@@ -194,10 +195,11 @@ export default function CalendarPage() {
 
   // ── 삭제 ──
 
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
   async function handleDelete() {
     if (!editEvent) return;
-    if (!window.confirm("이 일정을 삭제하시겠습니까?")) return;
-
+    setShowDeleteConfirm(false);
     await fetch(`/api/calendar?id=${editEvent.id}`, { method: "DELETE" });
     closeModal();
     await loadData();
@@ -526,7 +528,7 @@ export default function CalendarPage() {
                       variant="ghost"
                       size="sm"
                       className="text-red-500"
-                      onClick={handleDelete}
+                      onClick={() => setShowDeleteConfirm(true)}
                     >
                       삭제
                     </Button>
@@ -551,6 +553,16 @@ export default function CalendarPage() {
           </Card>
         </div>
       )}
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+        title="일정 삭제"
+        description="이 일정을 삭제하시겠습니까?"
+        confirmLabel="삭제"
+        variant="danger"
+      />
     </div>
   );
 }

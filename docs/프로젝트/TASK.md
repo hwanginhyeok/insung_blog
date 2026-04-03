@@ -49,8 +49,8 @@ Supabase (공유 제어 평면)
 | DUPLICATE-FIX | 중복 댓글 다층 방어 (사전 체크 + Supabase 이중 체크 + 게시 전 필터) | P0 | ✅ 완료 | 154그룹 237건 정리 + 4단계 방어 코드. 마이그레이션 SQL 수동 실행 필요 (2026-03-30) |
 | COOKIE-REFRESH | NID_AUT 없음 감지 시 재로그인 로직 강화 | P1 | ✅ 완료 | Supabase 쿠키 재로드 + 워커 NID_AUT 검증 + 1회 재시도 (2026-03-30) |
 | FAIL-FAST | 댓글 입력창 탐색 타임아웃 최적화 (~70초 -> ~20초) | P1 | ✅ 완료 | 주력 셀렉터 10초 + 폴백 2초 (2026-03-30) |
-| MIGRATION-UNIQUE | pending_comments UNIQUE partial index 적용 | P0 | 🔴 집에서 수동 실행 필요 | **dev 환경 없음 — prod 직접 적용 (순서 지켜야 함)** → 아래 절차 참고 |
-| MIGRATION-AUTO-MODE | bot_settings에 daily_discover/auto_execute 컬럼 추가 | P0 | 🔴 수동 실행 필요 | `supabase/migrations/20260403_add_auto_mode.sql` — Supabase Dashboard SQL Editor에서 실행 필요. 미실행 시 자동 수집/자동 게시 토글 저장 불가 |
+| MIGRATION-UNIQUE | pending_comments UNIQUE partial index 적용 | P0 | ✅ 완료 | supabase db push로 적용 + 중복 삽입 차단 검증 완료 (2026-04-03) |
+| MIGRATION-AUTO-MODE | bot_settings에 daily_discover/auto_execute 컬럼 추가 | P0 | ✅ 완료 | supabase db push로 적용 + 컬럼 존재 검증 완료 (2026-04-03) |
 
 #### MIGRATION-UNIQUE 실행 절차 (집에서 직접 수행)
 
@@ -116,12 +116,12 @@ git push
 | UX-C01 | 카카오 로그인 프로덕션 실동작 검증 | P1 | 대기 | SDK 에러는 로컬 dev 세션 캐시였음. 프로덕션 OAuth redirect는 SDK 없이 작동. 실제 카카오 로그인 직접 클릭 테스트 필요 |
 | UX-C02 | Vercel insights 404 (dev 환경) | P2 | 대기 | localhost:3001에서 3098 포트 참조 — next.config 환경 분기 추가 |
 | UX-H01 | CTA → 회원가입 기본 | P1 | ✅ 완료 | 랜딩 CTA → `/login?mode=signup`, login.tsx mode 초기화 추가 (2026-03-28) |
-| UX-H02 | 로그인 후 기본 화면 = /write | P1 | 대기 | 신규 사용자는 `/write` 로, 재방문은 `/calendar` 로. 현재 모두 `/calendar` |
+| UX-H02 | 로그인 후 기본 화면 = /write | P1 | ✅ 완료 | 신규(onboarding 미완료) → /write, 재방문 → /calendar. 이메일+OAuth 모두 적용 (2026-04-03) |
 | UX-H03 | 온보딩 "왼쪽 메뉴" → "상단 메뉴" | P1 | ✅ 완료 | onboarding-dialog.tsx 카피 수정 (2026-03-28) |
 | UX-H04 | 회원가입 후 이메일 인증 안내 | P1 | ✅ 완료 | signUp 성공 후 초록 성공 메시지 표시 (2026-03-28) |
-| UX-H05 | 비밀번호 찾기 기능 추가 | P1 | 대기 | Supabase resetPasswordForEmail() 연동 |
+| UX-H05 | 비밀번호 찾기 기능 추가 | P1 | ✅ 완료 | 로그인 페이지 "비밀번호를 잊으셨나요?" + /reset-password 페이지 구현 (2026-04-03) |
 | UX-H06 | 로그인 페이지 홈 링크 | P1 | ✅ 완료 | "인성이" 제목에 `href="/"` 추가 (2026-03-28) |
-| UX-M01 | 삭제 confirm → AlertDialog | P2 | 대기 | dashboard/page.tsx window.confirm() → shadcn AlertDialog |
+| UX-M01 | 삭제 confirm → AlertDialog | P2 | ✅ 완료 | ConfirmDialog 컴포넌트 신규 + dashboard/calendar/persona 3곳 적용 (2026-04-03) |
 | UX-M02 | 헤더 이메일 길이 처리 | P2 | ✅ 완료 | 모바일 hidden, sm+에서 @앞 ID만 표시 (2026-03-28) |
 | UX-M03 | 모바일 스탯 카드 표시 | P2 | 대기 | 랜딩 히어로 스탯(1분/30개/24/7) 모바일에서도 인라인 배지로 표시 |
 | UX-M04 | 이웃관리 "새 이웃 찾기" disabled 안내 개선 | P2 | 대기 | 테마 미등록 시 버튼 disabled 이유 명확히 안내. "테마를 먼저 등록하세요" 인라인 안내 추가 |
