@@ -171,6 +171,7 @@ interface BotControlPanelProps {
   onSendCommand: (command: "run" | "execute" | "retry") => void;
   onConfirmRun: () => void;
   onCancelRunWarning: () => void;
+  onSaveSettingsPatch?: (patch: Partial<BotSettings>) => Promise<void>;
 }
 
 export function BotControlPanel({
@@ -188,6 +189,7 @@ export function BotControlPanel({
   onSendCommand,
   onConfirmRun,
   onCancelRunWarning,
+  onSaveSettingsPatch,
 }: BotControlPanelProps) {
   // 현재 단계 결정
   function getCurrentStep(): number {
@@ -271,6 +273,34 @@ export function BotControlPanel({
               </span>
             )}
           </div>
+
+          {/* 매일 자동 수집 토글 */}
+          {onSaveSettingsPatch && (
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <button
+                role="switch"
+                aria-checked={settings.daily_discover}
+                onClick={() =>
+                  onSaveSettingsPatch({ daily_discover: !settings.daily_discover })
+                }
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                  settings.daily_discover ? "bg-primary" : "bg-muted"
+                }`}
+              >
+                <span
+                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                    settings.daily_discover ? "translate-x-4" : "translate-x-1"
+                  }`}
+                />
+              </button>
+              <span className="text-muted-foreground">
+                매일 자동 수집
+                {settings.daily_discover && (
+                  <span className="ml-1 text-xs text-primary">오전 9시</span>
+                )}
+              </span>
+            </label>
+          )}
 
           {commandError &&
             activeCommand?.command !== "execute" &&
@@ -357,7 +387,7 @@ export function BotControlPanel({
                 ))}
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   onClick={() => onSendCommand("execute")}
                   disabled={sendingCommand || !!activeCommand}
@@ -371,6 +401,29 @@ export function BotControlPanel({
                 >
                   재시도
                 </Button>
+
+                {/* 자동 모드 토글 */}
+                {onSaveSettingsPatch && (
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <button
+                      role="switch"
+                      aria-checked={settings.auto_execute}
+                      onClick={() =>
+                        onSaveSettingsPatch({ auto_execute: !settings.auto_execute })
+                      }
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                        settings.auto_execute ? "bg-primary" : "bg-muted"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                          settings.auto_execute ? "translate-x-4" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                    <span className="text-muted-foreground">자동 게시</span>
+                  </label>
+                )}
               </div>
             </>
           )}

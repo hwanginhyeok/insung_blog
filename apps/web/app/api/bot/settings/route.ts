@@ -47,6 +47,8 @@ export async function POST(req: NextRequest) {
     "auto_neighbor_request",
     "max_neighbor_requests_per_day",
     "neighbor_request_message",
+    "daily_discover",
+    "auto_execute",
   ] as const;
 
   const updateData: Record<string, unknown> = {};

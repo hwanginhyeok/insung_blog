@@ -540,6 +540,8 @@ def get_bot_settings_sb(user_id: str | None = None) -> dict:
                 "max_comments_per_day": row["max_comments_per_day"],
                 "max_bloggers_per_day": row["max_bloggers_per_day"],
                 "comment_prompt": row.get("comment_prompt"),
+                "daily_discover": row.get("daily_discover", False),
+                "auto_execute": row.get("auto_execute", False),
             }
 
     except Exception as e:

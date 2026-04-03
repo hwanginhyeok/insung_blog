@@ -13,7 +13,7 @@ import { CookieStatusBadge } from "./_components/CookieStatusBadge";
 import { RunHistoryPanel } from "./_components/RunHistoryPanel";
 import { CommentCalendar } from "./_components/CommentCalendar";
 import { CommentAnalyticsChart } from "./_components/CommentAnalyticsChart";
-import { BotSettings, apiFetchStatus } from "./_lib/bot-api";
+import { BotSettings, apiSaveSettings, apiFetchStatus } from "./_lib/bot-api";
 
 export default function BotPage() {
   const {
@@ -106,6 +106,17 @@ export default function BotPage() {
     [setPending]
   );
 
+  // 자동 모드 토글 (daily_discover / auto_execute 즉시 저장)
+  const handleSaveSettingsPatch = useCallback(
+    async (patch: Partial<BotSettings>) => {
+      const result = await apiSaveSettings({ ...settings, ...patch });
+      if (result.success && result.settings) {
+        setSettings(result.settings);
+      }
+    },
+    [settings, setSettings]
+  );
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center text-muted-foreground">
@@ -144,6 +155,7 @@ export default function BotPage() {
           sendCommand("run");
         }}
         onCancelRunWarning={() => setShowRunWarning(false)}
+        onSaveSettingsPatch={handleSaveSettingsPatch}
       />
 
       {/* 상태 카드 3개 */}

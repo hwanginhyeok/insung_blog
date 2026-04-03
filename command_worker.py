@@ -228,7 +228,7 @@ def claim_command() -> dict | None:
 
 
 async def handle_run(user_id: str | None = None) -> dict:
-    """봇 1회 실행 (orchestrator.run)."""
+    """봇 1회 실행 (orchestrator.run). auto_execute=True이면 완료 후 자동 승인 + execute 큐."""
     from src.orchestrator import run
 
     uid_label = user_id[:8] if user_id else "admin"
@@ -236,6 +236,30 @@ async def handle_run(user_id: str | None = None) -> dict:
     async with _browser_semaphore:
         await run(dry_run=False, user_id=user_id)
     logger.info(f"✓ 봇 실행 완료 (user={uid_label})")
+
+    # auto_execute: 봇 실행 완료 후 pending 댓글 자동 승인 + execute 명령 큐
+    if user_id:
+        from src.storage.supabase_client import (
+            get_bot_settings_sb,
+            get_pending_comments_sb,
+            update_pending_status_sb,
+        )
+        settings = get_bot_settings_sb(user_id)
+        if settings.get("auto_execute"):
+            pending = get_pending_comments_sb("pending", user_id=user_id)
+            if pending:
+                for comment in pending:
+                    update_pending_status_sb(comment["id"], "approved", decided_by="auto_execute")
+                logger.info(f"auto_execute: {len(pending)}개 댓글 자동 승인 (user={uid_label})")
+            # execute 명령 큐 추가
+            sb = get_supabase()
+            sb.table("bot_commands").insert({
+                "user_id": user_id,
+                "command": "execute",
+                "status": "pending",
+            }).execute()
+            logger.info(f"auto_execute: execute 명령 큐 추가 (user={uid_label})")
+
     return {"message": "봇 실행 완료"}
 
 

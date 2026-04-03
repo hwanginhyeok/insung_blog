@@ -34,6 +34,8 @@ export interface BotSettings {
   auto_neighbor_request: boolean;
   max_neighbor_requests_per_day: number;
   neighbor_request_message: string | null;
+  daily_discover: boolean;
+  auto_execute: boolean;
 }
 
 export interface TodayStats {
@@ -120,6 +122,8 @@ export const defaultSettings: BotSettings = {
   auto_neighbor_request: false,
   max_neighbor_requests_per_day: 10,
   neighbor_request_message: "",
+  daily_discover: false,
+  auto_execute: false,
 };
 
 export const STATUS_LABELS: Record<string, { label: string; className: string }> = {
