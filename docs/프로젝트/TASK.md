@@ -114,7 +114,7 @@ git push
 | # | 작업 | 중요도 | 상태 | 비고 |
 |---|------|--------|------|------|
 | UX-C01 | 카카오 로그인 프로덕션 실동작 검증 | P1 | 대기 | SDK 에러는 로컬 dev 세션 캐시였음. 프로덕션 OAuth redirect는 SDK 없이 작동. 실제 카카오 로그인 직접 클릭 테스트 필요 |
-| UX-C02 | Vercel insights 404 (dev 환경) | P2 | 대기 | localhost:3001에서 3098 포트 참조 — next.config 환경 분기 추가 |
+| UX-C02 | Vercel insights 404 (dev 환경) | P2 | ✅ 해당없음 | Vercel 자동 주입 스크립트 — 프로덕션 정상, 로컬 dev 전용 노이즈 (2026-04-04) |
 | UX-H01 | CTA → 회원가입 기본 | P1 | ✅ 완료 | 랜딩 CTA → `/login?mode=signup`, login.tsx mode 초기화 추가 (2026-03-28) |
 | UX-H02 | 로그인 후 기본 화면 = /write | P1 | ✅ 완료 | 신규(onboarding 미완료) → /write, 재방문 → /calendar. 이메일+OAuth 모두 적용 (2026-04-03) |
 | UX-H03 | 온보딩 "왼쪽 메뉴" → "상단 메뉴" | P1 | ✅ 완료 | onboarding-dialog.tsx 카피 수정 (2026-03-28) |
@@ -123,8 +123,8 @@ git push
 | UX-H06 | 로그인 페이지 홈 링크 | P1 | ✅ 완료 | "인성이" 제목에 `href="/"` 추가 (2026-03-28) |
 | UX-M01 | 삭제 confirm → AlertDialog | P2 | ✅ 완료 | ConfirmDialog 컴포넌트 신규 + dashboard/calendar/persona 3곳 적용 (2026-04-03) |
 | UX-M02 | 헤더 이메일 길이 처리 | P2 | ✅ 완료 | 모바일 hidden, sm+에서 @앞 ID만 표시 (2026-03-28) |
-| UX-M03 | 모바일 스탯 카드 표시 | P2 | 대기 | 랜딩 히어로 스탯(1분/30개/24/7) 모바일에서도 인라인 배지로 표시 |
-| UX-M04 | 이웃관리 "새 이웃 찾기" disabled 안내 개선 | P2 | 대기 | 테마 미등록 시 버튼 disabled 이유 명확히 안내. "테마를 먼저 등록하세요" 인라인 안내 추가 |
+| UX-M03 | 모바일 스탯 카드 표시 | P2 | ✅ 완료 | CTA 하단에 인라인 배지 3개 추가 (md:hidden) (2026-04-04) |
+| UX-M04 | 이웃관리 "새 이웃 찾기" disabled 안내 개선 | P2 | ✅ 완료 | 테마 미등록 시 버튼 아래 안내 문구 추가 (2026-04-04) |
 | UX-ONLINE | 프로덕션 UX 검토 (insungblog.vercel.app) | P1 | ✅ 완료 | 2026-03-28 검토. 이웃관리/모바일 헤더 이슈 수정 완료. 카카오 OAuth 작동 여부 수동 테스트 필요 |
 
 ### 기능 개선 (코드 작업)
@@ -140,9 +140,9 @@ git push
 | MULTI-BLOG-ID | 블로그 ID 다중 관리 + 자기 블로그 방문 차단 | P0 | ✅ 완료 | naver_blog_ids 배열 + 자동감지 + 전체 사용처 수정. 마이그레이션 00023 실행 필요 |
 | WORKER-PARALLEL | 워커 병렬 실행 (다중 사용자 동시 처리) | P0 | ✅ 완료 | create_task + Semaphore(3) + 같은 명령만 중복 차단 |
 | SECURITY-REVIEW | 전체 기능 보안 점검 + 에러 수정 | P1 | ✅ 완료 | calendar status 화이트리스트 + payload 크기 제한 |
-| WORKER-ELASTIC | 워커 슬롯 탄력 분배 (Elastic Semaphore) | P1 | 대기 | 아래 세부 참조 |
+| WORKER-ELASTIC | 워커 슬롯 탄력 분배 (Elastic Semaphore) | P1 | ✅ 완료 | get_slots_for_user + orchestrator 병렬 방문 이미 구현됨 확인 (2026-04-04) |
 | WORKER-CMD | command_worker에 추천/동기화/테마분석 명령 핸들러 추가 | P1 | ✅ 완료 | 3개 핸들러 + API route 등록. 테스트 5건 통과 |
-| ADMIN-BOT-DETAIL | UserDetailModal에 봇 실행 이력 탭 추가 | P2 | 대기 | 상세 일별 차트 + 로그 테이블 |
+| ADMIN-BOT-DETAIL | UserDetailModal에 봇 실행 이력 탭 추가 | P2 | ✅ 완료 | 요약 카드 4개 + 상태 뱃지 + 댓글 분포 + 최근 실행 로그 (2026-04-04) |
 | NAV-MOBILE | 모바일 반응형 전체 개선 | P2 | ✅ 완료 | 헤더 오버플로우·이메일, 글쓰기 버튼 wrap, 사진 삭제 터치, 뱃지 shrink, 탭 스크롤 fade, iPhone safe-area (2026-03-28) |
 | NEIGHBOR-E2E | 이웃 연동 기능 실행 테스트 | P1 | 대기 | 브라우저 필요 — 추천/동기화/테마분석 E2E |
 
