@@ -238,27 +238,33 @@ async def handle_run(user_id: str | None = None) -> dict:
     logger.info(f"✓ 봇 실행 완료 (user={uid_label})")
 
     # auto_execute: 봇 실행 완료 후 pending 댓글 자동 승인 + execute 명령 큐
+    # Supabase 오류가 나도 run 자체는 완료 처리 (try/except로 격리)
     if user_id:
-        from src.storage.supabase_client import (
-            get_bot_settings_sb,
-            get_pending_comments_sb,
-            update_pending_status_sb,
-        )
-        settings = get_bot_settings_sb(user_id)
-        if settings.get("auto_execute"):
-            pending = get_pending_comments_sb("pending", user_id=user_id)
-            if pending:
-                for comment in pending:
-                    update_pending_status_sb(comment["id"], "approved", decided_by="auto_execute")
-                logger.info(f"auto_execute: {len(pending)}개 댓글 자동 승인 (user={uid_label})")
-            # execute 명령 큐 추가
-            sb = get_supabase()
-            sb.table("bot_commands").insert({
-                "user_id": user_id,
-                "command": "execute",
-                "status": "pending",
-            }).execute()
-            logger.info(f"auto_execute: execute 명령 큐 추가 (user={uid_label})")
+        try:
+            from src.storage.supabase_client import (
+                get_bot_settings_sb,
+                get_pending_comments_sb,
+                update_pending_status_sb,
+            )
+            settings = get_bot_settings_sb(user_id)
+            if settings.get("auto_execute"):
+                pending = get_pending_comments_sb("pending", user_id=user_id)
+                if pending:
+                    for comment in pending:
+                        update_pending_status_sb(comment["id"], "approved", decided_by="auto_execute")
+                    logger.info(f"auto_execute: {len(pending)}개 댓글 자동 승인 (user={uid_label})")
+                    # pending이 있을 때만 execute 명령 큐 추가
+                    sb = get_supabase()
+                    sb.table("bot_commands").insert({
+                        "user_id": user_id,
+                        "command": "execute",
+                        "status": "pending",
+                    }).execute()
+                    logger.info(f"auto_execute: execute 명령 큐 추가 (user={uid_label})")
+                else:
+                    logger.info(f"auto_execute: pending 0건, execute 스킵 (user={uid_label})")
+        except Exception as auto_err:
+            logger.warning(f"auto_execute 큐 실패 (무시, run은 완료): {auto_err} (user={uid_label})")
 
     return {"message": "봇 실행 완료"}
 

@@ -50,6 +50,7 @@ Supabase (공유 제어 평면)
 | COOKIE-REFRESH | NID_AUT 없음 감지 시 재로그인 로직 강화 | P1 | ✅ 완료 | Supabase 쿠키 재로드 + 워커 NID_AUT 검증 + 1회 재시도 (2026-03-30) |
 | FAIL-FAST | 댓글 입력창 탐색 타임아웃 최적화 (~70초 -> ~20초) | P1 | ✅ 완료 | 주력 셀렉터 10초 + 폴백 2초 (2026-03-30) |
 | MIGRATION-UNIQUE | pending_comments UNIQUE partial index 적용 | P0 | 🔴 집에서 수동 실행 필요 | **dev 환경 없음 — prod 직접 적용 (순서 지켜야 함)** → 아래 절차 참고 |
+| MIGRATION-AUTO-MODE | bot_settings에 daily_discover/auto_execute 컬럼 추가 | P0 | 🔴 수동 실행 필요 | `supabase/migrations/20260403_add_auto_mode.sql` — Supabase Dashboard SQL Editor에서 실행 필요. 미실행 시 자동 수집/자동 게시 토글 저장 불가 |
 
 #### MIGRATION-UNIQUE 실행 절차 (집에서 직접 수행)
 
