@@ -1344,14 +1344,16 @@ async def handle_auto_reply(user_id: str | None = None, payload: dict | None = N
     uid_label = user_id[:8] if user_id else "admin"
     logger.info(f"▶ 대댓글 답글 시작 (user={uid_label})")
 
+    from src.storage.supabase_client import get_user_bot_config
     config = get_user_bot_config(user_id)
     if not config:
         return {"error": "봇 설정 없음"}
 
-    blog_id = config["settings"].get("naver_blog_id", "")
-    blog_ids = set(config["settings"].get("naver_blog_ids", [blog_id]))
+    blog_id = config.get("naver_blog_id", "")
+    blog_ids = set(config.get("naver_blog_ids") or [blog_id])
     if not blog_id:
         return {"error": "블로그 ID 없음"}
+    logger.info(f"대댓글 대상 블로그: {blog_id}, 전체 ID: {blog_ids}")
 
     # 오늘 답글 한도 확인
     today_replies = count_today_replies(user_id=user_id)
@@ -1390,18 +1392,26 @@ async def handle_auto_reply(user_id: str | None = None, payload: dict | None = N
                     stats["collected"] = inserted
                     logger.info(f"새 댓글 {inserted}개 저장 (user={uid_label})")
             except Exception as e:
-                logger.error(f"댓글 수집 실패: {e}")
+                import traceback
+                logger.error(f"댓글 수집 실패: {e}\n{traceback.format_exc()}")
             finally:
                 await mobile_ctx.close()
 
             # ── 생성 + 게시 단계 ──
             pending = get_incoming_comments_sb(user_id, status="pending", limit=remaining)
+            logger.info(f"답글 대기 댓글: {len(pending)}개 (user={uid_label})")
             if not pending:
-                logger.info(f"답글 대기 댓글 없음 (user={uid_label})")
+                logger.info(f"답글 대기 댓글 없음 — 종료 (user={uid_label})")
                 await browser.close()
                 return stats
 
-            # 로그인된 모바일 컨텍스트 생성
+            # 로그인된 모바일 컨텍스트 생성 (쿠키 직접 주입)
+            cookies = config.get("cookies")
+            if not cookies:
+                logger.warning(f"쿠키 없음 — 답글 게시 불가 (user={uid_label})")
+                await browser.close()
+                return stats
+
             reply_ctx = await browser.new_context(
                 user_agent=MOBILE_UA,
                 viewport=MOBILE_VIEWPORT,
@@ -1409,16 +1419,30 @@ async def handle_auto_reply(user_id: str | None = None, payload: dict | None = N
             )
             reply_page = await reply_ctx.new_page()
 
-            # 쿠키 로드 + 로그인
+            # 쿠키 주입
             try:
-                logged_in = await _login(reply_ctx, reply_page)
-                if not logged_in:
-                    logger.warning(f"로그인 실패 — 답글 게시 불가 (user={uid_label})")
+                import json as _json
+                cookie_list = cookies if isinstance(cookies, list) else (
+                    _json.loads(cookies) if isinstance(cookies, str) else []
+                )
+                naver_cookies = []
+                for c in cookie_list:
+                    naver_cookies.append({
+                        "name": c.get("name", ""),
+                        "value": c.get("value", ""),
+                        "domain": c.get("domain", ".naver.com"),
+                        "path": c.get("path", "/"),
+                    })
+                if naver_cookies:
+                    await reply_ctx.add_cookies(naver_cookies)
+                    logger.info(f"쿠키 {len(naver_cookies)}개 주입 완료 (user={uid_label})")
+                else:
+                    logger.warning(f"유효한 쿠키 없음 (user={uid_label})")
                     await reply_ctx.close()
                     await browser.close()
                     return stats
             except Exception as e:
-                logger.error(f"로그인 실패: {e}")
+                logger.error(f"쿠키 주입 실패: {e}")
                 await reply_ctx.close()
                 await browser.close()
                 return stats
