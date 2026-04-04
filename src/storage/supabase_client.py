@@ -739,3 +739,90 @@ def record_cookie_expiry(user_id: str) -> None:
         logger.info(f"쿠키 만료 기록 완료 (user={user_id[:8]})")
     except Exception as e:
         logger.error(f"쿠키 만료 기록 실패: {e}")
+
+
+# ─── incoming_comments (대댓글/답글 기능) ───
+
+def save_incoming_comments_sb(comments: list[dict], user_id: str) -> int:
+    """새로 감지된 방문자 댓글을 incoming_comments에 저장. 중복은 자동 스킵."""
+    sb = get_supabase()
+    uid = _resolve_user_id(user_id)
+    inserted = 0
+    for c in comments:
+        try:
+            sb.table("incoming_comments").insert({
+                "user_id": uid,
+                "post_url": c["post_url"],
+                "post_title": c.get("post_title", ""),
+                "log_no": c["log_no"],
+                "comment_no": c["comment_no"],
+                "commenter_id": c["commenter_id"],
+                "commenter_name": c.get("commenter_name", ""),
+                "comment_text": c.get("comment_text", ""),
+                "comment_date": c.get("comment_date"),
+                "reply_status": "pending",
+            }).execute()
+            inserted += 1
+        except Exception as e:
+            # UNIQUE 제약 위반 = 이미 존재 → 무시
+            if "duplicate" in str(e).lower() or "unique" in str(e).lower():
+                continue
+            logger.warning(f"incoming_comments 저장 실패: {e}")
+    return inserted
+
+
+def get_incoming_comments_sb(
+    user_id: str,
+    status: str = "pending",
+    limit: int = 50,
+) -> list[dict]:
+    """상태별 incoming_comments 조회."""
+    sb = get_supabase()
+    uid = _resolve_user_id(user_id)
+    result = (
+        sb.table("incoming_comments")
+        .select("*")
+        .eq("user_id", uid)
+        .eq("reply_status", status)
+        .order("created_at", desc=False)
+        .limit(limit)
+        .execute()
+    )
+    return result.data or []
+
+
+def update_incoming_reply_sb(
+    comment_id: str,
+    status: str,
+    reply_text: str | None = None,
+) -> bool:
+    """답글 상태 + 텍스트 업데이트."""
+    sb = get_supabase()
+    data: dict = {"reply_status": status}
+    if reply_text is not None:
+        data["reply_text"] = reply_text
+    if status == "posted":
+        data["replied_at"] = datetime.now(timezone.utc).isoformat()
+    try:
+        sb.table("incoming_comments").update(data).eq("id", comment_id).execute()
+        return True
+    except Exception as e:
+        logger.error(f"incoming_comments 업데이트 실패: {e}")
+        return False
+
+
+def get_existing_comment_nos_sb(user_id: str) -> set[str]:
+    """이미 DB에 있는 comment_no 셋 반환 (수집 시 중복 필터링용)."""
+    sb = get_supabase()
+    uid = _resolve_user_id(user_id)
+    try:
+        result = (
+            sb.table("incoming_comments")
+            .select("comment_no")
+            .eq("user_id", uid)
+            .execute()
+        )
+        return {r["comment_no"] for r in (result.data or [])}
+    except Exception as e:
+        logger.warning(f"comment_no 조회 실패: {e}")
+        return set()

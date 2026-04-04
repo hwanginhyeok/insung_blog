@@ -34,7 +34,7 @@ from src.utils.logger import setup_logger
 # ── 일일 봇 실행 한도 체크 (Freemium Gate) ──
 
 # 한도가 적용되는 명령 목록 (Playwright 브라우저를 소비하는 명령)
-_RATE_LIMITED_COMMANDS = {"run", "execute", "visit_neighbors", "discover_and_visit", "feed_comment"}
+_RATE_LIMITED_COMMANDS = {"run", "execute", "visit_neighbors", "discover_and_visit", "feed_comment", "auto_reply"}
 
 
 def check_daily_bot_limit(user_id: str | None) -> dict:
@@ -1320,6 +1320,165 @@ async def handle_feed_comment(
     return result
 
 
+# ── 대댓글(답글) 핸들러 ──
+
+
+async def handle_auto_reply(user_id: str | None = None, payload: dict | None = None) -> dict:
+    """내 블로그에 달린 댓글에 자동 답글 (수집 → 생성 → 게시)."""
+    from src.collectors.incoming_comment_collector import collect_incoming_comments
+    from src.commenter.ai_reply import generate_reply
+    from src.commenter.reply_writer import write_reply
+    from src.storage.supabase_client import (
+        get_existing_comment_nos_sb,
+        save_incoming_comments_sb,
+        get_incoming_comments_sb,
+        update_incoming_reply_sb,
+        get_bot_settings_sb,
+    )
+    from src.storage.database import record_reply, count_today_replies
+    from config.settings import (
+        MAX_REPLIES_PER_RUN, MAX_REPLIES_PER_DAY,
+        MOBILE_UA, MOBILE_VIEWPORT,
+    )
+
+    uid_label = user_id[:8] if user_id else "admin"
+    logger.info(f"▶ 대댓글 답글 시작 (user={uid_label})")
+
+    config = get_user_bot_config(user_id)
+    if not config:
+        return {"error": "봇 설정 없음"}
+
+    blog_id = config["settings"].get("naver_blog_id", "")
+    blog_ids = set(config["settings"].get("naver_blog_ids", [blog_id]))
+    if not blog_id:
+        return {"error": "블로그 ID 없음"}
+
+    # 오늘 답글 한도 확인
+    today_replies = count_today_replies(user_id=user_id)
+    if today_replies >= MAX_REPLIES_PER_DAY:
+        logger.info(f"오늘 답글 한도 도달 ({today_replies}/{MAX_REPLIES_PER_DAY})")
+        return {"collected": 0, "generated": 0, "posted": 0, "skipped": "일일 한도 도달"}
+
+    remaining = min(MAX_REPLIES_PER_RUN, MAX_REPLIES_PER_DAY - today_replies)
+    existing_nos = get_existing_comment_nos_sb(user_id)
+
+    stats = {"collected": 0, "generated": 0, "posted": 0, "failed": 0}
+
+    async with _browser_semaphore:
+        from playwright.async_api import async_playwright
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+
+            # ── 수집 단계 (모바일) ──
+            mobile_ctx = await browser.new_context(
+                user_agent=MOBILE_UA,
+                viewport=MOBILE_VIEWPORT,
+                locale="ko-KR",
+            )
+            mobile_page = await mobile_ctx.new_page()
+
+            try:
+                new_comments = await collect_incoming_comments(
+                    page=mobile_page,
+                    my_blog_id=blog_id,
+                    my_blog_ids=blog_ids,
+                    existing_comment_nos=existing_nos,
+                )
+                if new_comments:
+                    inserted = save_incoming_comments_sb(new_comments, user_id)
+                    stats["collected"] = inserted
+                    logger.info(f"새 댓글 {inserted}개 저장 (user={uid_label})")
+            except Exception as e:
+                logger.error(f"댓글 수집 실패: {e}")
+            finally:
+                await mobile_ctx.close()
+
+            # ── 생성 + 게시 단계 ──
+            pending = get_incoming_comments_sb(user_id, status="pending", limit=remaining)
+            if not pending:
+                logger.info(f"답글 대기 댓글 없음 (user={uid_label})")
+                await browser.close()
+                return stats
+
+            # 로그인된 모바일 컨텍스트 생성
+            reply_ctx = await browser.new_context(
+                user_agent=MOBILE_UA,
+                viewport=MOBILE_VIEWPORT,
+                locale="ko-KR",
+            )
+            reply_page = await reply_ctx.new_page()
+
+            # 쿠키 로드 + 로그인
+            try:
+                logged_in = await _login(reply_ctx, reply_page)
+                if not logged_in:
+                    logger.warning(f"로그인 실패 — 답글 게시 불가 (user={uid_label})")
+                    await reply_ctx.close()
+                    await browser.close()
+                    return stats
+            except Exception as e:
+                logger.error(f"로그인 실패: {e}")
+                await reply_ctx.close()
+                await browser.close()
+                return stats
+
+            for comment in pending:
+                try:
+                    # AI 답글 생성
+                    reply_text = generate_reply(
+                        comment_text=comment["comment_text"],
+                        post_title=comment.get("post_title", ""),
+                        commenter_name=comment.get("commenter_name"),
+                    )
+                    update_incoming_reply_sb(comment["id"], "generated", reply_text)
+                    stats["generated"] += 1
+
+                    # 답글 게시
+                    success = await write_reply(
+                        page=reply_page,
+                        post_url=comment["post_url"],
+                        comment_no=comment["comment_no"],
+                        reply_text=reply_text,
+                    )
+
+                    if success:
+                        update_incoming_reply_sb(comment["id"], "posted", reply_text)
+                        record_reply(
+                            comment_no=comment["comment_no"],
+                            post_url=comment["post_url"],
+                            commenter_id=comment["commenter_id"],
+                            comment_text=comment["comment_text"],
+                            reply_text=reply_text,
+                            success=True,
+                            user_id=user_id,
+                        )
+                        stats["posted"] += 1
+                        logger.info(
+                            f"답글 게시 완료: {comment['commenter_id']} → {reply_text[:30]}..."
+                        )
+                    else:
+                        update_incoming_reply_sb(comment["id"], "pending")
+                        stats["failed"] += 1
+
+                    # 답글 간 딜레이 (봇 감지 방지)
+                    await asyncio.sleep(random.uniform(3, 8))
+
+                except Exception as e:
+                    logger.warning(f"답글 처리 실패 ({comment.get('comment_no', '')[:12]}): {e}")
+                    stats["failed"] += 1
+
+            await reply_ctx.close()
+            await browser.close()
+
+    logger.info(
+        f"✓ 대댓글 완료 (user={uid_label}): "
+        f"수집 {stats['collected']}, 생성 {stats['generated']}, "
+        f"게시 {stats['posted']}, 실패 {stats['failed']}"
+    )
+    return stats
+
+
 # ── 명령 핸들러 매핑 ──
 
 
@@ -1338,6 +1497,7 @@ _HANDLERS = {
     "sync_neighbors": handle_sync_neighbors,
     "analyze_theme": handle_analyze_theme,
     "feed_comment": handle_feed_comment,
+    "auto_reply": handle_auto_reply,
 }
 
 

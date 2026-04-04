@@ -131,6 +131,18 @@ def init_db(user_id: str | None = None) -> None:
                 updated_at          TEXT NOT NULL DEFAULT (datetime('now','localtime'))
             );
             CREATE INDEX IF NOT EXISTS idx_behavior_score ON blogger_behavior(pattern_score);
+
+            -- 대댓글 답글 이력
+            CREATE TABLE IF NOT EXISTS reply_history (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                comment_no      TEXT NOT NULL UNIQUE,
+                post_url        TEXT NOT NULL,
+                commenter_id    TEXT NOT NULL,
+                comment_text    TEXT NOT NULL DEFAULT '',
+                reply_text      TEXT NOT NULL DEFAULT '',
+                success         INTEGER NOT NULL DEFAULT 0,
+                created_at      TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            );
         """)
         # 마이그레이션: 기존 DB에 category 컬럼 추가
         try:
@@ -754,3 +766,54 @@ def get_blogger_behavior_stats(days: int = 30, user_id: str | None = None) -> li
         }
         for row in rows
     ]
+
+
+# ── reply_history (대댓글 답글 이력) ─────────────────────────────────────
+
+
+@_retry_on_db_lock(max_retries=3)
+def is_comment_replied(comment_no: str, user_id: str | None = None) -> bool:
+    """해당 댓글에 이미 답글을 달았는지 확인."""
+    with _conn(user_id) as conn:
+        row = conn.execute(
+            "SELECT 1 FROM reply_history WHERE comment_no = ? AND success = 1",
+            (comment_no,),
+        ).fetchone()
+    return row is not None
+
+
+@_retry_on_db_lock(max_retries=3)
+def record_reply(
+    comment_no: str,
+    post_url: str,
+    commenter_id: str,
+    comment_text: str,
+    reply_text: str,
+    success: bool,
+    user_id: str | None = None,
+) -> None:
+    """대댓글 답글 이력 저장."""
+    with _conn(user_id) as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO reply_history
+                (comment_no, post_url, commenter_id, comment_text, reply_text, success)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (comment_no, post_url, commenter_id, comment_text, reply_text,
+             1 if success else 0),
+        )
+
+
+@_retry_on_db_lock(max_retries=3)
+def count_today_replies(user_id: str | None = None) -> int:
+    """오늘 작성한 답글 수 반환."""
+    with _conn(user_id) as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) as cnt FROM reply_history
+            WHERE date(created_at) = date('now','localtime')
+              AND success = 1
+            """
+        ).fetchone()
+    return row["cnt"] if row else 0
