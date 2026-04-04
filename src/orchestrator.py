@@ -270,7 +270,7 @@ async def run(
                     eligible = [(url, title) for url, title in posts
                                 if not is_post_commented(url, user_id=user_id)]
                     if not eligible:
-                        logger.info(f"{bid}: 댓글 가능한 게시물 없음 — 스킵")
+                        logger.info(f"{bid}: 새 글 없음 (최근 {len(posts)}개 전부 댓글 완료) — 스킵")
                         return v, w, f
 
                     comment_room = max_comments - count_today_comments(user_id=user_id)

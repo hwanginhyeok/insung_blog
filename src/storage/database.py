@@ -196,7 +196,7 @@ def is_post_commented(post_url: str, user_id: str | None = None) -> bool:
             .execute()
         )
         if (result.count or 0) > 0:
-            logger.info(f"Supabase에서 중복 발견: {post_url[:60]}")
+            logger.info(f"[이미 댓글 단 글] {post_url[:60]}")
             return True
     except Exception as e:
         logger.warning(f"Supabase 중복 체크 실패 (SQLite 결과만 사용): {e}")
