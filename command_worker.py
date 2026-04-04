@@ -1419,12 +1419,10 @@ async def handle_auto_reply(user_id: str | None = None, payload: dict | None = N
             )
             reply_page = await reply_ctx.new_page()
 
-            # 쿠키 주입
+            # 쿠키 복호화 + 주입
             try:
-                import json as _json
-                cookie_list = cookies if isinstance(cookies, list) else (
-                    _json.loads(cookies) if isinstance(cookies, str) else []
-                )
+                from src.utils.cookie_crypto import decrypt_cookies
+                cookie_list = decrypt_cookies(cookies)
                 naver_cookies = []
                 for c in cookie_list:
                     naver_cookies.append({
@@ -1486,7 +1484,8 @@ async def handle_auto_reply(user_id: str | None = None, payload: dict | None = N
                         stats["failed"] += 1
 
                     # 답글 간 딜레이 (봇 감지 방지)
-                    await asyncio.sleep(random.uniform(3, 8))
+                    import random as _random
+                    await asyncio.sleep(_random.uniform(3, 8))
 
                 except Exception as e:
                     logger.warning(f"답글 처리 실패 ({comment.get('comment_no', '')[:12]}): {e}")
