@@ -12,7 +12,7 @@ function getSupabase() {
   );
 }
 
-const VALID_COMMANDS = ["run", "execute", "retry", "publish", "save_draft", "extract_blog_id", "neighbor_request", "discover_neighbors", "visit_neighbors", "discover_and_visit", "recommend_neighbors", "sync_neighbors", "analyze_theme", "feed_comment"] as const;
+const VALID_COMMANDS = ["run", "execute", "retry", "publish", "save_draft", "extract_blog_id", "neighbor_request", "discover_neighbors", "visit_neighbors", "discover_and_visit", "recommend_neighbors", "sync_neighbors", "analyze_theme", "feed_comment", "auto_reply"] as const;
 type BotCommand = (typeof VALID_COMMANDS)[number];
 
 /**

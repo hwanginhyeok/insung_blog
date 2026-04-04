@@ -81,7 +81,7 @@ export function isProgressResult(val: unknown): val is ProgressResult {
 
 export interface BotCommandRecord {
   id: string;
-  command: "run" | "execute" | "retry";
+  command: "run" | "execute" | "retry" | "auto_reply";
   status: "pending" | "running" | "completed" | "failed";
   result: ProgressResult | MessageResult | null;
   error_message: string | null;
@@ -108,6 +108,7 @@ export const COMMAND_LABELS: Record<string, string> = {
   run: "봇 실행",
   execute: "댓글 게시",
   retry: "재시도",
+  auto_reply: "대댓글 답글",
 };
 
 export const defaultSettings: BotSettings = {
@@ -231,7 +232,7 @@ export async function apiFetchCommands(): Promise<CommandsResponse> {
 }
 
 export async function apiSendCommand(
-  command: "run" | "execute" | "retry"
+  command: "run" | "execute" | "retry" | "auto_reply"
 ): Promise<{ success: boolean; error?: string }> {
   const res = await fetch("/api/bot/command", {
     method: "POST",

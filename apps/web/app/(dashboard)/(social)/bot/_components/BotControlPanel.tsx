@@ -168,7 +168,7 @@ interface BotControlPanelProps {
   avgDuration: number | null;
   showRunWarning: boolean;
   onRunClick: () => void;
-  onSendCommand: (command: "run" | "execute" | "retry") => void;
+  onSendCommand: (command: "run" | "execute" | "retry" | "auto_reply") => void;
   onConfirmRun: () => void;
   onCancelRunWarning: () => void;
   onSaveSettingsPatch?: (patch: Partial<BotSettings>) => Promise<void>;
@@ -461,6 +461,40 @@ export function BotControlPanel({
               )}
             </div>
           )}
+
+          {/* ── 대댓글 자동 답글 ──────────────── */}
+          <div className="border-t pt-4 mt-2">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-sm font-semibold">대댓글 자동 답글</span>
+              <span className="text-xs text-muted-foreground">
+                내 글에 달린 댓글에 AI 답글
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onSendCommand("auto_reply")}
+                disabled={sendingCommand || !!activeCommand || !settings.naver_blog_id}
+              >
+                {activeCommand?.command === "auto_reply" && activeCommand.status === "running"
+                  ? "답글 작성 중..."
+                  : "답글 실행"}
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                새 댓글 수집 → AI 답글 생성 → 대댓글 게시
+              </span>
+            </div>
+            {activeCommand?.command === "auto_reply" && activeCommand.status === "running" && (
+              <p className="mt-2 text-sm">
+                <span className="mr-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-blue-500" />
+                답글 작성 진행 중...{" "}
+                <span className="font-mono text-muted-foreground">
+                  ({formatElapsed(elapsed)})
+                </span>
+              </p>
+            )}
+          </div>
 
           {/* 최근 완료 명령 */}
           {botCommands.filter(

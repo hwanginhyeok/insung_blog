@@ -41,7 +41,7 @@ export interface BotStatusState {
   // 액션
   fetchData: () => Promise<void>;
   fetchApproved: () => Promise<void>;
-  sendCommand: (command: "run" | "execute" | "retry") => Promise<void>;
+  sendCommand: (command: "run" | "execute" | "retry" | "auto_reply") => Promise<void>;
   handleRunClick: () => void;
   setShowRunWarning: (v: boolean) => void;
   setPending: React.Dispatch<React.SetStateAction<PendingComment[]>>;
@@ -157,7 +157,7 @@ export function useBotStatus(): BotStatusState {
 
   // 명령 전송
   const sendCommand = useCallback(
-    async (command: "run" | "execute" | "retry") => {
+    async (command: "run" | "execute" | "retry" | "auto_reply") => {
       setSendingCommand(true);
       setCommandError(null);
       try {
