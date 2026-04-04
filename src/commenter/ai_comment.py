@@ -66,7 +66,7 @@ _INVALID_RESPONSE_PATTERNS = [
 _BASE_RULES = """\
 [필수 형식 규칙 — 반드시 지킬 것]
 - 반드시 3~5줄, 줄바꿈(\\n)으로 호흡 나누기
-- 총 글자수 120~180자 (한 줄짜리 짧은 댓글 작성 시 실패 처리됨)
+- 총 글자수 120~200자 (100자 미만 실패 처리됨)
 - 마지막 줄은 감사/응원으로 마무리
 
 말투와 스타일:
@@ -369,7 +369,7 @@ def generate_comment(
 
     # ── 1차: Ollama 우선 시도 (크레딧 불필요) ──
     ollama_comment = _try_ollama_comment(body, post_title, tone_hint, category_hint, persona_tone)
-    if ollama_comment and len(ollama_comment) >= 80 and _is_valid_comment(ollama_comment):
+    if ollama_comment and len(ollama_comment) >= 100 and _is_valid_comment(ollama_comment):
         if not any(_is_similar(ollama_comment, rc) for rc in recent_comments):
             comment = post_process(_clean_comment(ollama_comment))
             logger.info(f"Ollama 댓글 생성 완료 ({len(comment)}자): {comment[:40]}...")
@@ -403,7 +403,7 @@ def generate_comment(
                 )
                 comment = response.content[0].text.strip()
 
-                if len(comment) < 80:
+                if len(comment) < 100:
                     logger.warning(f"AI 응답 너무 짧음 ({len(comment)}자, 시도 {attempt + 1}/3)")
                     continue
 
@@ -548,15 +548,15 @@ def generate_comments_batch(
                     tone_hint=tone_hint, category_hint=cat_hint,
                     persona_tone=persona_tone,
                 )
-                if ollama_comment and len(ollama_comment) >= 80 and _is_valid_comment(ollama_comment):
+                if ollama_comment and len(ollama_comment) >= 100 and _is_valid_comment(ollama_comment):
                     comment = post_process(_clean_comment(ollama_comment))
                     results.append(comment)
                     recent_comments_local.append(comment)
                     continue
             all_ok = False
             results.append(pick_phrase(p["title"], category=cat))
-        if all_ok or any(len(r) >= 80 for r in results):
-            logger.info(f"Ollama 배치 생성: {sum(1 for r in results if len(r) >= 80)}개 성공")
+        if all_ok or any(len(r) >= 100 for r in results):
+            logger.info(f"Ollama 배치 생성: {sum(1 for r in results if len(r) >= 100)}개 성공")
             return results
 
     # ── 2차: Anthropic API 배치 ──
@@ -629,7 +629,7 @@ def generate_comments_batch(
                 if raw and _is_valid_comment(raw):
                     comment = _clean_comment(raw)
                     # 최소 글자수 체크 (단건과 동일 기준)
-                    if len(comment) < 80:
+                    if len(comment) < 100:
                         logger.warning(f"배치 댓글 너무 짧음 ({len(comment)}자) — 단건 재시도 예정")
                         continue
                     if not any(_is_similar(comment, rc) for rc in recent_comments_local):
@@ -648,7 +648,7 @@ def generate_comments_batch(
                         recent_comments_local, custom_prompt=custom_prompt,
                         persona_tone=persona_tone,
                     )
-                    if len(retry_comment) >= 80:
+                    if len(retry_comment) >= 100:
                         results[i] = retry_comment
                         recent_comments_local.append(retry_comment)
                         logger.info(f"배치 실패 → 단건 재시도 성공 ({len(retry_comment)}자)")
@@ -676,7 +676,7 @@ def generate_comments_batch(
                 tone_hint=tone_hint, category_hint=cat_hint,
                 persona_tone=persona_tone,
             )
-            if ollama_comment and len(ollama_comment) >= 80 and _is_valid_comment(ollama_comment):
+            if ollama_comment and len(ollama_comment) >= 100 and _is_valid_comment(ollama_comment):
                 comment = post_process(_clean_comment(ollama_comment))
                 logger.info(f"Ollama 배치 폴백 성공 ({len(comment)}자)")
                 results.append(comment)
