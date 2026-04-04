@@ -38,6 +38,7 @@ export default function BotPage() {
     setShowRunWarning,
     setPending,
     setPendingCount,
+    setApprovedComments,
     setSettings,
     setCookieStatus,
   } = useBotStatus();
@@ -95,6 +96,14 @@ export default function BotPage() {
       setPendingCount((prev) => Math.max(0, prev - 1));
     },
     [setPending, setPendingCount]
+  );
+
+  const handleRevoked = useCallback(
+    async (id: string) => {
+      setApprovedComments((prev) => prev.filter((c) => c.id !== id));
+      setPendingCount((prev) => prev + 1);
+    },
+    [setApprovedComments, setPendingCount]
   );
 
   const handleEdited = useCallback(
@@ -170,8 +179,10 @@ export default function BotPage() {
       <div id="comment-approval" />
       <CommentApprovalPanel
         pending={pending}
+        approvedComments={approvedComments}
         onApproved={handleApproved}
         onRejected={handleRejected}
+        onRevoked={handleRevoked}
         onEdited={handleEdited}
         onBulkApproved={fetchApproved}
       />

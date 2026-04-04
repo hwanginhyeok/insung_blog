@@ -246,7 +246,7 @@ export async function apiSendCommand(
 
 export async function apiApprovePendingComment(
   id: string,
-  action: "approve" | "reject"
+  action: "approve" | "reject" | "revoke"
 ): Promise<boolean> {
   const res = await fetch("/api/bot/pending", {
     method: "POST",

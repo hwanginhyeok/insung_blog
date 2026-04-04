@@ -95,14 +95,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!["approve", "reject"].includes(action)) {
+  if (!["approve", "reject", "revoke"].includes(action)) {
     return NextResponse.json(
-      { error: "action은 approve 또는 reject만 가능합니다" },
+      { error: "action은 approve, reject, revoke만 가능합니다" },
       { status: 400 }
     );
   }
 
-  const newStatus = action === "approve" ? "approved" : "rejected";
+  const newStatus = action === "approve" ? "approved" : action === "revoke" ? "pending" : "rejected";
 
   const admin = createAdminClient();
   const { data, error } = await admin
