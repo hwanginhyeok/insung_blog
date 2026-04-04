@@ -167,6 +167,7 @@ export default function BotPage() {
       />
 
       {/* Step 2: 댓글 승인 */}
+      <div id="comment-approval" />
       <CommentApprovalPanel
         pending={pending}
         onApproved={handleApproved}
