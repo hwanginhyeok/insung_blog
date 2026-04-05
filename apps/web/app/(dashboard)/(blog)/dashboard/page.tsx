@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 import type { Database } from "@/lib/database.types";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Card,
@@ -13,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Search } from "lucide-react";
 
 type QueueRow = Database["public"]["Tables"]["generation_queue"]["Row"];
 
@@ -29,6 +31,28 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<string | null>(null);
+  // 검색 필터
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  /** 검색어 변경 시 300ms 디바운스 */
+  function handleSearchChange(value: string) {
+    setSearchInput(value);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setSearchQuery(value), 300);
+  }
+
+  /** 검색어로 필터링된 글 목록 */
+  const filteredPosts = searchQuery
+    ? posts.filter((p) => {
+        const q = searchQuery.toLowerCase();
+        return (
+          (p.generated_title ?? "").toLowerCase().includes(q) ||
+          (p.input_category ?? "").toLowerCase().includes(q)
+        );
+      })
+    : posts;
 
   useEffect(() => {
     async function fetchPosts() {
@@ -91,6 +115,19 @@ export default function DashboardPage() {
         </Link>
       </div>
 
+      {/* 검색 */}
+      {!loading && posts.length > 0 && (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="제목으로 검색..."
+            value={searchInput}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+      )}
+
       {loading ? (
         <Card>
           <CardContent className="flex items-center justify-center py-12">
@@ -108,9 +145,17 @@ export default function DashboardPage() {
             </Link>
           </CardContent>
         </Card>
+      ) : filteredPosts.length === 0 ? (
+        <Card>
+          <CardContent className="flex items-center justify-center py-12">
+            <p className="text-muted-foreground">
+              &ldquo;{searchQuery}&rdquo; 검색 결과가 없습니다
+            </p>
+          </CardContent>
+        </Card>
       ) : (
         <div className="grid gap-4">
-          {posts.map((post) => {
+          {filteredPosts.map((post) => {
             const status = statusConfig[post.status] || { label: post.status, color: "bg-stone-100 text-stone-600" };
             const categoryLabel = post.input_category || "자동";
             const dateStr = new Date(post.created_at).toLocaleDateString(

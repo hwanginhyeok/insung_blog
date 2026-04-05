@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import {
   PendingComment,
   STATUS_LABELS,
@@ -25,6 +26,28 @@ export function CommentHistoryTable({
   onTabChange,
 }: CommentHistoryTableProps) {
   const [expanded, setExpanded] = useState(false);
+  // 댓글 검색 필터
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  function handleSearchChange(value: string) {
+    setSearchInput(value);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setSearchQuery(value), 300);
+  }
+
+  /** 블로그 ID 또는 댓글 텍스트로 필터링 */
+  const filteredHistory = searchQuery
+    ? history.filter((c) => {
+        const q = searchQuery.toLowerCase();
+        return (
+          c.blog_id.toLowerCase().includes(q) ||
+          c.comment_text.toLowerCase().includes(q) ||
+          (c.post_title ?? "").toLowerCase().includes(q)
+        );
+      })
+    : history;
 
   return (
     <Card>
@@ -58,13 +81,30 @@ export function CommentHistoryTable({
             ))}
           </div>
 
+          {/* 댓글 검색 */}
+          {!historyLoading && history.length > 0 && (
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="블로그 ID, 댓글 내용으로 검색..."
+                value={searchInput}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="pl-9 h-9 text-sm"
+              />
+            </div>
+          )}
+
           {historyLoading ? (
             <p className="text-sm text-muted-foreground">불러오는 중...</p>
           ) : history.length === 0 ? (
             <p className="text-sm text-muted-foreground">내역이 없습니다</p>
+          ) : filteredHistory.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              &ldquo;{searchQuery}&rdquo; 검색 결과가 없습니다
+            </p>
           ) : (
             <div className="space-y-2 max-h-[400px] overflow-y-auto">
-              {history.map((c) => (
+              {filteredHistory.map((c) => (
                 <div key={c.id} className="rounded-lg border px-3 py-2 space-y-1">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-medium min-w-0 truncate">

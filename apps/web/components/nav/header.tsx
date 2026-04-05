@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme-toggle";
 import type { User } from "@supabase/supabase-js";
 
 // 글쓰기 탭으로 묶인 경로들
@@ -233,10 +234,15 @@ export function Header() {
           </nav>
         </div>
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           {user && (
-            <span className="hidden sm:inline text-sm text-foreground/50">
+            <Link
+              href="/profile"
+              className="hidden sm:inline text-sm text-foreground/50 hover:text-primary transition-colors"
+              title="내 프로필"
+            >
               {user.email?.split("@")[0]}
-            </span>
+            </Link>
           )}
           <Button
             variant="outline"

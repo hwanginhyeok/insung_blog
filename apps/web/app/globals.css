@@ -55,11 +55,28 @@
 .anim-delay-4 { animation-delay: 400ms; }
 .anim-delay-5 { animation-delay: 500ms; }
 
+/* 토스트 슬라이드-인 애니메이션 */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-toast-in {
+  animation: toast-in 0.3s ease-out both;
+}
+
 /* 접근성: 모션 감소 선호 시 애니메이션 비활성화 */
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-up,
   .animate-fade-in,
-  .animate-slide-in-right {
+  .animate-slide-in-right,
+  .animate-toast-in {
     animation: none;
     opacity: 1;
     transform: none;
