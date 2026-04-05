@@ -63,6 +63,11 @@ Supabase (공유 제어 평면)
 | COLLECT-PARALLEL | 블로그 수집 병렬화 설계 | P1 | 계획 | 방문+수집 단계 asyncio.gather 병렬화. 수집 5분→2분 예상 (2026-04-05) |
 | SCALING-REPORT | 스케일링 공학 분석 레포트 | P0 | ✅ 완료 | 10/100/1000명 시나리오별 인프라+비용+병목 분석 (2026-04-05) |
 | PRODUCT-REPORT | 프로덕트 레포트 + 성능 문서 | P1 | ✅ 완료 | PRODUCT_REPORT.md + PERFORMANCE.md + docs 정리 (2026-04-05) |
+| DESIGN-REVIEW-2 | 홈페이지 전체 디자인 리뷰 + 모바일 UX | P1 | ✅ 완료 | 15건 수정 + Pretendard 폰트 + 입장 애니메이션 + 제품 프리뷰 + 모바일 터치타겟. Design Score B-→B+ (2026-04-05) |
+| STABILITY-FIX | 서버 안정성 버그 5건 수정 | P0 | ✅ 완료 | Elastic Semaphore 작동, Task 루프 바운딩, API 워커 오프로드, 세마포어 구조 개선 (2026-04-05) |
+| DELAY-OPTIMIZE | 블로거 대기 시간 최적화 | P1 | ✅ 완료 | 30-60초→20-40초 + uniform→gauss 분포. 유저당 2.5분 절감 (2026-04-05) |
+| COST-ANALYSIS | 운영비용 분석 + IP 로테이션 기술 조사 | P1 | ✅ 완료 | 프록시 vs 동글 비용 비교, LTE CGNAT 기술 검증, 50명 마진 6%→35% (2026-04-05) |
+| IP-ROTATION | LTE 동글 IP 로테이션 구현 | P1 | 계획 | 화웨이 E8372 + HiLink API + WSL2 mirrored. 유저 20명+ 시 착수 (2026-04-05) |
 | SIGNUP-ALERT | 신규 가입 텔레그램 알림 + 임계점 경고 | P0 | ✅ 완료 | webhook + 워커 백업 체크. 10/50/100/500/1000명 마일스톤 (2026-04-05) |
 | FEEDBACK-PANEL | 문의/버그 리포트 플로팅 패널 | P1 | ✅ 완료 | FeedbackPanel + support_tickets + 관리자 알림. migration 적용 필요 (2026-04-05) |
 | NEIGHBOR-IMPROVE | 이웃봇 10건 이슈 일괄 개선 | P1 | ✅ 완료 | DB 한도/추천 감쇠/셀렉터 폴백/쿠키 감지/RLS/UI/테스트 (2026-04-05) |
@@ -167,29 +172,31 @@ git push
 
 | # | 작업 | 중요도 | 상태 | 비고 |
 |---|------|--------|------|------|
-| INFRA-SERVER | 로컬 PC 의존 탈피 — 클라우드 서버 이전 | P0 | 대기 | 아래 세부 참조 |
-| RAM-UPGRADE | DRAM 장착 (8GB→32GB) + MAX_CONCURRENT_BROWSERS=6 변경 | P1 | 대기 | 안 꽂힌 DRAM 재장착 → .env 값 변경만 하면 됨 |
-| SUPABASE-PRO | Supabase Pro 플랜 전환 검토 — Storage 유저 6명에서 한도 도달 | P1 | 대기 | 무료 1GB → Pro 8GB, 비용/이점 비교 |
+| INFRA-SERVER | 로컬 PC 의존 탈피 — 클라우드 서버 이전 | P0 | 대기 | 50명+ 시 VPS 이전 필요 (₩80,000/월) |
+| RAM-UPGRADE | DRAM → MAX_CONCURRENT_BROWSERS 조정 | P1 | ✅ 완료 | 16GB 확인, MAX=5로 설정 완료 (2026-04-05) |
+| SUPABASE-PRO | Supabase Pro 플랜 전환 검토 | P1 | 대기 | 50명+ 시 필요 (₩35,000/월). Storage 1GB/API 500K 한도 |
+| IP-ROTATION | LTE 동글 IP 로테이션 | P1 | 계획 | 20명+ 시 착수. 화웨이 E8372 + HiLink API. 초기 ₩80,000 + 월 ₩15,000-30,000 |
 
-## WORKER-ELASTIC: 워커 슬롯 탄력 분배
+## WORKER-ELASTIC: 워커 슬롯 탄력 분배 — ✅ 완료 (2026-04-05)
 
 > 유저 1명이면 슬롯 전부 사용, 유저 늘면 공정 분배. 유저별 데이터 격리 보장.
 
-### 배경
-현재 `run` 명령 1개 = 브라우저 1개 = 슬롯 1개만 사용.
-유저A 혼자일 때도 블로거 50명을 순차 방문 (3시간).
-슬롯 3개를 A가 전부 쓰면 1시간으로 단축 가능.
+### 구현 상태
+- `acquire_user_slot()`/`release_user_slot()` → `process_command()`에서 호출 (2026-04-05 수정)
+- 세마포어 구조 개선: 브라우저 구간에만 세마포어 점유, delay 중 슬롯 반환
+- MAX_CONCURRENT_BROWSERS=5 (.env)
+- 대기 시간: 20-40초 정규 분포 (gauss, 평균 30초)
 
 ### 알고리즘: Elastic Semaphore (탄력적 세마포어)
 
 ```
-총_슬롯 = MAX_CONCURRENT_BROWSERS (기본 3, RAM 32GB 후 6)
+총_슬롯 = MAX_CONCURRENT_BROWSERS (현재 5)
 활성_유저수 = len(현재_실행중_유저_set)
 유저당_최대 = 총_슬롯 // max(활성_유저수, 1)
 
-유저A 혼자 → 유저당_최대=3 → 블로거 3명 동시 방문
-유저B 등장 → 유저당_최대=1 → A는 다음 태스크부터 1개로 축소, B도 1개
-유저B 끝남 → 유저당_최대=3 → A 다시 3개 사용
+유저A 혼자 → 유저당_최대=5 → 블로거 5명 동시 방문
+유저B 등장 → 유저당_최대=2 → A는 다음 태스크부터 2개로 축소, B도 2개
+유저C 등장 → 유저당_최대=1 → 모두 1개씩
 ```
 
 비교 검토한 알고리즘:
