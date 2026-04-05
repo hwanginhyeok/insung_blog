@@ -22,11 +22,9 @@ export default function LandingPage() {
               체험단 리뷰, 맛집 후기, 일상 기록까지.
             </p>
             <div className="mt-8 flex items-center gap-4 animate-fade-up anim-delay-3">
-              <Link href="/login?mode=signup">
-                <Button size="lg" className="text-base px-8">
-                  무료로 시작하기
-                </Button>
-              </Link>
+              <Button size="lg" className="text-base px-8" asChild>
+                <Link href="/login?mode=signup">무료로 시작하기</Link>
+              </Button>
               <span className="text-sm text-muted-foreground">월 10회 무료</span>
             </div>
             {/* 모바일 — 인라인 스탯 배지 */}
@@ -153,11 +151,9 @@ export default function LandingPage() {
             글쓰기에 쏟는 시간을 줄이고, 실제 경험에 집중하세요.
           </p>
           <div className="mt-6">
-            <Link href="/login?mode=signup">
-              <Button size="lg" className="text-base px-8">
-                무료로 시작하기
-              </Button>
-            </Link>
+            <Button size="lg" className="text-base px-8" asChild>
+              <Link href="/login?mode=signup">무료로 시작하기</Link>
+            </Button>
           </div>
         </div>
       </section>
