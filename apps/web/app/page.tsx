@@ -12,16 +12,16 @@ export default function LandingPage() {
             <p className="text-sm font-medium text-primary tracking-wide uppercase animate-fade-up">
               AI 블로그 파트너
             </p>
-            <h1 className="mt-3 text-3xl sm:text-4xl md:text-5xl font-bold text-foreground leading-[1.15] sm:leading-[1.15] md:leading-[1.15] animate-fade-up delay-100">
+            <h1 className="mt-3 text-3xl sm:text-4xl md:text-5xl font-bold text-foreground leading-[1.15] sm:leading-[1.15] md:leading-[1.15] animate-fade-up anim-delay-1">
               경험에 집중하세요.
               <br />
               글은 AI가 쓸게요.
             </h1>
-            <p className="mt-5 text-lg text-muted-foreground max-w-lg leading-relaxed animate-fade-up delay-200">
+            <p className="mt-5 text-lg text-muted-foreground max-w-lg leading-relaxed animate-fade-up anim-delay-2">
               사진과 메모만 올리면 당신만의 스타일로 블로그 글을 완성합니다.
               체험단 리뷰, 맛집 후기, 일상 기록까지.
             </p>
-            <div className="mt-8 flex items-center gap-4 animate-fade-up delay-300">
+            <div className="mt-8 flex items-center gap-4 animate-fade-up anim-delay-3">
               <Link href="/login?mode=signup">
                 <Button size="lg" className="text-base px-8">
                   무료로 시작하기
@@ -38,7 +38,7 @@ export default function LandingPage() {
           </div>
 
           {/* 데스크톱 — 제품 프리뷰 + 스탯 (2/5) */}
-          <div className="hidden md:block md:col-span-2 animate-slide-in-right delay-300">
+          <div className="hidden md:block md:col-span-2 animate-slide-in-right anim-delay-3">
             {/* 미니 제품 UI 프리뷰 */}
             <div className="rounded-2xl border border-border bg-card shadow-lg overflow-hidden">
               {/* 브라우저 바 */}
@@ -149,7 +149,7 @@ export default function LandingPage() {
           <h2 className="text-2xl font-bold text-foreground animate-fade-up">
             매일 1-2시간, 더 가치있게 쓰세요
           </h2>
-          <p className="mt-3 text-muted-foreground animate-fade-up delay-100">
+          <p className="mt-3 text-muted-foreground animate-fade-up anim-delay-1">
             글쓰기에 쏟는 시간을 줄이고, 실제 경험에 집중하세요.
           </p>
           <div className="mt-6">

@@ -48,12 +48,12 @@
   animation: slide-in-right 0.6s ease-out both;
 }
 
-/* 지연 시간 유틸리티 */
-.delay-100 { animation-delay: 100ms; }
-.delay-200 { animation-delay: 200ms; }
-.delay-300 { animation-delay: 300ms; }
-.delay-400 { animation-delay: 400ms; }
-.delay-500 { animation-delay: 500ms; }
+/* 애니메이션 지연 (Tailwind delay-*와 충돌 방지) */
+.anim-delay-1 { animation-delay: 100ms; }
+.anim-delay-2 { animation-delay: 200ms; }
+.anim-delay-3 { animation-delay: 300ms; }
+.anim-delay-4 { animation-delay: 400ms; }
+.anim-delay-5 { animation-delay: 500ms; }
 
 /* 접근성: 모션 감소 선호 시 애니메이션 비활성화 */
 @media (prefers-reduced-motion: reduce) {
