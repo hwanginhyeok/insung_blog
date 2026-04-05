@@ -26,9 +26,8 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  // ?mode=signup 이면 기본을 회원가입으로 (랜딩 CTA → 회원가입 흐름)
-  const initialMode = useSearchParams().get("mode") === "signup" ? "signup" : "login";
-  const [mode, setMode] = useState<"login" | "signup" | "reset">(initialMode);
+  // 항상 로그인이 기본 (회원가입은 하단 링크로 전환)
+  const [mode, setMode] = useState<"login" | "signup" | "reset">("login");
 
   const router = useRouter();
   const searchParams = useSearchParams();

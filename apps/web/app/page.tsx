@@ -23,7 +23,7 @@ export default function LandingPage() {
             </p>
             <div className="mt-8 flex items-center gap-4 animate-fade-up anim-delay-3">
               <Button size="lg" className="text-base px-8" asChild>
-                <Link href="/login?mode=signup">무료로 시작하기</Link>
+                <Link href="/login">무료로 시작하기</Link>
               </Button>
               <span className="text-sm text-muted-foreground">월 10회 무료</span>
             </div>
@@ -152,7 +152,7 @@ export default function LandingPage() {
           </p>
           <div className="mt-6">
             <Button size="lg" className="text-base px-8" asChild>
-              <Link href="/login?mode=signup">무료로 시작하기</Link>
+              <Link href="/login">무료로 시작하기</Link>
             </Button>
           </div>
         </div>
