@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect } from "react";
 import { KeyRound } from "lucide-react";
+import { HelpTooltip } from "@/components/HelpTooltip";
 import { useBotStatus } from "./_hooks/useBotStatus";
 import { useCommentHistory } from "./_hooks/useCommentHistory";
 import { useBotSettings } from "./_hooks/useBotSettings";
@@ -12,6 +13,7 @@ import { CommentHistoryTable } from "./_components/CommentHistoryTable";
 import { BotSettingsPanel } from "./_components/BotSettingsPanel";
 import { CookieStatusBadge } from "./_components/CookieStatusBadge";
 import { RunHistoryPanel } from "./_components/RunHistoryPanel";
+import { MonthlyReport } from "./_components/MonthlyReport";
 import { CommentCalendar } from "./_components/CommentCalendar";
 import { CommentAnalyticsChart } from "./_components/CommentAnalyticsChart";
 import { BotSettings, apiSaveSettings, apiFetchStatus } from "./_lib/bot-api";
@@ -141,7 +143,10 @@ export default function BotPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">댓글봇</h1>
+        <div className="flex items-center gap-1.5">
+          <h1 className="text-2xl font-bold">댓글봇</h1>
+          <HelpTooltip text="이웃 블로그에 AI 댓글을 자동 생성합니다. 승인 모드에서는 직접 확인 후 게시됩니다." />
+        </div>
         <p className="text-sm text-muted-foreground mt-1">
           내 블로그에 댓글 남긴 사람들의 블로그에 방문해서 AI 댓글을 남깁니다.
         </p>
@@ -243,6 +248,9 @@ export default function BotPage() {
 
       {/* 최근 실행 이력 (접기/펼치기) */}
       <RunHistoryPanel runs={runs} avgDuration={avgDuration} />
+
+      {/* 월간 성과 리포트 (접기/펼치기) */}
+      <MonthlyReport runs={runs} todayStats={todayStats} />
 
       {/* 토스트 알림 */}
       {toast && (

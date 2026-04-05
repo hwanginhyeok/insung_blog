@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { HelpTooltip } from "@/components/HelpTooltip";
 import {
   sendFeedComment,
   sendDiscoverAndVisit,
@@ -139,7 +140,10 @@ export default function NeighborPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">이웃관리</h1>
+        <div className="flex items-center gap-1.5">
+          <h1 className="text-2xl font-bold">이웃관리</h1>
+          <HelpTooltip text="테마 기반으로 새 이웃을 발견하고, 자동으로 서로이웃 신청합니다." />
+        </div>
         <p className="text-sm text-muted-foreground mt-1">
           이웃의 새 글에 댓글을 달거나, 새로운 이웃을 찾아 관계를 넓힙니다.
         </p>

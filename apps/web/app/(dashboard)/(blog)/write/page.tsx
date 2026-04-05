@@ -16,6 +16,7 @@ import { renderPostHtml } from "@/lib/render/naver-html";
 import type { FormattingItem } from "@/lib/render/naver-html";
 import { compressImage } from "@/lib/image-compress";
 import { WritingFeedback } from "@/components/writing-feedback";
+import { HelpTooltip } from "@/components/HelpTooltip";
 
 const categories = ["맛집", "카페", "여행", "일상", "기타"];
 
@@ -62,6 +63,8 @@ function WritePageContent() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [versions, setVersions] = useState<DraftVersion[]>([]);
   const [currentVersion, setCurrentVersion] = useState<number>(0); // 0 = 최신 (draft)
+  const [showDiff, setShowDiff] = useState(false);
+  const [diffTarget, setDiffTarget] = useState<number | null>(null); // 비교 대상 버전 번호
   const [cachedFormatting, setCachedFormatting] = useState<FormattingItem[]>([]);
   const [cachedPhotoUrls, setCachedPhotoUrls] = useState<string[]>([]);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -772,9 +775,12 @@ function WritePageContent() {
       )}
 
       <div>
-        <h1 className="text-2xl font-bold">
-          {editId ? "저장된 글 보기" : "새 글 쓰기"}
-        </h1>
+        <div className="flex items-center gap-1.5">
+          <h1 className="text-2xl font-bold">
+            {editId ? "저장된 글 보기" : "새 글 쓰기"}
+          </h1>
+          <HelpTooltip text="사진과 메모를 올리면 AI가 당신의 말투로 블로그 글을 작성합니다." />
+        </div>
         <p className="text-sm text-muted-foreground">
           {editId
             ? "이전에 저장한 글을 확인하고 수정할 수 있습니다"
@@ -1031,6 +1037,7 @@ function WritePageContent() {
                 <CardContent className="space-y-4">
                   {/* 버전 히스토리 */}
                   {versions.length > 1 && (
+                    <>
                     <div className="flex items-center gap-2 rounded-md bg-secondary/50 px-3 py-2">
                       <span className="text-xs font-medium text-muted-foreground">버전</span>
                       <div className="flex gap-1">
@@ -1038,6 +1045,8 @@ function WritePageContent() {
                           <button
                             key={v.version}
                             onClick={() => {
+                              setShowDiff(false);
+                              setDiffTarget(null);
                               if (v.version === versions.length) {
                                 // 최신 버전 = 현재 draft
                                 setCurrentVersion(0);
@@ -1062,12 +1071,119 @@ function WritePageContent() {
                           </button>
                         ))}
                       </div>
-                      {currentVersion > 0 && currentVersion < versions.length && (
+                      {/* 비교 버튼 (2개 이상 버전이 있을 때) */}
+                      <button
+                        onClick={() => {
+                          if (showDiff) {
+                            setShowDiff(false);
+                            setDiffTarget(null);
+                          } else {
+                            // 현재 보고 있는 버전의 직전 버전과 비교
+                            const viewing = currentVersion === 0 ? versions.length : currentVersion;
+                            const prevVer = viewing > 1 ? viewing - 1 : null;
+                            if (prevVer) {
+                              setDiffTarget(prevVer);
+                              setShowDiff(true);
+                            }
+                          }
+                        }}
+                        className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
+                          showDiff
+                            ? "bg-orange-500 text-white"
+                            : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                        }`}
+                      >
+                        {showDiff ? "비교 닫기" : "비교"}
+                      </button>
+                      {currentVersion > 0 && currentVersion < versions.length && !showDiff && (
                         <span className="ml-auto text-xs text-muted-foreground">
                           이전 버전 보기 중
                         </span>
                       )}
                     </div>
+                    {/* 버전 Diff 표시 */}
+                    {showDiff && diffTarget && (() => {
+                      const viewingVer = currentVersion === 0 ? versions.length : currentVersion;
+                      const oldV = versions.find((v) => v.version === diffTarget);
+                      const newV = versions.find((v) => v.version === viewingVer);
+                      if (!oldV || !newV) return null;
+
+                      // 줄 단위 diff 계산
+                      const oldLines = oldV.body.split("\n");
+                      const newLines = newV.body.split("\n");
+                      const maxLen = Math.max(oldLines.length, newLines.length);
+                      const diffLines: { type: "same" | "add" | "del" | "change"; old?: string; new?: string }[] = [];
+                      for (let i = 0; i < maxLen; i++) {
+                        const ol = i < oldLines.length ? oldLines[i] : undefined;
+                        const nl = i < newLines.length ? newLines[i] : undefined;
+                        if (ol === nl) {
+                          diffLines.push({ type: "same", old: ol, new: nl });
+                        } else if (ol !== undefined && nl !== undefined) {
+                          diffLines.push({ type: "change", old: ol, new: nl });
+                        } else if (ol === undefined) {
+                          diffLines.push({ type: "add", new: nl });
+                        } else {
+                          diffLines.push({ type: "del", old: ol });
+                        }
+                      }
+
+                      return (
+                        <div className="rounded-lg border p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-medium text-muted-foreground">
+                              v{diffTarget} → v{viewingVer} 변경 사항
+                            </p>
+                            {oldV.feedback && (
+                              <span className="text-xs text-muted-foreground">
+                                수정 요청: {newV.feedback}
+                              </span>
+                            )}
+                          </div>
+                          {/* 제목 비교 */}
+                          {oldV.title !== newV.title && (
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium">제목</p>
+                              <div className="rounded bg-red-50 px-2 py-1 text-xs text-red-800 line-through">{oldV.title}</div>
+                              <div className="rounded bg-green-50 px-2 py-1 text-xs text-green-800">{newV.title}</div>
+                            </div>
+                          )}
+                          {/* 본문 줄 단위 비교 */}
+                          <div className="max-h-64 overflow-y-auto rounded border bg-muted/20 p-2 text-xs font-mono leading-relaxed">
+                            {diffLines.map((line, i) => {
+                              if (line.type === "same") {
+                                return (
+                                  <div key={i} className="text-muted-foreground whitespace-pre-wrap">
+                                    {line.old || "\u00A0"}
+                                  </div>
+                                );
+                              }
+                              if (line.type === "del") {
+                                return (
+                                  <div key={i} className="bg-red-50 text-red-800 whitespace-pre-wrap">
+                                    - {line.old}
+                                  </div>
+                                );
+                              }
+                              if (line.type === "add") {
+                                return (
+                                  <div key={i} className="bg-green-50 text-green-800 whitespace-pre-wrap">
+                                    + {line.new}
+                                  </div>
+                                );
+                              }
+                              // change: 둘 다 있지만 다름
+                              return (
+                                <div key={i}>
+                                  <div className="bg-red-50 text-red-800 whitespace-pre-wrap">- {line.old}</div>
+                                  <div className="bg-green-50 text-green-800 whitespace-pre-wrap">+ {line.new}</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    </>
                   )}
 
                   {/* 제목 */}

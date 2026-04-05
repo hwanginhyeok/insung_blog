@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronDown, AlertTriangle } from "lucide-react";
+import { ChevronDown, AlertTriangle, Download, Cookie, Upload, CheckCircle } from "lucide-react";
 import {
   CookieStatus,
   timeAgo,
@@ -167,10 +167,54 @@ export function CookieStatusBadge({
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
             <span><strong>PC에서만 가능</strong> — 모바일에서는 쿠키 업로드 불가</span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            <strong>PC Chrome</strong>에서: EditThisCookie 확장 설치 &rarr; naver.com 로그인 &rarr; 확장
-            아이콘 클릭 &rarr; Export &rarr; 여기에 붙여넣기
-          </p>
+          {/* 단계별 쿠키 등록 가이드 */}
+          <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+            <p className="text-xs font-semibold text-muted-foreground">쿠키 등록 방법 (PC Chrome)</p>
+            <div className="grid gap-2">
+              <div className="flex items-start gap-2">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                  <Download className="h-3 w-3 text-primary" />
+                </div>
+                <div className="text-xs">
+                  <span className="font-medium">1. 확장 설치</span>
+                  <span className="text-muted-foreground"> — Chrome 웹스토어에서 EditThisCookie 설치</span>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                  <Cookie className="h-3 w-3 text-primary" />
+                </div>
+                <div className="text-xs">
+                  <span className="font-medium">2. 네이버 로그인</span>
+                  <span className="text-muted-foreground"> — naver.com에서 본인 계정으로 로그인</span>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                  <Upload className="h-3 w-3 text-primary" />
+                </div>
+                <div className="text-xs">
+                  <span className="font-medium">3. 쿠키 내보내기</span>
+                  <span className="text-muted-foreground"> — 확장 아이콘 클릭 → Export 버튼 → JSON 복사</span>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                  <CheckCircle className="h-3 w-3 text-primary" />
+                </div>
+                <div className="text-xs">
+                  <span className="font-medium">4. 붙여넣기</span>
+                  <span className="text-muted-foreground"> — 위 입력란에 JSON을 붙여넣고 업로드</span>
+                </div>
+              </div>
+            </div>
+            <a
+              href="/guide"
+              className="inline-block text-xs font-medium text-primary hover:underline"
+            >
+              자세한 가이드 보기 →
+            </a>
+          </div>
         </CardContent>
       )}
     </Card>

@@ -11,28 +11,44 @@ import {
 } from "@/components/ui/card";
 import { TIER_LIMITS, type Tier } from "@/lib/tier";
 import { CheckoutButton } from "@/components/checkout-button";
-import { Check } from "lucide-react";
+import { Check, X } from "lucide-react";
 
 const FEATURES: Record<Tier, string[]> = {
   free: [
-    "AI 글 생성 월 10회",
-    "댓글 봇 일 30회",
+    "AI 글 생성 월 5회",
+    "댓글 봇 일 10개",
     "이웃 관리",
   ],
   basic: [
-    "AI 글 생성 월 50회",
-    "댓글 봇 일 30회",
+    "AI 글 생성 월 30회",
+    "댓글 봇 일 30개",
     "이웃 관리",
     "이메일 지원",
   ],
   pro: [
-    "AI 글 생성 월 200회",
-    "댓글 봇 일 30회",
+    "AI 글 생성 무제한",
+    "댓글 봇 일 100개",
     "이웃 관리",
     "우선 지원",
     "고급 분석",
   ],
 };
+
+/** 플랜별 기능 비교표 데이터 */
+const COMPARISON_ROWS: {
+  label: string;
+  free: string;
+  basic: string;
+  pro: string;
+}[] = [
+  { label: "AI 글쓰기", free: "5회/월", basic: "30회/월", pro: "무제한" },
+  { label: "댓글/일", free: "10개", basic: "30개", pro: "100개" },
+  { label: "블로거/일", free: "3명", basic: "10명", pro: "30명" },
+  { label: "대댓글/일", free: "5개", basic: "20개", pro: "50개" },
+  { label: "이웃봇", free: "no", basic: "yes", pro: "yes" },
+  { label: "페르소나 분석", free: "yes", basic: "yes", pro: "yes" },
+  { label: "우선 지원", free: "no", basic: "no", pro: "yes" },
+];
 
 /**
  * /pricing — 가격 페이지 (Server Component)
@@ -137,6 +153,44 @@ export default async function PricingPage() {
             </Card>
           );
         })}
+      </div>
+
+      {/* 플랜 비교표 */}
+      <div className="overflow-x-auto">
+        <h2 className="mb-4 text-center text-lg font-semibold">플랜 비교</h2>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b">
+              <th className="py-3 pr-4 text-left font-medium text-muted-foreground">기능</th>
+              {(["free", "basic", "pro"] as Tier[]).map((tier) => (
+                <th key={tier} className="px-4 py-3 text-center font-medium">
+                  {TIER_LIMITS[tier].label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {COMPARISON_ROWS.map((row) => (
+              <tr key={row.label} className="border-b last:border-0">
+                <td className="py-3 pr-4 font-medium">{row.label}</td>
+                {(["free", "basic", "pro"] as Tier[]).map((tier) => {
+                  const val = row[tier];
+                  return (
+                    <td key={tier} className="px-4 py-3 text-center">
+                      {val === "yes" ? (
+                        <Check className="mx-auto h-4 w-4 text-primary" />
+                      ) : val === "no" ? (
+                        <X className="mx-auto h-4 w-4 text-muted-foreground/40" />
+                      ) : (
+                        <span>{val}</span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       <p className="text-center text-xs text-muted-foreground">
