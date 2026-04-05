@@ -51,10 +51,18 @@ Supabase (공유 제어 평면)
 | FAIL-FAST | 댓글 입력창 탐색 타임아웃 최적화 (~70초 -> ~20초) | P1 | ✅ 완료 | 주력 셀렉터 10초 + 폴백 2초 (2026-03-30) |
 | MIGRATION-UNIQUE | pending_comments UNIQUE partial index 적용 | P0 | ✅ 완료 | supabase db push로 적용 + 중복 삽입 차단 검증 완료 (2026-04-03) |
 | MIGRATION-AUTO-MODE | bot_settings에 daily_discover/auto_execute 컬럼 추가 | P0 | ✅ 완료 | supabase db push로 적용 + 컬럼 존재 검증 완료 (2026-04-03) |
-| PERSONA-SPLIT | 페르소나 용도별 분리 — 글쓰기용 vs 댓글용 | P0 | 진행중 | 댓글에 "유유베어가~" 닉네임 누출 버그. 페르소나를 글쓰기/댓글 별도 관리 필요 (2026-04-04) |
+| PERSONA-SPLIT | 페르소나 용도별 3분할 (글쓰기/댓글/대댓글) | P0 | ✅ 완료 | persona_builder 용도별 빌드 + 닉네임 필터. 댓글 테스트 통과 (2026-04-05) |
 | COMMENT-REVOKE | 승인 취소 기능 (approved → pending 되돌리기) | P1 | 진행중 | API revoke 추가 완료, 웹 UI "승인 취소" 버튼 추가. 테스트 필요 (2026-04-04) |
-| AUTO-REPLY | 대댓글 자동 답글 (내 블로그 댓글에 AI 답글) | P1 | 진행중 | 백엔드 완료 (수집+생성+게시), E2E 1건 성공. 웹 UI 버튼 추가됨. 쿠키 복호화 수정 완료 (2026-04-04) |
+| AUTO-REPLY | 대댓글 자동 답글 (내 블로그 댓글에 AI 답글) | P1 | 진행중 | 백엔드 완료 (수집+생성+게시), E2E 1건 성공. reply용 페르소나 연동 완료 (2026-04-05) |
 | BUG-REPORT | 버그/오류 리포팅 프로세스 구축 | P1 | 대기 | 이슈 발생 시 자동 수집+추적 체계 필요 (2026-04-04) |
+| OLLAMA-PARALLEL | Ollama 병렬 댓글 생성 | P1 | ✅ 완료 | ThreadPoolExecutor 3병렬 + OLLAMA_NUM_PARALLEL=3. 순차 25개/분→병렬 33개/분 (2026-04-05) |
+| COOKIE-ONBOARD | 쿠키 미등록 온보딩 배너 | P1 | ✅ 완료 | 봇 페이지 상단 노란 배너 + 스크롤 링크 (2026-04-05) |
+| DESIGN-REVIEW | 봇 페이지 디자인 감사 + 수정 | P2 | ✅ 완료 | 이모지→lucide 아이콘, 스탯 강조, 모바일 레이아웃 등 8건 수정 (2026-04-05) |
+| DESIGN-SYSTEM | DESIGN.md 생성 (디자인 시스템 문서화) | P2 | ✅ 완료 | apps/web/DESIGN.md — 색상/타이포/간격/컴포넌트 분석 (2026-04-05) |
+| OAUTH-COOKIE-FIX | OAuth 쿠키 secure 플래그 동적 설정 | P1 | ✅ 완료 | HTTP 환경에서 OAuth 쿠키 설정 안 되는 문제 수정 (2026-04-05) |
+| COLLECT-PARALLEL | 블로그 수집 병렬화 설계 | P1 | 계획 | 방문+수집 단계 asyncio.gather 병렬화. 수집 5분→2분 예상 (2026-04-05) |
+| SCALING-REPORT | 스케일링 공학 분석 레포트 | P0 | 작성중 | 10/100/1000명 시나리오별 인프라+비용+병목 분석 (2026-04-05) |
+| PRODUCT-REPORT | 프로덕트 레포트 + 성능 문서 | P1 | 작성중 | PRODUCT_REPORT.md + PERFORMANCE.md + docs 정리 (2026-04-05) |
 
 #### MIGRATION-UNIQUE 실행 절차 (집에서 직접 수행)
 
