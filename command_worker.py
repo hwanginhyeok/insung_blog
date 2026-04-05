@@ -1434,9 +1434,10 @@ async def handle_auto_reply(user_id: str | None = None, payload: dict | None = N
 
     async with _browser_semaphore:
         from playwright.async_api import async_playwright
+        from src.utils.browser import _BROWSER_ARGS
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            browser = await p.chromium.launch(headless=True, args=_BROWSER_ARGS)
 
             # ── 수집 단계 (모바일) ──
             mobile_ctx = await browser.new_context(
@@ -1766,6 +1767,12 @@ async def process_command(cmd: dict) -> None:
                     pass
             return
 
+    # Elastic Semaphore: 유저별 슬롯 추적 시작
+    acquire_user_slot(cmd_user_id)
+    active_slots = _user_active_slots.get(cmd_user_id or "__admin__", 0)
+    max_slots = get_slots_for_user(cmd_user_id)
+    logger.info(f"[elastic] user={uid_label} slots={active_slots}/{max_slots} (전체 활성: {dict(_user_active_slots)})")
+
     try:
         kwargs: dict = {"user_id": cmd_user_id}
         # publish/save_draft/neighbor_request 명령은 payload도 전달
@@ -1799,6 +1806,9 @@ async def process_command(cmd: dict) -> None:
                 )
             except Exception as notify_err:
                 logger.warning(f"실패 알림 전송 실패: {notify_err}")
+    finally:
+        # Elastic Semaphore: 유저별 슬롯 추적 해제
+        release_user_slot(cmd_user_id)
 
 
 async def main_loop() -> None:
@@ -1840,14 +1850,18 @@ async def main_loop() -> None:
                 logger.error(f"태스크 예외: {exc}")
         _active_tasks -= done
 
-        # pending 명령 claim
+        # pending 명령 claim (슬롯 여유가 있을 때만)
+        active_count = len(_active_tasks)
+        if active_count >= MAX_CONCURRENT_BROWSERS:
+            # 슬롯 만석 — 새 Task 생성 안 하고 대기
+            await asyncio.sleep(1)
+            continue
+
         cmd = claim_command()
         if cmd:
-            active_count = len(_active_tasks)
             logger.info(f"[{active_count + 1}/{MAX_CONCURRENT_BROWSERS} 슬롯] 명령 할당: {cmd['command']}")
             task = asyncio.create_task(process_command(cmd))
             _active_tasks.add(task)
-            # 연속으로 더 가져올 수 있으면 바로 다음 명령 확인 (Semaphore가 제한)
             continue
         else:
             # pending 없으면 대기
