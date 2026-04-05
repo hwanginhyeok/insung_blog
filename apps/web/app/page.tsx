@@ -25,13 +25,13 @@ export default function LandingPage() {
               <Button size="lg" className="text-base px-8" asChild>
                 <Link href="/login">무료로 시작하기</Link>
               </Button>
-              <span className="text-sm text-muted-foreground">월 10회 무료</span>
+              <span className="text-sm text-muted-foreground">월 5회 무료</span>
             </div>
             {/* 모바일 — 인라인 스탯 배지 */}
             <div className="mt-6 flex flex-wrap gap-2 md:hidden">
-              <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground">1분 완성</span>
-              <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground">일 30개 댓글</span>
-              <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground">24/7 이웃관리</span>
+              <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground">1분 글쓰기</span>
+              <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground">일 100개 댓글</span>
+              <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground">이웃 자동관리</span>
             </div>
           </div>
 
@@ -75,9 +75,9 @@ export default function LandingPage() {
 
             {/* 스탯 */}
             <div className="mt-4 grid grid-cols-3 gap-3">
-              <MiniStat number="1분" label="완성" />
-              <MiniStat number="30개" label="자동 댓글" />
-              <MiniStat number="24/7" label="이웃관리" />
+              <MiniStat number="1분" label="글쓰기" />
+              <MiniStat number="100개" label="일 댓글" />
+              <MiniStat number="자동" label="이웃관리" />
             </div>
           </div>
         </div>
@@ -119,11 +119,12 @@ export default function LandingPage() {
               <div className="border-t border-border pt-8">
                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">보너스</span>
                 <h3 className="mt-2 text-lg font-semibold text-foreground">
-                  AI 댓글봇
+                  AI 댓글봇 + 대댓글
                 </h3>
                 <p className="mt-2 text-muted-foreground leading-relaxed">
-                  이웃 블로그 글을 읽고 맥락에 맞는 댓글을 생성합니다.
-                  승인 후 게시되니 자연스러움을 유지할 수 있습니다.
+                  이웃 블로그 글을 읽고 맥락에 맞는 댓글을 자동 생성합니다.
+                  내 글에 달린 댓글에도 AI가 따뜻하게 답글을 달아줍니다.
+                  프로 기준 하루 최대 100개 댓글, 50개 답글.
                 </p>
               </div>
               <div className="border-t border-border pt-8 mt-8 md:mt-0">
@@ -132,8 +133,9 @@ export default function LandingPage() {
                   이웃 자동관리
                 </h3>
                 <p className="mt-2 text-muted-foreground leading-relaxed">
-                  서로이웃 신청, 교류 추적, 테마 기반 추천까지.
-                  블로그 네트워크를 자동으로 키워드립니다.
+                  테마 기반 새 이웃 발견, 서로이웃 자동 신청,
+                  이웃 새글 피드 댓글까지. 교류 추적과 추천 알고리즘으로
+                  블로그 네트워크를 자동으로 키워줍니다.
                 </p>
               </div>
             </div>
@@ -145,10 +147,10 @@ export default function LandingPage() {
       <section className="border-t border-border bg-muted">
         <div className="max-w-4xl mx-auto px-6 py-16 text-center">
           <h2 className="text-2xl font-bold text-foreground animate-fade-up">
-            매일 1-2시간, 더 가치있게 쓰세요
+            블로그 운영, AI에게 맡기세요
           </h2>
           <p className="mt-3 text-muted-foreground animate-fade-up anim-delay-1">
-            글쓰기에 쏟는 시간을 줄이고, 실제 경험에 집중하세요.
+            글쓰기, 댓글, 이웃관리까지 한 곳에서. 무료로 시작하세요.
           </p>
           <div className="mt-6">
             <Button size="lg" className="text-base px-8" asChild>
