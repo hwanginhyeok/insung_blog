@@ -64,6 +64,30 @@ export async function POST(req: NextRequest) {
 
   const admin = createAdminClient();
 
+  // 2.5. 페르소나 생성 횟수 제한 (티어별)
+  const { data: userRow } = await admin
+    .from("users")
+    .select("tier")
+    .eq("id", user.id)
+    .single();
+  const tier = (userRow?.tier || "free") as string;
+  const PERSONA_LIMITS: Record<string, number> = { free: 1, basic: 3, pro: 10 };
+  const maxPersonas = PERSONA_LIMITS[tier] ?? 1;
+
+  const { count: personaCount } = await admin
+    .from("user_personas")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id);
+
+  // 기존 페르소나 재크롤링이 아닌 신규 생성일 때만 제한
+  const reqPersonaIdCheck = (body as { personaId?: string }).personaId;
+  if (!reqPersonaIdCheck && (personaCount ?? 0) >= maxPersonas) {
+    return NextResponse.json(
+      { error: `페르소나는 최대 ${maxPersonas}개까지 생성 가능합니다 (${tier} 플랜)` },
+      { status: 403 }
+    );
+  }
+
   // 3. 동일 블로그 URL의 기존 페르소나 검색 (또는 personaId로 업데이트)
   const reqPersonaId = body.personaId as string | undefined;
 

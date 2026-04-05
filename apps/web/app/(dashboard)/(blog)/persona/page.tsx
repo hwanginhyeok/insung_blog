@@ -87,9 +87,10 @@ export default function PersonaListPage() {
       }
 
       const crawlData = await crawlRes.json();
-      setCreateMessage(
-        `${crawlData.postCount}편 크롤링 완료. AI 분석 중...`
-      );
+      const countMsg = crawlData.postCount < 10
+        ? `⚠�� ${crawlData.postCount}편만 수집됨 — 게시물이 적으면 페르소나 정확도가 낮을 수 ���습니다. AI 분석 중...`
+        : `${crawlData.postCount}편 크롤링 완료. AI 분석 중...`;
+      setCreateMessage(countMsg);
 
       const analyzeRes = await fetch("/api/persona/analyze", {
         method: "POST",
@@ -185,7 +186,8 @@ export default function PersonaListPage() {
           <CardHeader>
             <CardTitle>새 페르소나 만들기</CardTitle>
             <CardDescription>
-              블로그 URL을 입력하면 AI가 글쓰기 스타일을 분석합니다
+              블로그 URL을 입력하면 최근 20편을 수집해 AI가 글쓰기 스타일을 분석합니다.
+              게시물이 적으면 정확도가 낮아질 수 있습니다
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
