@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HelpTooltip } from "@/components/HelpTooltip";
+import { ChevronDown } from "lucide-react";
 import {
   sendFeedComment,
   sendDiscoverAndVisit,
@@ -67,6 +68,9 @@ export default function NeighborPage() {
 
   // 하단 섹션 토글
   const [showVisitResults, setShowVisitResults] = useState(false);
+
+  // 댓글 승인 섹션 접기/펼치기 (기본 펼침)
+  const [approvalCollapsed, setApprovalCollapsed] = useState(false);
 
   // ── 대기 댓글 상태 ──
   const [pendingComments, setPendingComments] = useState<PendingComment[]>([]);
@@ -272,7 +276,7 @@ export default function NeighborPage() {
 
       {/* 핵심 액션 2개 */}
       <div className="grid gap-4 sm:grid-cols-2">
-        {/* 1. 이웃 새글 댓글 */}
+        {/* 1. 이웃 새글 댓글 + 자동화 토글 */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">이웃 새글 댓글</CardTitle>
@@ -288,6 +292,73 @@ export default function NeighborPage() {
             >
               새글에 댓글 달기
             </Button>
+
+            {/* 자동화 토글 */}
+            <div className="border-t pt-3 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">자동화</p>
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                {/* 자동 발견+방문 */}
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <button
+                    role="switch"
+                    aria-checked={botSettings.daily_discover}
+                    disabled={savingToggle}
+                    onClick={() => handleToggleSetting({ daily_discover: !botSettings.daily_discover })}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                      botSettings.daily_discover ? "bg-primary" : "bg-muted"
+                    } disabled:opacity-50`}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                      botSettings.daily_discover ? "translate-x-4" : "translate-x-0.5"
+                    }`} />
+                  </button>
+                  <span className="text-xs text-muted-foreground">자동 발견</span>
+                </label>
+
+                {/* 자동 댓글 승인 */}
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <button
+                    role="switch"
+                    aria-checked={botSettings.approval_mode === "auto"}
+                    disabled={savingToggle}
+                    onClick={() => handleToggleSetting({
+                      approval_mode: botSettings.approval_mode === "auto" ? "manual" : "auto",
+                    })}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                      botSettings.approval_mode === "auto" ? "bg-primary" : "bg-muted"
+                    } disabled:opacity-50`}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                      botSettings.approval_mode === "auto" ? "translate-x-4" : "translate-x-0.5"
+                    }`} />
+                  </button>
+                  <span className="text-xs text-muted-foreground">자동 승인</span>
+                </label>
+
+                {/* 자동 게시 */}
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <button
+                    role="switch"
+                    aria-checked={botSettings.auto_execute}
+                    disabled={savingToggle}
+                    onClick={() => handleToggleSetting({ auto_execute: !botSettings.auto_execute })}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                      botSettings.auto_execute ? "bg-primary" : "bg-muted"
+                    } disabled:opacity-50`}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                      botSettings.auto_execute ? "translate-x-4" : "translate-x-0.5"
+                    }`} />
+                  </button>
+                  <span className="text-xs text-muted-foreground">자동 게시</span>
+                </label>
+              </div>
+              {botSettings.approval_mode === "auto" && botSettings.auto_execute && (
+                <p className="text-xs text-yellow-600">
+                  자동 승인 + 자동 게시가 모두 켜져 있으면 댓글이 검토 없이 게시됩니다.
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -349,11 +420,13 @@ export default function NeighborPage() {
             >
               찾기 + 댓글 + 이웃 신청
             </Button>
-            {themes.length === 0 && (
-              <p className="text-xs text-muted-foreground text-center">
-                위에서 테마를 먼저 등록하면 이웃 찾기를 시작할 수 있어요
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground text-center">
+              {themes.length === 0
+                ? "위에서 테마를 먼저 등록하면 이웃 찾기를 시작할 수 있어요"
+                : botSettings.approval_mode === "auto"
+                  ? "댓글은 승인 대기로 생성됩니다 (자동 승인 활성)"
+                  : "댓글은 승인 대기로 생성됩니다"}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -380,199 +453,139 @@ export default function NeighborPage() {
         </div>
       )}
 
-      {/* ── 대기 댓글 승인 섹션 ── */}
+      {/* ── 대기 댓글 승인 섹션 (접기/펼치기) ── */}
       {(pendingComments.length > 0 || approvedComments.length > 0) && (
         <Card>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base">
-                댓글 승인
-                {pendingComments.length > 0 && (
-                  <span className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-yellow-500 text-[10px] font-bold text-white">
-                    {pendingComments.length}
-                  </span>
-                )}
-              </CardTitle>
-              <div className="flex gap-1.5">
-                {pendingComments.length > 1 && (
-                  <Button size="sm" onClick={handleBulkApprove}>
-                    일괄 승인
-                  </Button>
-                )}
-                {approvedComments.length > 0 && (
-                  <Button
-                    size="sm"
-                    onClick={handleExecute}
-                    disabled={executing || isRunning}
-                  >
-                    {executing ? "게시 중..." : `게시 (${approvedComments.length}건)`}
-                  </Button>
-                )}
-              </div>
+              <button
+                className="flex items-center gap-1.5 text-left"
+                onClick={() => setApprovalCollapsed(!approvalCollapsed)}
+              >
+                <ChevronDown
+                  className={`h-4 w-4 text-muted-foreground transition-transform ${
+                    approvalCollapsed ? "-rotate-90" : ""
+                  }`}
+                />
+                <CardTitle className="text-base">
+                  댓글 승인
+                  {pendingComments.length > 0 && (
+                    <span className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-yellow-500 text-[10px] font-bold text-white">
+                      {pendingComments.length}
+                    </span>
+                  )}
+                </CardTitle>
+              </button>
+              {!approvalCollapsed && (
+                <div className="flex gap-1.5">
+                  {pendingComments.length > 1 && (
+                    <Button size="sm" onClick={handleBulkApprove}>
+                      일괄 승인
+                    </Button>
+                  )}
+                  {approvedComments.length > 0 && (
+                    <Button
+                      size="sm"
+                      onClick={handleExecute}
+                      disabled={executing || isRunning}
+                    >
+                      {executing ? "게시 중..." : `게시 (${approvedComments.length}건)`}
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {/* 대기 중인 댓글 목록 */}
-            {pendingComments.length > 0 && (
-              <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
-                {pendingComments.map((c) => (
-                  <div key={c.id} className="rounded-lg border p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span className="font-medium text-foreground">{c.blog_id}</span>
-                          <span>{timeAgo(c.created_at)}</span>
+          {!approvalCollapsed && (
+            <CardContent className="space-y-3">
+              {/* 대기 중인 댓글 목록 */}
+              {pendingComments.length > 0 && (
+                <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+                  {pendingComments.map((c) => (
+                    <div key={c.id} className="rounded-lg border p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground">{c.blog_id}</span>
+                            <span>{timeAgo(c.created_at)}</span>
+                          </div>
+                          {c.post_url && (
+                            <a
+                              href={c.post_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-muted-foreground hover:underline"
+                            >
+                              {c.post_title || "제목 없음"}
+                            </a>
+                          )}
+                          <p className="mt-1 text-sm whitespace-pre-wrap break-words">
+                            {c.comment_text}
+                          </p>
                         </div>
-                        {c.post_url && (
-                          <a
-                            href={c.post_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-muted-foreground hover:underline"
+                        <div className="flex shrink-0 gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleCommentAction(c.id, "approve")}
+                            disabled={processingIds.has(c.id)}
                           >
-                            {c.post_title || "제목 없음"}
-                          </a>
-                        )}
-                        <p className="mt-1 text-sm whitespace-pre-wrap break-words">
-                          {c.comment_text}
-                        </p>
+                            승인
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-muted-foreground"
+                            onClick={() => handleCommentAction(c.id, "reject")}
+                            disabled={processingIds.has(c.id)}
+                          >
+                            거부
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex shrink-0 gap-1">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleCommentAction(c.id, "approve")}
-                          disabled={processingIds.has(c.id)}
-                        >
-                          승인
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-muted-foreground"
-                          onClick={() => handleCommentAction(c.id, "reject")}
-                          disabled={processingIds.has(c.id)}
-                        >
-                          거부
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {pendingComments.length === 0 && approvedComments.length > 0 && (
-              <p className="text-sm text-muted-foreground">대기 중인 댓글이 없습니다</p>
-            )}
-
-            {/* 승인된 댓글 (게시 대기) */}
-            {approvedComments.length > 0 && (
-              <div className="border-t pt-3 space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">
-                  게시 대기 ({approvedComments.length}건)
-                </p>
-                <div className="max-h-[200px] overflow-y-auto space-y-1.5 pr-1">
-                  {approvedComments.map((c) => (
-                    <div key={c.id} className="flex items-center justify-between gap-2 rounded border px-3 py-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm truncate">
-                          <span className="font-medium">[{c.blog_id}]</span>{" "}
-                          <span className="text-muted-foreground">
-                            {c.comment_text.length > 40 ? c.comment_text.slice(0, 40) + "..." : c.comment_text}
-                          </span>
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="shrink-0 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                        onClick={() => handleRevokeApproval(c.id)}
-                      >
-                        취소
-                      </Button>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-          </CardContent>
+              )}
+
+              {pendingComments.length === 0 && approvedComments.length > 0 && (
+                <p className="text-sm text-muted-foreground">대기 중인 댓글이 없습니다</p>
+              )}
+
+              {/* 승인된 댓글 (게시 대기) */}
+              {approvedComments.length > 0 && (
+                <div className="border-t pt-3 space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">
+                    게시 대기 ({approvedComments.length}건)
+                  </p>
+                  <div className="max-h-[200px] overflow-y-auto space-y-1.5 pr-1">
+                    {approvedComments.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between gap-2 rounded border px-3 py-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm truncate">
+                            <span className="font-medium">[{c.blog_id}]</span>{" "}
+                            <span className="text-muted-foreground">
+                              {c.comment_text.length > 40 ? c.comment_text.slice(0, 40) + "..." : c.comment_text}
+                            </span>
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="shrink-0 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                          onClick={() => handleRevokeApproval(c.id)}
+                        >
+                          취소
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          )}
         </Card>
       )}
-
-      {/* ── 자동 이웃 관리 토글 ── */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">자동 이웃 관리</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-            {/* 자동 발견+방문 */}
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <button
-                role="switch"
-                aria-checked={botSettings.daily_discover}
-                disabled={savingToggle}
-                onClick={() => handleToggleSetting({ daily_discover: !botSettings.daily_discover })}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  botSettings.daily_discover ? "bg-primary" : "bg-muted"
-                } disabled:opacity-50`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                  botSettings.daily_discover ? "translate-x-5" : "translate-x-1"
-                }`} />
-              </button>
-              <span className="text-muted-foreground">
-                자동 발견+방문
-                {botSettings.daily_discover && <span className="ml-1 text-xs text-primary">매일 오전 9시</span>}
-              </span>
-            </label>
-
-            {/* 자동 댓글 승인 */}
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <button
-                role="switch"
-                aria-checked={botSettings.approval_mode === "auto"}
-                disabled={savingToggle}
-                onClick={() => handleToggleSetting({
-                  approval_mode: botSettings.approval_mode === "auto" ? "manual" : "auto",
-                })}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  botSettings.approval_mode === "auto" ? "bg-primary" : "bg-muted"
-                } disabled:opacity-50`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                  botSettings.approval_mode === "auto" ? "translate-x-5" : "translate-x-1"
-                }`} />
-              </button>
-              <span className="text-muted-foreground">자동 승인</span>
-            </label>
-
-            {/* 자동 게시 */}
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <button
-                role="switch"
-                aria-checked={botSettings.auto_execute}
-                disabled={savingToggle}
-                onClick={() => handleToggleSetting({ auto_execute: !botSettings.auto_execute })}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  botSettings.auto_execute ? "bg-primary" : "bg-muted"
-                } disabled:opacity-50`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                  botSettings.auto_execute ? "translate-x-5" : "translate-x-1"
-                }`} />
-              </button>
-              <span className="text-muted-foreground">자동 게시</span>
-            </label>
-          </div>
-          {botSettings.approval_mode === "auto" && botSettings.auto_execute && (
-            <p className="mt-2 text-xs text-yellow-600">
-              자동 승인 + 자동 게시가 모두 켜져 있으면 댓글이 검토 없이 게시됩니다.
-            </p>
-          )}
-        </CardContent>
-      </Card>
 
       {/* 이웃 현황 */}
       <Card>
