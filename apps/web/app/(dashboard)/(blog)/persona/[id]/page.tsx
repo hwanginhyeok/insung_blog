@@ -30,6 +30,25 @@ const CATEGORIES = [
 
 type CategoryKey = (typeof CATEGORIES)[number]["key"];
 
+// 카테고리 3그룹 정의
+const CATEGORY_GROUPS = [
+  {
+    label: "말투 스타일",
+    desc: "어떻게 쓰는지",
+    keys: ["voice", "emoji", "ending"] as CategoryKey[],
+  },
+  {
+    label: "글 구성",
+    desc: "글의 형태",
+    keys: ["structure", "formatting"] as CategoryKey[],
+  },
+  {
+    label: "규칙",
+    desc: "제한/특수 규칙",
+    keys: ["forbidden", "custom"] as CategoryKey[],
+  },
+] as const;
+
 // ── 타입 ──
 
 interface Persona {
@@ -93,6 +112,7 @@ export default function PersonaDetailPage() {
   const [crawlMessage, setCrawlMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [openCategory, setOpenCategory] = useState<CategoryKey | null>(null);
+  const [openGroups, setOpenGroups] = useState<Set<number>>(new Set([0]));
   const [addingTo, setAddingTo] = useState<CategoryKey | null>(null);
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
@@ -511,139 +531,218 @@ export default function PersonaDetailPage() {
         </Card>
       )}
 
-      {/* 카테고리별 아코디언 */}
+      {/* 카테고리 그룹별 아코디언 */}
       {items.length > 0 && (
-        <div className="space-y-2">
-          {CATEGORIES.map((cat) => {
-            const catItems = grouped[cat.key] || [];
-            const activeCount = catItems.filter((i) => i.is_active).length;
-            const isOpen = openCategory === cat.key;
+        <div className="space-y-4">
+          {CATEGORY_GROUPS.map((group, groupIdx) => {
+            const groupCats = CATEGORIES.filter((c) =>
+              group.keys.includes(c.key)
+            );
+            const groupItems = groupCats.flatMap(
+              (c) => grouped[c.key] || []
+            );
+            const groupActiveCount = groupItems.filter(
+              (i) => i.is_active
+            ).length;
+            const isGroupOpen = openGroups.has(groupIdx);
 
             return (
-              <Card key={cat.key}>
+              <Card key={groupIdx}>
+                {/* 그룹 헤더 */}
                 <button
                   onClick={() =>
-                    setOpenCategory(isOpen ? null : cat.key)
+                    setOpenGroups((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(groupIdx)) next.delete(groupIdx);
+                      else next.add(groupIdx);
+                      return next;
+                    })
                   }
-                  className="flex w-full items-center justify-between px-6 py-4 text-left hover:bg-secondary/50 transition-colors rounded-lg"
+                  className="flex w-full items-center justify-between px-6 py-4 text-left hover:bg-secondary/50 transition-colors rounded-t-lg"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-base font-medium">
-                      {cat.label}
+                    <span className="text-lg font-semibold">
+                      {group.label}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {cat.desc}
+                      {group.desc}
+                    </span>
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                      {groupActiveCount}개
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">
-                      {activeCount}/{catItems.length}
-                    </span>
-                    <span
-                      className={`text-muted-foreground transition-transform ${
-                        isOpen ? "rotate-180" : ""
-                      }`}
-                    >
-                      ▼
-                    </span>
-                  </div>
+                  <span
+                    className={`text-muted-foreground transition-transform ${
+                      isGroupOpen ? "rotate-180" : ""
+                    }`}
+                  >
+                    ▼
+                  </span>
                 </button>
 
-                {isOpen && (
-                  <CardContent className="pt-0 pb-4 space-y-2">
-                    {catItems.length === 0 && (
-                      <p className="text-sm text-muted-foreground py-2">
-                        항목 없음
-                      </p>
-                    )}
+                {/* 그룹 내 카테고리들 */}
+                {isGroupOpen && (
+                  <CardContent className="pt-0 pb-4 space-y-3">
+                    {groupCats.map((cat) => {
+                      const catItems = grouped[cat.key] || [];
+                      const activeCount = catItems.filter(
+                        (i) => i.is_active
+                      ).length;
+                      const isOpen = openCategory === cat.key;
 
-                    {catItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className={`flex items-start gap-3 rounded-md border p-3 text-sm ${
-                          item.is_active
-                            ? "bg-background"
-                            : "bg-muted/50 opacity-60"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={item.is_active}
-                          onChange={() =>
-                            toggleItem(item.id, item.is_active)
-                          }
-                          className="mt-1 shrink-0"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{item.key}</span>
-                            {item.priority >= 7 && (
-                              <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">
-                                필수
-                              </span>
-                            )}
-                            {item.source === "user" && (
-                              <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
-                                직접 추가
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-muted-foreground mt-0.5 break-words">
-                            {item.value}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => deleteItem(item.id)}
-                          className="text-muted-foreground hover:text-red-500 shrink-0 text-xs"
-                          title="삭제"
+                      return (
+                        <div
+                          key={cat.key}
+                          className="rounded-lg border"
                         >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
+                          <button
+                            onClick={() =>
+                              setOpenCategory(
+                                isOpen ? null : cat.key
+                              )
+                            }
+                            className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-secondary/30 transition-colors rounded-lg"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">
+                                {cat.label}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {cat.desc}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">
+                                {activeCount}/{catItems.length}
+                              </span>
+                              <span
+                                className={`text-muted-foreground transition-transform text-xs ${
+                                  isOpen ? "rotate-180" : ""
+                                }`}
+                              >
+                                ▼
+                              </span>
+                            </div>
+                          </button>
 
-                    {addingTo === cat.key ? (
-                      <div className="space-y-2 border rounded-md p-3">
-                        <Input
-                          placeholder="패턴명 (예: 반말 어미)"
-                          value={newKey}
-                          onChange={(e) => setNewKey(e.target.value)}
-                        />
-                        <Textarea
-                          placeholder="설명 (예: ~했어, ~인듯, ~거든 형태의 반말 어미 사용)"
-                          value={newValue}
-                          onChange={(e) => setNewValue(e.target.value)}
-                          rows={2}
-                        />
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => addItem(cat.key)}
-                            disabled={!newKey.trim() || !newValue.trim()}
-                          >
-                            추가
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setAddingTo(null);
-                              setNewKey("");
-                              setNewValue("");
-                            }}
-                          >
-                            취소
-                          </Button>
+                          {isOpen && (
+                            <div className="px-4 pb-3 space-y-2">
+                              {catItems.length === 0 && (
+                                <p className="text-sm text-muted-foreground py-2">
+                                  항목 없음
+                                </p>
+                              )}
+
+                              {catItems.map((item) => (
+                                <div
+                                  key={item.id}
+                                  className={`flex items-start gap-3 rounded-md border p-3 text-sm ${
+                                    item.is_active
+                                      ? "bg-background"
+                                      : "bg-muted/50 opacity-60"
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={item.is_active}
+                                    onChange={() =>
+                                      toggleItem(
+                                        item.id,
+                                        item.is_active
+                                      )
+                                    }
+                                    className="mt-1 shrink-0"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-medium">
+                                        {item.key}
+                                      </span>
+                                      {item.priority >= 7 && (
+                                        <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">
+                                          필수
+                                        </span>
+                                      )}
+                                      {item.source === "user" && (
+                                        <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                                          직접 추가
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-muted-foreground mt-0.5 break-words">
+                                      {item.value}
+                                    </p>
+                                  </div>
+                                  <button
+                                    onClick={() =>
+                                      deleteItem(item.id)
+                                    }
+                                    className="text-muted-foreground hover:text-red-500 shrink-0 text-xs"
+                                    title="삭제"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+
+                              {addingTo === cat.key ? (
+                                <div className="space-y-2 border rounded-md p-3">
+                                  <Input
+                                    placeholder="패턴명 (예: 반말 어미)"
+                                    value={newKey}
+                                    onChange={(e) =>
+                                      setNewKey(e.target.value)
+                                    }
+                                  />
+                                  <Textarea
+                                    placeholder="설명 (예: ~했어, ~인듯, ~거든 형태의 반말 어미 사용)"
+                                    value={newValue}
+                                    onChange={(e) =>
+                                      setNewValue(e.target.value)
+                                    }
+                                    rows={2}
+                                  />
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      onClick={() =>
+                                        addItem(cat.key)
+                                      }
+                                      disabled={
+                                        !newKey.trim() ||
+                                        !newValue.trim()
+                                      }
+                                    >
+                                      추가
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => {
+                                        setAddingTo(null);
+                                        setNewKey("");
+                                        setNewValue("");
+                                      }}
+                                    >
+                                      취소
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() =>
+                                    setAddingTo(cat.key)
+                                  }
+                                  className="text-sm text-muted-foreground hover:text-foreground py-1"
+                                >
+                                  + 직접 추가
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setAddingTo(cat.key)}
-                        className="text-sm text-muted-foreground hover:text-foreground py-1"
-                      >
-                        + 직접 추가
-                      </button>
-                    )}
+                      );
+                    })}
                   </CardContent>
                 )}
               </Card>

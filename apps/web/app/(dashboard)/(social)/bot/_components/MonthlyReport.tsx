@@ -27,6 +27,7 @@ function monthLabel(): string {
  * 월간 성과 리포트 — bot 페이지 하단에 표시.
  * runs 배열에서 이번 달 데이터를 집계하여 요약 카드를 보여준다.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function MonthlyReport({ runs, todayStats }: MonthlyReportProps) {
   const [open, setOpen] = useState(false);
   const [stats, setStats] = useState({

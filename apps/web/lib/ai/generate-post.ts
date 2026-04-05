@@ -75,6 +75,22 @@ const CATEGORY_LABELS: Record<string, string> = {
   formatting: "텍스트 포맷팅",
 };
 
+// 레이아웃 관련 키워드 (structure 항목에서 배치 규칙 감지용)
+const LAYOUT_KEYS = [
+  "글_레이아웃_템플릿", "사진_배치_패턴", "텍스트_사진_비율",
+  "스티커_사용", "지도_배치", "외부링크_배치", "섹션_구분",
+  "스티커_구분선", "사진_캡션", "block_layout", "photo_layout",
+];
+
+/** structure 항목 중 레이아웃 관련 항목이 있는지 확인 */
+function hasLayoutRules(items: PersonaItemRow[]): boolean {
+  return items.some(
+    (i) =>
+      i.category === "structure" &&
+      LAYOUT_KEYS.some((k) => i.key.toLowerCase().includes(k.toLowerCase()))
+  );
+}
+
 /** persona_items → 시스템 프롬프트용 스타일 가이드 텍스트 */
 function renderPersonaToPrompt(items: PersonaItemRow[]): string {
   const grouped = new Map<string, PersonaItemRow[]>();
@@ -110,6 +126,8 @@ interface PersonaLoadResult {
   spec: string;
   /** 카테고리별 추가 지시 (key = 맛집/카페/여행/일상/기타) */
   categoryPrompts: Record<string, string>;
+  /** 페르소나에 사진 배치 관련 structure 항목이 있는지 */
+  hasPhotoLayout: boolean;
 }
 
 /**
@@ -156,6 +174,7 @@ async function loadUserPersona(userId: string, personaId?: string): Promise<Pers
     return {
       spec: regularItems.length > 0 ? renderPersonaToPrompt(regularItems) : "",
       categoryPrompts,
+      hasPhotoLayout: hasLayoutRules(regularItems),
     };
   } catch {
     return null;
@@ -298,8 +317,29 @@ async function generateDraft(
   memo: string,
   category: string,
   spec: string,
-  categoryInstruction: string | null = null
+  categoryInstruction: string | null = null,
+  usePersonaPhotoLayout: boolean = false
 ): Promise<{ title: string; body: string }> {
+
+  // 페르소나에 레이아웃 패턴이 있으면 그 패턴을 따르도록 지시
+  // 없으면 기존 기본 규칙 사용
+  const layoutRules = usePersonaPhotoLayout
+    ? `- 사용 가능한 마커 (반드시 단독 줄에 배치):
+  * [PHOTO_1], [PHOTO_2], ... — 사진 (분석 번호와 일치)
+  * [STICKER] — 스티커/장식 (구분선 역할)
+  * [SEPARATOR] — 가로 구분선
+  * [MAP] — 네이버 지도 (장소 정보)
+- 위 스타일 가이드의 "글 구조" 섹션을 **정확히** 따를 것:
+  * "글_레이아웃_템플릿"이 있으면 그 순서대로 요소를 배치
+  * "텍스트_블록_길이" 패턴대로 각 텍스트 블록의 길이 조절
+  * "사진_배치_패턴"에 맞게 사진 간격 조절
+  * "스티커_사용" 패턴대로 스티커 배치
+  * "섹션_구분"대로 구분선/빈줄 삽입
+  * "지도_배치"/"외부링크_배치" 패턴 따르기
+  * "오프닝_방식"대로 글 시작`
+    : `- 사진 위치를 [PHOTO_1], [PHOTO_2], ... 마커로 표시 (반드시 단독 줄에 배치)
+- 사진 분석의 번호와 마커 번호를 일치시킬 것
+- 각 마커 앞뒤로 해당 사진에 대한 코멘터리 2~4줄 작성`;
 
   let systemPrompt = `너는 네이버 블로그 작성자야. 아래 제작 스펙을 **반드시 준수**하여 블로그 게시물을 작성해.
 
@@ -310,9 +350,7 @@ ${spec}
 - 제목은 ${POST_TITLE_MAX_CHARS}자 이내
 - 본문은 ${POST_BODY_MIN_CHARS}~${POST_BODY_MAX_CHARS}자
 - body에 줄바꿈은 \\n으로 표현
-- 사진 위치를 [PHOTO_1], [PHOTO_2], ... 마커로 표시 (반드시 단독 줄에 배치)
-- 사진 분석의 번호와 마커 번호를 일치시킬 것
-- 각 마커 앞뒤로 해당 사진에 대한 코멘터리 2~4줄 작성
+${layoutRules}
 - 출력 형식: 반드시 아래 JSON만 출력. 인사말, 설명, 마크다운 등 다른 텍스트 절대 금지.
 {"title": "제목", "body": "본문"}`;
 
@@ -410,9 +448,10 @@ export async function generatePost(
   // Step 2: 카테고리 감지 (사용자 선택 있으면 스킵)
   const category = userCategory || (await detectCategory(client, analysis, memo));
 
-  // Step 3: 초안 생성 (카테고리별 추가 지시 포함)
+  // Step 3: 초안 생성 (카테고리별 추가 지시 + 사진 배치 패턴 포함)
   const categoryInstruction = personaResult?.categoryPrompts[category] || null;
-  const draft = await generateDraft(client, analysis, memo, category, spec, categoryInstruction);
+  const usePersonaPhotoLayout = personaResult?.hasPhotoLayout ?? false;
+  const draft = await generateDraft(client, analysis, memo, category, spec, categoryInstruction, usePersonaPhotoLayout);
 
   // Step 4: 해시태그
   const hashtags = await generateHashtags(client, draft.title, draft.body);

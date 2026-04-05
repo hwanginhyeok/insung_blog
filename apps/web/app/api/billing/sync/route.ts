@@ -9,6 +9,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
  * 결제 동기화. 웹훅이 실패했을 때 사용자가 직접 동기화.
  * users 테이블의 subscription_status를 기반으로 tier를 재확인.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function POST(req: NextRequest) {
   // 1. 인증
   const cookieStore = cookies();

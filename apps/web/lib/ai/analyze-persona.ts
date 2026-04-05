@@ -7,7 +7,7 @@
  * 모델: Sonnet (1회성 분석, 정확도 우선)
  */
 import Anthropic from "@anthropic-ai/sdk";
-import type { CrawledPost, CrawlResult } from "@/lib/crawl/naver-blog";
+import type { CrawledPost, CrawlResult, BlockSequenceItem } from "@/lib/crawl/naver-blog";
 
 // ── 설정 ──
 
@@ -31,7 +31,59 @@ export interface PersonaItem {
 
 // ── 요약 생성 유틸 ──
 
-/** 콘텐츠 분석용: 게시물 텍스트 요약 */
+/**
+ * 블록 시퀀스를 상세 문자열로 변환.
+ * text 블록에 글자 수, image에 캡션, sticker에 팩 ID를 포함.
+ * 예: text(130자) → image → text(35자) → sticker[ogq_604a] → separator → ...
+ */
+function formatBlockSequence(blocks: BlockSequenceItem[]): string {
+  if (blocks.length === 0) return "(없음)";
+  return blocks.map((b) => {
+    if (b.type === "text") {
+      if (b.charCount === 0) return "빈줄";
+      return `text(${b.charCount}자)`;
+    }
+    if (b.type === "image") {
+      return b.caption ? `image[캡션:"${b.caption.slice(0, 30)}"]` : "image";
+    }
+    if (b.type === "sticker") {
+      return b.stickerPackId ? `sticker[${b.stickerPackId.slice(0, 12)}]` : "sticker";
+    }
+    return b.type;
+  }).join(" → ");
+}
+
+/** 블록 시퀀스 통계 요약 (이미지 수, 텍스트 평균 길이 등) */
+function buildBlockStats(meta: CrawledPost["htmlMeta"]): string {
+  const textBlocks = meta.block_sequence.filter(b => b.type === "text" && (b.charCount ?? 0) > 0);
+  const avgChars = textBlocks.length > 0
+    ? Math.round(textBlocks.reduce((s, b) => s + (b.charCount ?? 0), 0) / textBlocks.length)
+    : 0;
+  const stickerPacks = new Set(
+    meta.block_sequence
+      .filter(b => b.type === "sticker" && b.stickerPackId)
+      .map(b => b.stickerPackId)
+  );
+
+  const parts: string[] = [
+    `사진 ${meta.image_count}장`,
+    `텍스트 ${textBlocks.length}블록 (평균 ${avgChars}자)`,
+    `빈줄 ${meta.empty_text_blocks}개`,
+  ];
+
+  const separators = meta.block_sequence.filter(b => b.type === "separator").length;
+  if (separators > 0) parts.push(`구분선 ${separators}개`);
+
+  const stickers = meta.block_sequence.filter(b => b.type === "sticker").length;
+  if (stickers > 0) parts.push(`스티커 ${stickers}개 (${stickerPacks.size}종)`);
+
+  const captions = meta.block_sequence.filter(b => b.type === "image" && b.caption).length;
+  if (captions > 0) parts.push(`캡션 있는 사진 ${captions}장`);
+
+  return parts.join(", ");
+}
+
+/** 콘텐츠 분석용: 게시물 텍스트 + 상세 블록 배치 시퀀스 요약 */
 function buildContentSummary(posts: CrawledPost[]): string {
   return posts
     .map(
@@ -39,6 +91,8 @@ function buildContentSummary(posts: CrawledPost[]): string {
         `--- 게시물 ${i + 1} ---\n` +
         `제목: ${p.title}\n` +
         `카테고리: ${p.category || "없음"}\n` +
+        `블록 통계: ${buildBlockStats(p.htmlMeta)}\n` +
+        `요소 배치: ${formatBlockSequence(p.htmlMeta.block_sequence)}\n` +
         `본문 (${p.body_length}자):\n${p.body.slice(0, 800)}\n`
     )
     .join("\n");
@@ -202,10 +256,47 @@ async function analyzeContent(
 주어진 블로그 글들의 **공통 패턴**을 카테고리별로 추출해.
 실제 게시물에서 반복적으로 나타나는 구체적인 패턴만 추출해.
 
+각 게시물에는 "블록 통계"와 "요소 배치"가 포함되어 있다.
+"요소 배치"는 실제 HTML에서 추출한 블록 순서와 상세 정보야:
+- text(N자): 텍스트 블록 (N은 글자 수 — 짧으면 1줄, 길면 여러 줄)
+- 빈줄: 줄바꿈용 빈 텍스트 블록
+- image: 사진 (캡션이 있으면 [캡션:"..."] 표기)
+- sticker[ogq_XXX]: 스티커 장식 (같은 팩 ID면 같은 스타일)
+- separator: 가로 구분선
+- map: 네이버 지도
+- oglink: 외부 링크 카드
+- video: 동영상
+- quotation: 인용구 블록
+
+"블록 통계"는 게시물별 사진 수, 텍스트 평균 글자 수, 스티커 종류 수 등의 요약이야.
+
 카테고리:
 - voice: 어미, 말투, 특유의 표현 (예: "~했어요", "~더라구요", "진짜", "완전")
 - emoji: 사용하는 이모지와 규칙 (빈도, 위치 — 문장 끝/제목/단독줄)
-- structure: 글 구조 패턴 (오프닝 방식, 사진-글 배치, 섹션 구분법)
+- structure: **글의 전체 레이아웃 패턴**. "요소 배치" 데이터를 분석하여 아래 항목을 반드시 추출:
+  * 글_레이아웃_템플릿 (key: "글_레이아웃_템플릿") — 요소 배치 시퀀스에서 공통으로 나타나는 전체 구조 템플릿
+    예: "text(인사) → image → text(2~3줄 감상) → image → text(정보) → sticker(구분) → text(3~4줄) → image → map → text(마무리)"
+    모든 요소(text, image, sticker, map, oglink)의 배치를 포함해야 함
+  * 사진_배치_패턴 (key: "사진_배치_패턴") — 사진이 언제, 몇 장씩 들어가는지
+    예: "text 2~3블록마다 사진 1장", "도입부 사진 1장 → 본문마다 사진 2장 연속"
+  * 텍스트_사진_비율 (key: "텍스트_사진_비율") — 텍스트 블록과 사진의 대략적 비율
+    예: "text 3 : image 1", "text 2 : image 2 (사진이 많은 스타일)"
+  * 텍스트_블록_길이 (key: "텍스트_블록_길이") — 각 텍스트 블록이 보통 몇 자인지
+    예: "평균 40~60자 (짧은 1~2줄 감상)", "평균 100~150자 (긴 설명문)"
+  * 스티커_사용 (key: "스티커_사용") — 스티커를 쓰는지, 어디에 쓰는지, 같은 팩인지
+    예: "섹션 사이에 sticker 1개씩 (같은 ogq팩 반복)", "미사용"
+  * 구분선_사용 (key: "구분선_사용") — separator(가로줄)를 쓰는지, 어디에 쓰는지
+    예: "도입부 끝 + 본문 끝에 separator", "미사용"
+  * 지도_배치 (key: "지도_배치") — 지도를 쓰는지, 어디에 배치하는지
+    예: "글 마지막에 map 1개 (장소 정보)", "미사용"
+  * 외부링크_배치 (key: "외부링크_배치") — oglink를 쓰는지, 어디에 배치하는지
+    예: "글 끝 참고 링크로 oglink 1개", "미사용"
+  * 오프닝_방식 (key: "오프닝_방식") — 첫 문장/문단의 시작 패턴
+    예: "인사 + 장소 소개로 시작", "사진 먼저 → 감상 텍스트"
+  * 섹션_구분 (key: "섹션_구분") — 섹션을 어떻게 나누는지
+    예: "sticker로 섹션 구분", "separator로 구분", "빈 줄로 구분"
+  * 사진_캡션 (key: "사진_캡션") — 사진에 캡션을 다는지, 스타일은 어떤지
+    예: "캡션 없음", "사진 아래 짧은 감탄형 캡션"
 - ending: 마무리 패턴 (추천 문구, CTA, 해시태그 앞 멘트)
 - forbidden: 절대 쓰지 않는 표현 (격식체, 특정 이모지 등)
 - custom: 자기지칭, 독자호칭, 특수 문구 등 독특한 패턴

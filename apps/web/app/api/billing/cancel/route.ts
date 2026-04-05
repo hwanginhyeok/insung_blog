@@ -10,6 +10,7 @@ import { cancelPaymentSchedule } from "@/lib/portone";
  * 구독 해지. 포트원 스케줄 삭제 + subscription_ends_at 설정.
  * 해지 후에도 다음 결제일까지는 현재 tier 유지.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function POST(req: NextRequest) {
   // 1. 인증
   const cookieStore = cookies();

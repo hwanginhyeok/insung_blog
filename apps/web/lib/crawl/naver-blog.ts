@@ -25,9 +25,20 @@ const FETCH_TIMEOUT_MS = 10_000;
 
 // ── 타입 ──
 
+/** 블록 시퀀스 항목: 타입 + 블록별 부가 정보 */
+export interface BlockSequenceItem {
+  type: string;
+  /** text 블록: 글자 수 (빈 줄이면 0) */
+  charCount?: number;
+  /** image 블록: 캡션 텍스트 (없으면 undefined) */
+  caption?: string;
+  /** sticker 블록: 스티커팩 ID (ogq_XXXXX 형태) */
+  stickerPackId?: string;
+}
+
 export interface HtmlMetadata {
-  /** 블록 시퀀스: 글의 뼈대 */
-  block_sequence: { type: string }[];
+  /** 블록 시퀀스: 글의 뼈대 (타입 + 부가 정보) */
+  block_sequence: BlockSequenceItem[];
   /** se-ff-* 폰트 클래스 빈도 */
   font_classes: Record<string, number>;
   /** se-fs-* 사이즈 클래스 빈도 */
@@ -46,6 +57,10 @@ export interface HtmlMetadata {
   total_text_blocks: number;
   /** 색상이 적용된 span 샘플 */
   color_spans: { color: string; text: string }[];
+  /** 게시물 내 이미지 총 개수 */
+  image_count: number;
+  /** 빈 텍스트 블록의 시퀀스 내 인덱스 목록 */
+  empty_line_positions: number[];
 }
 
 export interface CrawledPost {
@@ -249,14 +264,17 @@ function extractHtmlMetadata(
     empty_text_blocks: 0,
     total_text_blocks: 0,
     color_spans: [],
+    image_count: 0,
+    empty_line_positions: [],
   };
 
   // 블록 시퀀스 + 폰트/사이즈 + 정렬 + 빈 줄 분석
+  let blockIndex = 0;
   container.find(".se-component").each((_, el) => {
     const $el = $(el);
     const classes = ($el.attr("class") || "").split(/\s+/);
 
-    // 블록 타입 판별
+    // 블록 타입 판별 (구분선, 인용구 추가)
     let blockType = "unknown";
     for (const cls of classes) {
       if (cls === "se-text") blockType = "text";
@@ -266,18 +284,24 @@ function extractHtmlMetadata(
       else if (cls === "se-video") blockType = "video";
       else if (cls === "se-sticker") blockType = "sticker";
       else if (cls === "se-otype") blockType = "otype";
+      else if (cls === "se-horizontalLine") blockType = "separator";
+      else if (cls === "se-quotation") blockType = "quotation";
     }
 
-    meta.block_sequence.push({ type: blockType });
+    const block: BlockSequenceItem = { type: blockType };
 
     // 텍스트 블록 상세 분석
     if (blockType === "text") {
       meta.total_text_blocks++;
 
       const textContent = $el.text().trim();
-      // 빈 텍스트 블록 (줄 간격 역할) — 제로폭스페이스(​) 또는 빈 문자열
-      if (!textContent || textContent === "\u200B") {
+      const charCount = textContent.length;
+      const isEmpty = !textContent || textContent === "\u200B";
+      block.charCount = isEmpty ? 0 : charCount;
+
+      if (isEmpty) {
         meta.empty_text_blocks++;
+        meta.empty_line_positions.push(blockIndex);
       }
 
       // 정렬 분석
@@ -309,6 +333,29 @@ function extractHtmlMetadata(
         }
       });
     }
+
+    // 이미지 블록: 캡션 추출 + 개수 집계
+    if (blockType === "image") {
+      meta.image_count++;
+      const captionEl = $el.find(".se-caption");
+      const caption = captionEl.text().trim();
+      if (caption) {
+        block.caption = caption.slice(0, 100);
+      }
+    }
+
+    // 스티커 블록: 팩 ID 추출
+    if (blockType === "sticker") {
+      const img = $el.find("img");
+      const src = img.attr("src") || img.attr("data-src") || "";
+      const packMatch = src.match(/\/(ogq_[a-f0-9]+)\//);
+      if (packMatch) {
+        block.stickerPackId = packMatch[1];
+      }
+    }
+
+    meta.block_sequence.push(block);
+    blockIndex++;
   });
 
   // 볼드 텍스트 추출
