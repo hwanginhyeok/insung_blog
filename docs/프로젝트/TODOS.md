@@ -4,19 +4,13 @@
 
 ---
 
-## TODO-1: Supabase Edge Function 개발 환경 셋업
+## ~~TODO-1: Supabase Edge Function 개발 환경 셋업~~ (Superseded)
 
-**What:** `supabase/functions/toss-webhook/` Edge Function 개발 환경 구성 (Deno 런타임 + `supabase functions serve`)
-
-**Why:** 블록 3(토스페이 Webhook 수신 → 구독 상태 갱신)은 Supabase Edge Function이 유일한 WSL2-안전 수신 방법. 현재 Edge Function 코드가 프로젝트에 없음. 착수 전에 WSL2에서 `supabase functions serve` 동작 확인이 선행 조건.
-
-**Pros:** WSL2 로컬 서버에 HTTPS 공인 주소 없이도 Webhook 수신 가능. 토스페이 프로덕션 Webhook 수신 구조 확립.
-
-**Cons:** Deno + Supabase CLI 설치 추가 공수. 로컬 테스트는 `supabase functions serve` + ngrok 조합 필요.
-
-**Context:** 블록 3의 결제 Webhook 수신 경로: 토스페이 → Supabase Edge Function → `users.subscription_status` 갱신. WSL2에서 FastAPI로 직접 수신 불가 (공인 HTTPS 없음). `apps/web/supabase/` 폴더에 `functions/` 디렉토리 신규 생성 필요.
-
-**Depends on / blocked by:** 블록 3 Open Questions #2(결제 수단) 결정 후 착수.
+> **Superseded by:** 포트원 V2 + Vercel API Route 결제 플랜 (2026-04-05).
+> 토스페이 대신 카카오페이(포트원 경유)로 결정. 웹훅은 Vercel API Route(`/api/webhooks/portone`)에서 수신.
+> Supabase Edge Function 불필요.
+>
+> 관련 디자인 문서: `~/.gstack/projects/hwanginhyeok-insung_blog/window11-master-design-20260405-163738.md`
 
 ---
 

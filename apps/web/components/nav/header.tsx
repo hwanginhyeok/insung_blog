@@ -30,6 +30,7 @@ const socialSubItems = [
 
 const navItems = [
   { href: "/guide", label: "사용법" },
+  { href: "/pricing", label: "요금제" },
 ];
 
 const adminItems = [{ href: "/admin", label: "관리" }];

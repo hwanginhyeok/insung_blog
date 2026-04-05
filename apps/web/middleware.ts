@@ -37,7 +37,7 @@ export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
   // 보호 경로: /dashboard, /write, /persona, /bot, /admin
-  const protectedPaths = ["/dashboard", "/write", "/calendar", "/persona", "/bot", "/admin", "/analytics"];
+  const protectedPaths = ["/dashboard", "/write", "/calendar", "/persona", "/bot", "/admin", "/analytics", "/pricing", "/billing"];
   const isProtected = protectedPaths.some((p) => pathname.startsWith(p));
 
   if (isProtected && !user) {
@@ -55,5 +55,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/write/:path*", "/calendar/:path*", "/persona/:path*", "/bot/:path*", "/admin/:path*", "/analytics/:path*", "/login"],
+  matcher: ["/dashboard/:path*", "/write/:path*", "/calendar/:path*", "/persona/:path*", "/bot/:path*", "/admin/:path*", "/analytics/:path*", "/pricing/:path*", "/billing/:path*", "/login"],
 };
