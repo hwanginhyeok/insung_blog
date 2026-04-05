@@ -237,10 +237,10 @@ export function Header() {
           {user && (
             <Link
               href="/profile"
-              className="hidden sm:inline text-sm text-foreground/50 hover:text-primary transition-colors"
-              title="내 프로필"
+              className="hidden sm:inline text-sm text-primary font-medium hover:text-primary/80 transition-colors"
+              title="마이페이지"
             >
-              {user.email?.split("@")[0]}
+              마이페이지
             </Link>
           )}
           <Button
