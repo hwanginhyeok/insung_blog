@@ -105,11 +105,12 @@ export default function LandingPage() {
                 </p>
               </div>
               <div className="mt-6 md:mt-0 bg-muted rounded-xl p-6">
-                <div className="text-sm text-muted-foreground mb-2">작동 방식</div>
+                <div className="text-sm text-muted-foreground mb-2">이렇게 사용하세요</div>
                 <div className="space-y-3 text-sm">
-                  <Step n="1" text="사진 + 메모 업로드" />
-                  <Step n="2" text="AI가 당신 스타일로 글 작성" />
-                  <Step n="3" text="HTML 복사 → 네이버 발행" />
+                  <Step n="1" text="회원가입 + 네이버 쿠키 등록" />
+                  <Step n="2" text="사진과 메모만 올리면 AI가 글 작성" />
+                  <Step n="3" text="댓글봇 실행 → 승인 → 자동 게시" />
+                  <Step n="4" text="이웃 자동 발견 + 서로이웃 신청" />
                 </div>
               </div>
             </div>
