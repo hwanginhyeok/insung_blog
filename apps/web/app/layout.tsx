@@ -13,6 +13,10 @@ const geistMono = localFont({
   weight: "100 900",
 });
 
+// Pretendard CDN URL (동적 서브셋, 한국어+라틴 최적화)
+const PRETENDARD_CSS =
+  "https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css";
+
 export const metadata: Metadata = {
   title: "인성이 블로그 AI 파트너",
   description: "AI가 당신의 블로그 스타일을 학습하여 완벽한 글을 작성해드립니다",
@@ -32,6 +36,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
+      <head>
+        <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
+        <link rel="stylesheet" href={PRETENDARD_CSS} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
