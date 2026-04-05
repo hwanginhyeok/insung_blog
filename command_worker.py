@@ -63,10 +63,12 @@ USER_MILESTONE_CHECK_INTERVAL = 3600  # 사용자 수 임계점 체크 주기 (1
 _USER_COUNT_FILE = Path("/tmp/user_count.txt")  # 워커 재시작해도 중복 알림 방지
 
 # 사용자 수 임계점 목록
-_USER_MILESTONES = [10, 50, 100, 500, 1000]
+_USER_MILESTONES = [10, 15, 20, 50, 100, 500, 1000]
 _MILESTONE_MESSAGES = {
     10: "📊 10명 돌파! 현행 인프라 OK",
-    50: "⚠️ 50명 돌파! 프록시+API 전환 준비 시작",
+    15: "🔧 15명 돌파! LTE 동글 구매 + IP 로테이션 준비 시작\n→ 화웨이 E8372 + 알뜰폰 SIM 구매\n→ docs/프로젝트/요구사항/IP-로테이션-기술조사.md 참조",
+    20: "⚡ 20명 돌파! IP 로테이션 구현 착수 필요\n→ rotate_ip.py + command_worker 통합",
+    50: "⚠️ 50명 돌파! Supabase Pro + 클라우드 서버 검토\n→ docs/프로젝트/요구사항/운영비용-분석.md 참조",
     100: "🚨 100명 돌파! 워커 다중화+서버 스펙업 필수",
     500: "🔥 500명 돌파! 분산 아키텍처 전환 시급",
     1000: "🏆 1000명 돌파!",
