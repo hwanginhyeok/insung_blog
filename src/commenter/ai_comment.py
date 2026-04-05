@@ -21,6 +21,7 @@ import json
 import os
 import random
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import urllib.error
 from difflib import SequenceMatcher
 
@@ -37,6 +38,7 @@ _client: Anthropic | None = None
 _OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
 _OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma3:4b")
 _ollama_available: bool | None = None  # 캐시: None=미확인, True/False
+_OLLAMA_PARALLEL = int(os.environ.get("OLLAMA_PARALLEL", "3"))  # Ollama 병렬 요청 수
 
 # 본문이 너무 길면 앞부분만 사용 (토큰 절약)
 _MAX_BODY_CHARS = 1000
@@ -543,29 +545,40 @@ def generate_comments_batch(
     # D-1: 톤 랜덤화 + 시작어 중복 방지 (배치 Ollama에서도 사용)
     _, tone_hint = _pick_tone()
 
-    # ── 1차: Ollama로 개별 생성 (크레딧 불필요) ──
+    # ── 1차: Ollama로 병렬 생성 (크레딧 불필요) ��─
     if _check_ollama():
-        results: list[str] = []
-        all_ok = True
-        for p in posts:
+        # 각 게시물별 Ollama 호출을 준비
+        def _generate_one(idx: int, p: dict) -> tuple[int, str | None]:
             body = p["body"].strip()
             cat = _detect_category(p.get("title", ""), body)
             cat_hint = _CATEGORY_PROMPT_HINTS.get(cat) if cat else None
-            if len(body) >= 20:
-                ollama_comment = _try_ollama_comment(
-                    body[:_MAX_BODY_CHARS], p["title"],
-                    tone_hint=tone_hint, category_hint=cat_hint,
-                    persona_tone=persona_tone,
-                )
-                if ollama_comment and len(ollama_comment) >= 100 and _is_valid_comment(ollama_comment):
-                    comment = post_process(_clean_comment(ollama_comment))
-                    results.append(comment)
+            if len(body) < 20:
+                return idx, None
+            raw = _try_ollama_comment(
+                body[:_MAX_BODY_CHARS], p["title"],
+                tone_hint=tone_hint, category_hint=cat_hint,
+                persona_tone=persona_tone,
+            )
+            if raw and len(raw) >= 100 and _is_valid_comment(raw):
+                return idx, post_process(_clean_comment(raw))
+            return idx, None
+
+        results: list[str] = [
+            pick_phrase(p["title"], category=_detect_category(p.get("title", ""), p.get("body", "")))
+            for p in posts
+        ]
+        ok_count = 0
+        with ThreadPoolExecutor(max_workers=_OLLAMA_PARALLEL) as pool:
+            futures = {pool.submit(_generate_one, i, p): i for i, p in enumerate(posts)}
+            for future in as_completed(futures):
+                idx, comment = future.result()
+                if comment:
+                    results[idx] = comment
                     recent_comments_local.append(comment)
-                    continue
-            all_ok = False
-            results.append(pick_phrase(p["title"], category=cat))
-        if all_ok or any(len(r) >= 100 for r in results):
-            logger.info(f"Ollama 배치 생성: {sum(1 for r in results if len(r) >= 100)}개 성공")
+                    ok_count += 1
+
+        if ok_count > 0:
+            logger.info(f"Ollama 병렬 배치 생성: {ok_count}/{len(posts)}개 성공")
             return results
 
     # ── 2차: Anthropic API 배치 ──
@@ -672,24 +685,34 @@ def generate_comments_batch(
             logger.warning(f"배치 댓글 생성 오류 (시도 {attempt + 1}/2): {e}")
             continue
 
-    # 배치 실패 → Ollama로 개별 생성 시도
-    logger.warning("배치 댓글 생성 실패 — Ollama 폴백 시도")
-    results: list[str] = []
-    for p in posts:
+    # 배치 실패 → Ollama로 병렬 생성 시도
+    logger.warning("배치 댓글 생성 실패 — Ollama 병렬 폴백 시도")
+
+    def _fallback_one(idx: int, p: dict) -> tuple[int, str | None]:
         body = p["body"].strip()
         cat = _detect_category(p.get("title", ""), body)
         cat_hint = _CATEGORY_PROMPT_HINTS.get(cat) if cat else None
-        if len(body) >= 20:
-            ollama_comment = _try_ollama_comment(
-                body[:_MAX_BODY_CHARS], p["title"],
-                tone_hint=tone_hint, category_hint=cat_hint,
-                persona_tone=persona_tone,
-            )
-            if ollama_comment and len(ollama_comment) >= 100 and _is_valid_comment(ollama_comment):
-                comment = post_process(_clean_comment(ollama_comment))
-                logger.info(f"Ollama 배치 폴백 성공 ({len(comment)}자)")
-                results.append(comment)
-                continue
-        results.append(pick_phrase(p["title"], category=cat))
+        if len(body) < 20:
+            return idx, None
+        raw = _try_ollama_comment(
+            body[:_MAX_BODY_CHARS], p["title"],
+            tone_hint=tone_hint, category_hint=cat_hint,
+            persona_tone=persona_tone,
+        )
+        if raw and len(raw) >= 100 and _is_valid_comment(raw):
+            return idx, post_process(_clean_comment(raw))
+        return idx, None
+
+    results: list[str] = [
+        pick_phrase(p["title"], category=_detect_category(p.get("title", ""), p.get("body", "")))
+        for p in posts
+    ]
+    with ThreadPoolExecutor(max_workers=_OLLAMA_PARALLEL) as pool:
+        futures = {pool.submit(_fallback_one, i, p): i for i, p in enumerate(posts)}
+        for future in as_completed(futures):
+            idx, comment = future.result()
+            if comment:
+                results[idx] = comment
+                logger.info(f"Ollama 병렬 폴백 성공 ({len(comment)}자)")
 
     return results
