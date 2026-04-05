@@ -33,6 +33,7 @@ export default function BotPage() {
     loading,
     showRunWarning,
     avgDuration,
+    toast,
     fetchApproved,
     sendCommand,
     handleRunClick,
@@ -242,6 +243,17 @@ export default function BotPage() {
 
       {/* 최근 실행 이력 (접기/펼치기) */}
       <RunHistoryPanel runs={runs} avgDuration={avgDuration} />
+
+      {/* 토스트 알림 */}
+      {toast && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 rounded-lg px-4 py-3 shadow-lg text-sm font-medium text-white transition-all animate-fade-up ${
+            toast.type === "success" ? "bg-green-600" : "bg-red-600"
+          }`}
+        >
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 }

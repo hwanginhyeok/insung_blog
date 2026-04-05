@@ -8,6 +8,7 @@ import {
   TodayStats,
   CookieStatus,
   BotCommandRecord,
+  COMMAND_LABELS,
   defaultSettings,
   apiFetchStatus,
   apiFetchPending,
@@ -15,6 +16,12 @@ import {
   apiFetchCommands,
   apiSendCommand,
 } from "../_lib/bot-api";
+
+export interface ToastNotification {
+  id: string;
+  message: string;
+  type: "success" | "error";
+}
 
 export interface BotStatusState {
   // 데이터
@@ -37,6 +44,7 @@ export interface BotStatusState {
   loading: boolean;
   showRunWarning: boolean;
   avgDuration: number | null;
+  toast: ToastNotification | null;
 
   // 액션
   fetchData: () => Promise<void>;
@@ -79,6 +87,8 @@ export function useBotStatus(): BotStatusState {
 
   // 재실행 경고
   const [showRunWarning, setShowRunWarning] = useState(false);
+  // 토스트 알림
+  const [toast, setToast] = useState<ToastNotification | null>(null);
 
   // approved 댓글 fetch
   const fetchApproved = useCallback(async () => {
@@ -106,6 +116,71 @@ export function useBotStatus(): BotStatusState {
   useEffect(() => {
     isRunningRef.current = activeCommand?.status === "running";
   }, [activeCommand?.status]);
+
+  // 명령 완료/실패 시 팝업 알림 + 알림음
+  const prevCommandRef = useRef<{ id: string; status: string } | null>(null);
+  useEffect(() => {
+    // 최신 완료/실패 명령 찾기
+    const latest = botCommands
+      .filter((c) => c.status === "completed" || c.status === "failed")
+      .sort((a, b) => (b.completed_at || b.created_at).localeCompare(a.completed_at || a.created_at))[0];
+
+    if (!latest) return;
+    // 이전과 같은 명령이면 무시
+    if (prevCommandRef.current?.id === latest.id && prevCommandRef.current?.status === latest.status) return;
+    // 첫 로드 시에는 알림 안 띄움
+    if (!prevCommandRef.current) {
+      prevCommandRef.current = { id: latest.id, status: latest.status };
+      return;
+    }
+    prevCommandRef.current = { id: latest.id, status: latest.status };
+
+    const label = COMMAND_LABELS[latest.command as keyof typeof COMMAND_LABELS] || latest.command;
+    const isSuccess = latest.status === "completed";
+    const msg = isSuccess
+      ? `✅ ${label} 완료!`
+      : `❌ ${label} 실패`;
+
+    // 브라우저 알림음
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = isSuccess ? 880 : 440;
+      gain.gain.value = 0.3;
+      osc.start();
+      osc.stop(ctx.currentTime + (isSuccess ? 0.15 : 0.3));
+      if (isSuccess) {
+        // 성공: 짧은 두 번 비프
+        setTimeout(() => {
+          const osc2 = ctx.createOscillator();
+          const gain2 = ctx.createGain();
+          osc2.connect(gain2);
+          gain2.connect(ctx.destination);
+          osc2.frequency.value = 1100;
+          gain2.gain.value = 0.3;
+          osc2.start();
+          osc2.stop(ctx.currentTime + 0.15);
+        }, 200);
+      }
+    } catch {
+      // AudioContext 미지원 무시
+    }
+
+    // 브라우저 Notification API (허용된 경우, 탭이 비활성일 때)
+    if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.visibilityState === "hidden") {
+      new Notification("인성이 봇", { body: msg });
+    } else if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+
+    // 인라인 토스트 팝업
+    const toastId = latest.id + latest.status;
+    setToast({ id: toastId, message: msg, type: isSuccess ? "success" : "error" });
+    setTimeout(() => setToast((prev) => prev?.id === toastId ? null : prev), 4000);
+  }, [botCommands]);
 
   // 탭 비활성 시 폴링 제어 + 활성 명령 없으면 30초 간격
   // interval + isRunning 모두 ref로 관리 → handleVisibility 클로저 stale 방지
@@ -260,6 +335,7 @@ export function useBotStatus(): BotStatusState {
     loading,
     showRunWarning,
     avgDuration,
+    toast,
     fetchData,
     fetchApproved,
     sendCommand,
