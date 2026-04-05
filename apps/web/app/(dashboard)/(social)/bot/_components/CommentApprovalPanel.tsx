@@ -131,7 +131,7 @@ export function CommentApprovalPanel({
             {pending.length}건의 댓글이 접혀 있습니다
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
             {pending.map((c) => (
               <div key={c.id} className="rounded-lg border p-3 space-y-2">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
@@ -231,6 +231,7 @@ export function CommentApprovalPanel({
             <p className="text-sm font-medium text-muted-foreground">
               게시 대기 ({approvedComments.length}건)
             </p>
+            <div className="max-h-[300px] overflow-y-auto space-y-2 pr-1">
             {approvedComments.map((c) => (
               <div key={c.id} className="flex items-center justify-between gap-2 rounded border px-3 py-2">
                 <div className="min-w-0 flex-1">
@@ -252,6 +253,7 @@ export function CommentApprovalPanel({
                 </Button>
               </div>
             ))}
+            </div>
           </div>
         )}
       </CardContent>
