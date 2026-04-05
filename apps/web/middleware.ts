@@ -18,9 +18,11 @@ export async function middleware(req: NextRequest) {
           return req.cookies.getAll();
         },
         setAll(cookiesToSet) {
+          const isSecure = req.nextUrl.protocol === "https:";
           cookiesToSet.forEach(({ name, value, options }) => {
+            const opts = { ...options, secure: isSecure };
             req.cookies.set(name, value);
-            res.cookies.set(name, value, options);
+            res.cookies.set(name, value, opts);
           });
         },
       },

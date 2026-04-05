@@ -31,17 +31,20 @@ export async function GET(req: NextRequest) {
 
   const res = NextResponse.redirect(naverAuthUrl.toString());
 
+  const isSecure = origin.startsWith("https://");
   res.cookies.set("oauth_state", state, {
     httpOnly: true,
     maxAge: 600,
     path: "/",
     sameSite: "lax",
+    secure: isSecure,
   });
   res.cookies.set("oauth_redirect", redirect, {
     httpOnly: true,
     maxAge: 600,
     path: "/",
     sameSite: "lax",
+    secure: isSecure,
   });
 
   return res;

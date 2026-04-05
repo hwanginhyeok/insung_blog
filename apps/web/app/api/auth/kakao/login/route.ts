@@ -32,17 +32,20 @@ export async function GET(req: NextRequest) {
   const res = NextResponse.redirect(kakaoAuthUrl.toString());
 
   // CSRF 방지용 state + redirect 경로를 쿠키에 저장
+  const isSecure = origin.startsWith("https://");
   res.cookies.set("oauth_state", state, {
     httpOnly: true,
     maxAge: 600,
     path: "/",
     sameSite: "lax",
+    secure: isSecure,
   });
   res.cookies.set("oauth_redirect", redirect, {
     httpOnly: true,
     maxAge: 600,
     path: "/",
     sameSite: "lax",
+    secure: isSecure,
   });
 
   return res;
