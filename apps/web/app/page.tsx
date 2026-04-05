@@ -30,7 +30,7 @@ export default function LandingPage() {
             {/* 모바일 — 인라인 스탯 배지 */}
             <div className="mt-6 flex flex-wrap gap-2 md:hidden">
               <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground">1분 글쓰기</span>
-              <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground">일 100개 댓글</span>
+              <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground">일 200개 댓글</span>
               <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground">이웃 자동관리</span>
             </div>
           </div>
@@ -76,7 +76,7 @@ export default function LandingPage() {
             {/* 스탯 */}
             <div className="mt-4 grid grid-cols-3 gap-3">
               <MiniStat number="1분" label="글쓰기" />
-              <MiniStat number="100개" label="일 댓글" />
+              <MiniStat number="200개" label="일 댓글" />
               <MiniStat number="자동" label="이웃관리" />
             </div>
           </div>
@@ -125,7 +125,7 @@ export default function LandingPage() {
                 <p className="mt-2 text-muted-foreground leading-relaxed">
                   이웃 블로그 글을 읽고 맥락에 맞는 댓글을 자동 생성합니다.
                   내 글에 달린 댓글에도 AI가 따뜻하게 답글을 달아줍니다.
-                  프로 기준 하루 최대 100개 댓글, 50개 답글.
+                  프로 기준 하루 최대 200개 댓글, 100개 답글.
                 </p>
               </div>
               <div className="border-t border-border pt-8 mt-8 md:mt-0">

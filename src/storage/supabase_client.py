@@ -164,10 +164,12 @@ def get_user_bot_config(user_id: str) -> dict | None:
         except Exception:
             pass
 
+        # ⚠ 동기화 필수: 이 값은 apps/web/lib/tier.ts의 TIER_LIMITS와 반드시 일치해야 함.
+        #   수정 시 양쪽 모두 업데이트할 것. (2026-04-05 동기화 완료)
         _TIER_LIMITS = {
-            "free":  {"comments": 10, "bloggers": 3,  "replies": 5,  "neighbor": False},
-            "basic": {"comments": 30, "bloggers": 10, "replies": 20, "neighbor": True},
-            "pro":   {"comments": 100,"bloggers": 30, "replies": 50, "neighbor": True},
+            "free":  {"comments": 10, "bloggers": 3,  "replies": 5,   "neighbor": False},
+            "basic": {"comments": 50, "bloggers": 15, "replies": 30,  "neighbor": True},
+            "pro":   {"comments": 200,"bloggers": 50, "replies": 100, "neighbor": True},
         }
         limits = _TIER_LIMITS.get(tier, _TIER_LIMITS["free"])
 

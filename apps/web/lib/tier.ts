@@ -22,6 +22,8 @@ import { createAdminClient } from "@/lib/supabase-admin";
 
 export type Tier = "free" | "basic" | "pro";
 
+// ⚠ 동기화 필수: 댓글/블로거/대댓글 한도는 src/storage/supabase_client.py의 _TIER_LIMITS와
+//   반드시 일치해야 함. 수정 시 양쪽 모두 업데이트할 것. (2026-04-05 동기화 완료)
 export const TIER_LIMITS: Record<
   Tier,
   {
@@ -34,9 +36,9 @@ export const TIER_LIMITS: Record<
     neighborBot: boolean;     // 이웃봇 사용 가능
   }
 > = {
-  free:  { label: "무료",   max: 5,    price: 0,     commentsPerDay: 10,  bloggersPerDay: 3,  repliesPerDay: 5,  neighborBot: false },
-  basic: { label: "베이직", max: 30,   price: 7900,  commentsPerDay: 30,  bloggersPerDay: 10, repliesPerDay: 20, neighborBot: true },
-  pro:   { label: "프로",   max: 9999, price: 14900, commentsPerDay: 100, bloggersPerDay: 30, repliesPerDay: 50, neighborBot: true },
+  free:  { label: "무료",   max: 5,    price: 0,     commentsPerDay: 10,  bloggersPerDay: 3,  repliesPerDay: 5,   neighborBot: false },
+  basic: { label: "베이직", max: 30,   price: 7900,  commentsPerDay: 50,  bloggersPerDay: 15, repliesPerDay: 30,  neighborBot: true },
+  pro:   { label: "프로",   max: 9999, price: 14900, commentsPerDay: 200, bloggersPerDay: 50, repliesPerDay: 100, neighborBot: true },
 };
 
 export interface UsageResult {
