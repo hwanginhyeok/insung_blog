@@ -27,6 +27,7 @@ _BROWSER_ARGS = [
 async def create_browser(
     pw: Playwright,
     headless: bool = True,
+    proxy_url: str | None = None,
 ) -> tuple[Browser, BrowserContext, Page]:
     """
     Playwright 브라우저 + 컨텍스트 + 페이지 생성.
@@ -34,14 +35,16 @@ async def create_browser(
     Args:
         pw: async_playwright() 인스턴스
         headless: True=백그라운드, False=화면 표시
+        proxy_url: 프록시 URL (없으면 직접 연결)
 
     Returns:
         (browser, context, page) 튜플
     """
-    browser = await pw.chromium.launch(
-        headless=headless,
-        args=_BROWSER_ARGS,
-    )
+    launch_opts: dict = {"headless": headless, "args": _BROWSER_ARGS}
+    if proxy_url:
+        launch_opts["proxy"] = {"server": proxy_url}
+
+    browser = await pw.chromium.launch(**launch_opts)
     context = await browser.new_context(
         user_agent=_USER_AGENT,
         viewport=_VIEWPORT,

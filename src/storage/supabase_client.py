@@ -168,6 +168,7 @@ def get_user_bot_config(user_id: str) -> dict | None:
             "has_cookies": cookies is not None,
             "persona_prompt": persona_prompt,
             "reply_persona_prompt": reply_persona_prompt,
+            "proxy_url": settings_row.get("proxy_url"),
             "settings": {
                 "approval_mode": settings_row["approval_mode"],
                 "is_active": settings_row["is_active"],

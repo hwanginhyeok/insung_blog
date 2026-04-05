@@ -54,15 +54,20 @@ Supabase (공유 제어 평면)
 | PERSONA-SPLIT | 페르소나 용도별 3분할 (글쓰기/댓글/대댓글) | P0 | ✅ 완료 | persona_builder 용도별 빌드 + 닉네임 필터. 댓글 테스트 통과 (2026-04-05) |
 | COMMENT-REVOKE | 승인 취소 기능 (approved → pending 되돌리기) | P1 | 진행중 | API revoke 추가 완료, 웹 UI "승인 취소" 버튼 추가. 테스트 필요 (2026-04-04) |
 | AUTO-REPLY | 대댓글 자동 답글 (내 블로그 댓글에 AI 답글) | P1 | 진행중 | 백엔드 완료 (수집+생성+게시), E2E 1건 성공. reply용 페르소나 연동 완료 (2026-04-05) |
-| BUG-REPORT | 버그/오류 리포팅 프로세스 구축 | P1 | 대기 | 이슈 발생 시 자동 수집+추적 체계 필요 (2026-04-04) |
+| BUG-REPORT | 버그/오류 리포팅 프로세스 구축 | P1 | ✅ 완료 | FeedbackPanel 플로팅 패널 + support_tickets 테이블 + 텔레그램 알림 (2026-04-05) |
 | OLLAMA-PARALLEL | Ollama 병렬 댓글 생성 | P1 | ✅ 완료 | ThreadPoolExecutor 3병렬 + OLLAMA_NUM_PARALLEL=3. 순차 25개/분→병렬 33개/분 (2026-04-05) |
 | COOKIE-ONBOARD | 쿠키 미등록 온보딩 배너 | P1 | ✅ 완료 | 봇 페이지 상단 노란 배너 + 스크롤 링크 (2026-04-05) |
 | DESIGN-REVIEW | 봇 페이지 디자인 감사 + 수정 | P2 | ✅ 완료 | 이모지→lucide 아이콘, 스탯 강조, 모바일 레이아웃 등 8건 수정 (2026-04-05) |
 | DESIGN-SYSTEM | DESIGN.md 생성 (디자인 시스템 문서화) | P2 | ✅ 완료 | apps/web/DESIGN.md — 색상/타이포/간격/컴포넌트 분석 (2026-04-05) |
 | OAUTH-COOKIE-FIX | OAuth 쿠키 secure 플래그 동적 설정 | P1 | ✅ 완료 | HTTP 환경에서 OAuth 쿠키 설정 안 되는 문제 수정 (2026-04-05) |
 | COLLECT-PARALLEL | 블로그 수집 병렬화 설계 | P1 | 계획 | 방문+수집 단계 asyncio.gather 병렬화. 수집 5분→2분 예상 (2026-04-05) |
-| SCALING-REPORT | 스케일링 공학 분석 레포트 | P0 | 작성중 | 10/100/1000명 시나리오별 인프라+비용+병목 분석 (2026-04-05) |
-| PRODUCT-REPORT | 프로덕트 레포트 + 성능 문서 | P1 | 작성중 | PRODUCT_REPORT.md + PERFORMANCE.md + docs 정리 (2026-04-05) |
+| SCALING-REPORT | 스케일링 공학 분석 레포트 | P0 | ✅ 완료 | 10/100/1000명 시나리오별 인프라+비용+병목 분석 (2026-04-05) |
+| PRODUCT-REPORT | 프로덕트 레포트 + 성능 문서 | P1 | ✅ 완료 | PRODUCT_REPORT.md + PERFORMANCE.md + docs 정리 (2026-04-05) |
+| SIGNUP-ALERT | 신규 가입 텔레그램 알림 + 임계점 경고 | P0 | ✅ 완료 | webhook + 워커 백업 체크. 10/50/100/500/1000명 마일스톤 (2026-04-05) |
+| FEEDBACK-PANEL | 문의/버그 리포트 플로팅 패널 | P1 | ✅ 완료 | FeedbackPanel + support_tickets + 관리자 알림. migration 적용 필요 (2026-04-05) |
+| NEIGHBOR-IMPROVE | 이웃봇 10건 이슈 일괄 개선 | P1 | ✅ 완료 | DB 한도/추천 감쇠/셀렉터 폴백/쿠키 감지/RLS/UI/테스트 (2026-04-05) |
+| PROXY-READY | 프록시 인프라 코드 준비 | P1 | ✅ 완료 | browser.py proxy_url 파라미터 + bot_settings 컬럼. 30명+ 시 구매 (2026-04-05) |
+| PROXY-DEPLOY | 프록시 실제 도입 | P2 | 대기 | 30명 도달 시 주거용 프록시 구매 + 유저별 할당 (docs/프로젝트/요구사항/프록시-전략.md) |
 
 #### MIGRATION-UNIQUE 실행 절차 (집에서 직접 수행)
 
