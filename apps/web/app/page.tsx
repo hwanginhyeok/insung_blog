@@ -9,19 +9,19 @@ export default function LandingPage() {
         <div className="md:grid md:grid-cols-5 md:gap-16 md:items-center">
           {/* 텍스트 — 좌측 정렬 (3/5) */}
           <div className="md:col-span-3">
-            <p className="text-sm font-medium text-primary tracking-wide uppercase">
+            <p className="text-sm font-medium text-primary tracking-wide uppercase animate-fade-up">
               AI 블로그 파트너
             </p>
-            <h1 className="mt-3 text-3xl sm:text-4xl md:text-5xl font-bold text-foreground leading-[1.15] sm:leading-[1.15] md:leading-[1.15]">
+            <h1 className="mt-3 text-3xl sm:text-4xl md:text-5xl font-bold text-foreground leading-[1.15] sm:leading-[1.15] md:leading-[1.15] animate-fade-up delay-100">
               경험에 집중하세요.
               <br />
               글은 AI가 쓸게요.
             </h1>
-            <p className="mt-5 text-lg text-muted-foreground max-w-lg leading-relaxed">
+            <p className="mt-5 text-lg text-muted-foreground max-w-lg leading-relaxed animate-fade-up delay-200">
               사진과 메모만 올리면 당신만의 스타일로 블로그 글을 완성합니다.
               체험단 리뷰, 맛집 후기, 일상 기록까지.
             </p>
-            <div className="mt-8 flex items-center gap-4">
+            <div className="mt-8 flex items-center gap-4 animate-fade-up delay-300">
               <Link href="/login?mode=signup">
                 <Button size="lg" className="text-base px-8">
                   무료로 시작하기
@@ -38,7 +38,7 @@ export default function LandingPage() {
           </div>
 
           {/* 데스크톱 — 요약 스탯 카드 (2/5) */}
-          <div className="hidden md:block md:col-span-2">
+          <div className="hidden md:block md:col-span-2 animate-slide-in-right delay-300">
             <div className="bg-muted rounded-2xl p-8 space-y-6">
               <StatItem number="1분" label="글 하나 완성까지" />
               <StatItem number="30개" label="일일 자동 댓글" />
@@ -51,7 +51,7 @@ export default function LandingPage() {
       {/* 기능 섹션 — 2컬럼 비대칭 */}
       <section className="border-t border-border">
         <div className="max-w-6xl mx-auto px-6 py-20">
-          <h2 className="text-2xl font-bold text-foreground">
+          <h2 className="text-2xl font-bold text-foreground animate-fade-up">
             블로그 운영, 이렇게 바뀝니다
           </h2>
 
@@ -109,10 +109,10 @@ export default function LandingPage() {
       {/* 하단 CTA */}
       <section className="border-t border-border bg-muted">
         <div className="max-w-4xl mx-auto px-6 py-16 text-center">
-          <h2 className="text-2xl font-bold text-foreground">
+          <h2 className="text-2xl font-bold text-foreground animate-fade-up">
             매일 1-2시간, 더 가치있게 쓰세요
           </h2>
-          <p className="mt-3 text-muted-foreground">
+          <p className="mt-3 text-muted-foreground animate-fade-up delay-100">
             글쓰기에 쏟는 시간을 줄이고, 실제 경험에 집중하세요.
           </p>
           <div className="mt-6">
