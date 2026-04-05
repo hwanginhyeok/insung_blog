@@ -207,6 +207,26 @@ export async function sendDiscoverAndVisit(
   return { success: true };
 }
 
+// ── 이웃 신청 메시지 커스텀 ──
+
+export async function fetchNeighborRequestMessage(): Promise<string> {
+  const res = await fetch("/api/bot/settings");
+  if (!res.ok) return "";
+  const data = await res.json();
+  return data.neighbor_request_message || "";
+}
+
+export async function saveNeighborRequestMessage(
+  message: string,
+): Promise<boolean> {
+  const res = await fetch("/api/bot/settings", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ neighbor_request_message: message }),
+  });
+  return res.ok;
+}
+
 export interface BotCommandStatus {
   id: string;
   command: string;

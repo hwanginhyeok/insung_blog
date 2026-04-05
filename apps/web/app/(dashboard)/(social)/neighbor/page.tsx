@@ -11,10 +11,17 @@ import {
   saveBlogThemes,
   fetchNeighborStats,
   fetchNeighborList,
+  fetchInteractions,
+  fetchRecommendations,
   type BotCommandStatus,
   type Neighbor,
   type NeighborStats,
+  type NeighborInteraction,
+  type NeighborRecommendation,
 } from "./_lib/neighbor-api";
+import { RecentInteractions } from "./_components/RecentInteractions";
+import { NeighborRecommendations } from "./_components/NeighborRecommendations";
+import { VisitResults } from "./_components/VisitResults";
 
 /**
  * 이웃 관리 페이지 — 간소화 버전
@@ -24,10 +31,13 @@ import {
  * 2. 새 이웃 찾기 (discover_and_visit) — 키워드로 찾아서 댓글+이웃 신청
  *
  * + 이웃 현황 (간단 통계 + 목록)
+ * + 최근 교류 / 추천 / 실행 이력
  */
 export default function NeighborPage() {
   const [stats, setStats] = useState<NeighborStats | null>(null);
   const [neighbors, setNeighbors] = useState<Neighbor[]>([]);
+  const [interactions, setInteractions] = useState<NeighborInteraction[]>([]);
+  const [recommendations, setRecommendations] = useState<NeighborRecommendation[]>([]);
   const [loading, setLoading] = useState(true);
 
   // 자동화 상태
@@ -44,15 +54,22 @@ export default function NeighborPage() {
   // 이웃 목록 토글
   const [listVisible, setListVisible] = useState(false);
 
+  // 하단 섹션 토글
+  const [showVisitResults, setShowVisitResults] = useState(false);
+
   useEffect(() => {
     Promise.all([
       fetchNeighborStats(),
       fetchNeighborList(),
       fetchBlogThemes(),
-    ]).then(([s, n, t]) => {
+      fetchInteractions(),
+      fetchRecommendations(),
+    ]).then(([s, n, t, i, rec]) => {
       setStats(s);
       setNeighbors(n);
       setThemes(t);
+      setInteractions(i);
+      setRecommendations(rec);
       setLoading(false);
     });
   }, []);
@@ -60,6 +77,8 @@ export default function NeighborPage() {
   function refresh() {
     fetchNeighborStats().then(setStats);
     fetchNeighborList().then(setNeighbors);
+    fetchInteractions().then(setInteractions);
+    fetchRecommendations().then(setRecommendations);
   }
 
   // 명령 폴링
@@ -296,6 +315,30 @@ export default function NeighborPage() {
           </CardContent>
         )}
       </Card>
+
+      {/* 이웃 추천 — recommendations가 있을 때만 표시 */}
+      {recommendations.length > 0 && (
+        <NeighborRecommendations
+          recommendations={recommendations}
+          onUpdate={refresh}
+        />
+      )}
+
+      {/* 최근 교류 */}
+      <RecentInteractions interactions={interactions} />
+
+      {/* 실행 이력 + 대기 댓글 — 토글로 표시 */}
+      <div className="space-y-2">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-xs text-muted-foreground"
+          onClick={() => setShowVisitResults(!showVisitResults)}
+        >
+          {showVisitResults ? "실행 이력 접기" : "실행 이력 / 대기 댓글 보기"}
+        </Button>
+        {showVisitResults && <VisitResults />}
+      </div>
     </div>
   );
 }
