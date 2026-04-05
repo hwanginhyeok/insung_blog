@@ -224,8 +224,7 @@ function LoginForm() {
 
             <Button
               type="button"
-              className="w-full border-0 font-medium"
-              style={{ backgroundColor: "#FEE500", color: "#191919" }}
+              className="w-full border-0 font-medium bg-[#FEE500] text-[#191919] hover:bg-[#FDD800]"
               onClick={() =>
                 (window.location.href = `/api/auth/kakao/login?redirect=${encodeURIComponent(redirect)}`)
               }
@@ -235,8 +234,7 @@ function LoginForm() {
 
             <Button
               type="button"
-              className="w-full border-0 font-medium text-white"
-              style={{ backgroundColor: "#03C75A" }}
+              className="w-full border-0 font-medium text-white bg-[#03C75A] hover:bg-[#02b350]"
               onClick={() =>
                 (window.location.href = `/api/auth/naver/login?redirect=${encodeURIComponent(redirect)}`)
               }
