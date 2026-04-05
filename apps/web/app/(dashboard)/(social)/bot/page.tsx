@@ -145,6 +145,29 @@ export default function BotPage() {
         </p>
       </div>
 
+      {/* 쿠키 미등록 온보딩 배너 */}
+      {!cookieStatus?.hasCookies && (
+        <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-5">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">🔑</span>
+            <div className="space-y-2">
+              <h3 className="font-semibold text-amber-900">네이버 쿠키를 먼저 등록해주세요</h3>
+              <p className="text-sm text-amber-800 leading-relaxed">
+                댓글봇을 사용하려면 네이버 로그인 쿠키가 필요합니다.
+                아래 <strong>&quot;네이버 쿠키&quot;</strong> 섹션에서 쿠키를 업로드해주세요.
+              </p>
+              <button
+                type="button"
+                className="text-sm font-medium text-amber-700 underline hover:text-amber-900"
+                onClick={() => document.getElementById("cookie-section")?.scrollIntoView({ behavior: "smooth" })}
+              >
+                쿠키 업로드하러 가기 ↓
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 3단계 Stepper + Step 1 봇 실행 + Step 3 댓글 게시 */}
       <BotControlPanel
         pending={pending}
@@ -200,6 +223,7 @@ export default function BotPage() {
       />
 
       {/* 네이버 쿠키 (접기/펼치기) */}
+      <div id="cookie-section" />
       <CookieStatusBadge
         cookieStatus={cookieStatus}
         onStatusChange={setCookieStatus}
