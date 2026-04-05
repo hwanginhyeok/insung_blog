@@ -24,11 +24,19 @@ export type Tier = "free" | "basic" | "pro";
 
 export const TIER_LIMITS: Record<
   Tier,
-  { label: string; max: number; price: number }
+  {
+    label: string;
+    max: number;          // AI 글쓰기 월 한도
+    price: number;
+    commentsPerDay: number;   // 댓글/일
+    bloggersPerDay: number;   // 블로거/일
+    repliesPerDay: number;    // 대댓글/일
+    neighborBot: boolean;     // 이웃봇 사용 가능
+  }
 > = {
-  free: { label: "무료", max: 5, price: 0 },
-  basic: { label: "베이직", max: 30, price: 7900 },
-  pro: { label: "프로", max: 9999, price: 14900 },  // 무제한 (UI에서 "무제한" 표시)
+  free:  { label: "무료",   max: 5,    price: 0,     commentsPerDay: 10,  bloggersPerDay: 3,  repliesPerDay: 5,  neighborBot: false },
+  basic: { label: "베이직", max: 30,   price: 7900,  commentsPerDay: 30,  bloggersPerDay: 10, repliesPerDay: 20, neighborBot: true },
+  pro:   { label: "프로",   max: 9999, price: 14900, commentsPerDay: 100, bloggersPerDay: 30, repliesPerDay: 50, neighborBot: true },
 };
 
 export interface UsageResult {

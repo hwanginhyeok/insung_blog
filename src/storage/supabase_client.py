@@ -155,6 +155,22 @@ def get_user_bot_config(user_id: str) -> dict | None:
         if naver_blog_id and naver_blog_id not in naver_blog_ids:
             naver_blog_ids.append(naver_blog_id)
 
+        # 유저 티어 조회 → 한도 오버라이드
+        tier = "free"
+        try:
+            user_row = sb.table("users").select("tier").eq("id", user_id).limit(1).execute()
+            if user_row.data:
+                tier = user_row.data[0].get("tier") or "free"
+        except Exception:
+            pass
+
+        _TIER_LIMITS = {
+            "free":  {"comments": 10, "bloggers": 3,  "replies": 5,  "neighbor": False},
+            "basic": {"comments": 30, "bloggers": 10, "replies": 20, "neighbor": True},
+            "pro":   {"comments": 100,"bloggers": 30, "replies": 50, "neighbor": True},
+        }
+        limits = _TIER_LIMITS.get(tier, _TIER_LIMITS["free"])
+
         # 용도별 페르소나 프롬프트 로드 (없으면 None → 기본 톤 사용)
         from src.persona.persona_builder import load_persona_prompt
         persona_prompt = load_persona_prompt(user_id, "comment")
@@ -169,13 +185,17 @@ def get_user_bot_config(user_id: str) -> dict | None:
             "persona_prompt": persona_prompt,
             "reply_persona_prompt": reply_persona_prompt,
             "proxy_url": settings_row.get("proxy_url"),
+            "tier": tier,
+            "tier_limits": limits,
             "settings": {
                 "approval_mode": settings_row["approval_mode"],
                 "is_active": settings_row["is_active"],
                 "weekday_hours": settings_row["weekday_hours"],
                 "weekend_hours": settings_row["weekend_hours"],
-                "max_comments_per_day": settings_row["max_comments_per_day"],
-                "max_bloggers_per_day": settings_row["max_bloggers_per_day"],
+                "max_comments_per_day": limits["comments"],
+                "max_bloggers_per_day": limits["bloggers"],
+                "max_replies_per_day": limits["replies"],
+                "neighbor_bot_enabled": limits["neighbor"],
                 "comment_prompt": settings_row.get("comment_prompt"),
             },
         }
