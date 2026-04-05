@@ -102,13 +102,25 @@ def generate_reply(
         f"위 댓글에 블로그 주인으로서 답글을 작성해줘."
     )
 
+    def _trim_reply(text: str) -> str:
+        """답글 길이 하드캡 (200자). 문장 단위로 자름."""
+        if len(text) <= 200:
+            return text
+        # 200자 이내에서 마지막 문장 부호 찾기
+        cut = text[:200]
+        for sep in [".", "!", "요", "요!", "네요", "세요"]:
+            last = cut.rfind(sep)
+            if last > 80:
+                return cut[:last + len(sep)]
+        return cut.rstrip() + "..."
+
     # 1차: Ollama 시도
     if _check_ollama():
         ollama_reply = _call_ollama(system, user_msg, max_tokens=200)
         if ollama_reply:
             reply = _clean_comment(ollama_reply)
             if len(reply) >= 30 and _is_valid_comment(reply):
-                result = post_process(reply)
+                result = _trim_reply(post_process(reply))
                 logger.info(f"Ollama 답글 생성 ({len(result)}자): {result[:40]}...")
                 return result
 
@@ -124,7 +136,7 @@ def generate_reply(
         reply = response.content[0].text.strip()
         reply = _clean_comment(reply)
         if len(reply) >= 30 and _is_valid_comment(reply):
-            result = post_process(reply)
+            result = _trim_reply(post_process(reply))
             logger.info(f"Anthropic 답글 생성 ({len(result)}자): {result[:40]}...")
             return result
     except Exception as e:

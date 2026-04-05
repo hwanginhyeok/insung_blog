@@ -571,11 +571,14 @@ def generate_comments_batch(
         with ThreadPoolExecutor(max_workers=_OLLAMA_PARALLEL) as pool:
             futures = {pool.submit(_generate_one, i, p): i for i, p in enumerate(posts)}
             for future in as_completed(futures):
-                idx, comment = future.result()
-                if comment:
-                    results[idx] = comment
-                    recent_comments_local.append(comment)
-                    ok_count += 1
+                try:
+                    idx, comment = future.result(timeout=90)
+                    if comment:
+                        results[idx] = comment
+                        recent_comments_local.append(comment)
+                        ok_count += 1
+                except Exception as e:
+                    logger.warning(f"Ollama 병렬 생성 개별 실패: {e}")
 
         if ok_count > 0:
             logger.info(f"Ollama 병렬 배치 생성: {ok_count}/{len(posts)}개 성공")
@@ -710,9 +713,12 @@ def generate_comments_batch(
     with ThreadPoolExecutor(max_workers=_OLLAMA_PARALLEL) as pool:
         futures = {pool.submit(_fallback_one, i, p): i for i, p in enumerate(posts)}
         for future in as_completed(futures):
-            idx, comment = future.result()
-            if comment:
-                results[idx] = comment
+            try:
+                idx, comment = future.result(timeout=90)
+                if comment:
+                    results[idx] = comment
+            except Exception as e:
+                logger.warning(f"Ollama 폴백 개별 실패: {e}")
                 logger.info(f"Ollama 병렬 폴백 성공 ({len(comment)}자)")
 
     return results
