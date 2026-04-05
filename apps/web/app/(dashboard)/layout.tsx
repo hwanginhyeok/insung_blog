@@ -1,5 +1,6 @@
 import { Header } from "@/components/nav/header";
 import { OnboardingDialog } from "@/components/onboarding-dialog";
+import { FeedbackPanel } from "@/components/FeedbackPanel";
 
 export default function DashboardLayout({
   children,
@@ -11,6 +12,7 @@ export default function DashboardLayout({
       <Header />
       <main>{children}</main>
       <OnboardingDialog />
+      <FeedbackPanel />
     </div>
   );
 }
