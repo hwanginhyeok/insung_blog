@@ -2,9 +2,9 @@
  * 구독 티어 정의 + 월간 사용량 관리 (서버 전용)
  *
  * 티어별 월간 AI 생성 한도:
- *   free  (무료)   → 10회/월
- *   basic (베이직) → 50회/월
- *   pro   (프로)   → 200회/월
+ *   free  (무료)   → 5회/월
+ *   basic (베이직) → 30회/월
+ *   pro   (프로)   → 무제한 (9999)
  *
  * 사용량 흐름 (원자적):
  *   1. reserveUsage() — DB 함수로 체크 + 증분을 원자적 실행 (FOR UPDATE 행 잠금)
@@ -22,10 +22,13 @@ import { createAdminClient } from "@/lib/supabase-admin";
 
 export type Tier = "free" | "basic" | "pro";
 
-export const TIER_LIMITS: Record<Tier, { label: string; max: number }> = {
-  free: { label: "무료", max: 10 },
-  basic: { label: "베이직", max: 50 },
-  pro: { label: "프로", max: 200 },
+export const TIER_LIMITS: Record<
+  Tier,
+  { label: string; max: number; price: number }
+> = {
+  free: { label: "무료", max: 5, price: 0 },
+  basic: { label: "베이직", max: 30, price: 7900 },
+  pro: { label: "프로", max: 9999, price: 14900 },  // 무제한 (UI에서 "무제한" 표시)
 };
 
 export interface UsageResult {
