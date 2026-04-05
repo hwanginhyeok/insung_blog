@@ -436,8 +436,9 @@ export default function CalendarPage() {
             <CardContent className="space-y-4">
               {/* 주제 */}
               <div>
-                <label className="mb-1 block text-sm font-medium">주제</label>
+                <label htmlFor="cal-topic" className="mb-1 block text-sm font-medium">주제</label>
                 <Input
+                  id="cal-topic"
                   placeholder="오늘 뭘 쓸까요?"
                   value={formTopic}
                   onChange={(e) => setFormTopic(e.target.value)}
@@ -467,8 +468,9 @@ export default function CalendarPage() {
 
               {/* 메모 */}
               <div>
-                <label className="mb-1 block text-sm font-medium">메모</label>
+                <label htmlFor="cal-memo" className="mb-1 block text-sm font-medium">메모</label>
                 <Textarea
+                  id="cal-memo"
                   placeholder="메모 (선택사항)"
                   value={formMemo}
                   onChange={(e) => setFormMemo(e.target.value)}
