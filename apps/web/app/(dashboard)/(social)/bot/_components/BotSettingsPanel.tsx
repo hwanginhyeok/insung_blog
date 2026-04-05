@@ -64,8 +64,9 @@ export function BotSettingsPanel({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <label className="text-sm font-medium">내 네이버 블로그 ID</label>
+              <label htmlFor="naver-blog-id" className="text-sm font-medium">내 네이버 블로그 ID</label>
               <Input
+                id="naver-blog-id"
                 placeholder="예: youyoubear0517"
                 value={settingsDraft.naver_blog_id || ""}
                 onChange={(e) =>
@@ -87,8 +88,9 @@ export function BotSettingsPanel({
             </div>
 
             <div>
-              <label className="text-sm font-medium">모드</label>
+              <label htmlFor="approval-mode" className="text-sm font-medium">모드</label>
               <select
+                id="approval-mode"
                 className="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm"
                 value={settingsDraft.approval_mode}
                 onChange={(e) =>
@@ -183,8 +185,9 @@ export function BotSettingsPanel({
             </div>
 
             <div>
-              <label className="text-sm font-medium">일일 블로거 한도</label>
+              <label htmlFor="max-bloggers" className="text-sm font-medium">일일 블로거 한도</label>
               <Input
+                id="max-bloggers"
                 type="number"
                 min={1}
                 max={50}
@@ -200,8 +203,9 @@ export function BotSettingsPanel({
             </div>
 
             <div>
-              <label className="text-sm font-medium">일일 댓글 한도</label>
+              <label htmlFor="max-comments" className="text-sm font-medium">일일 댓글 한도</label>
               <Input
+                id="max-comments"
                 type="number"
                 min={1}
                 max={100}
@@ -239,8 +243,9 @@ export function BotSettingsPanel({
               </div>
 
               <div>
-                <label className="text-sm font-medium">일일 신청 한도</label>
+                <label htmlFor="max-neighbor-requests" className="text-sm font-medium">일일 신청 한도</label>
                 <Input
+                  id="max-neighbor-requests"
                   type="number"
                   min={1}
                   max={30}
@@ -257,8 +262,9 @@ export function BotSettingsPanel({
               </div>
 
               <div className="sm:col-span-2">
-                <label className="text-sm font-medium">신청 메시지</label>
+                <label htmlFor="neighbor-message" className="text-sm font-medium">신청 메시지</label>
                 <Textarea
+                  id="neighbor-message"
                   placeholder="안녕하세요! 글이 좋아서 서로이웃 신청드립니다 :)"
                   rows={2}
                   value={settingsDraft.neighbor_request_message || ""}
@@ -281,7 +287,7 @@ export function BotSettingsPanel({
           {/* 댓글 스타일 프롬프트 */}
           <div>
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">댓글 스타일 프롬프트</label>
+              <label htmlFor="comment-prompt" className="text-sm font-medium">댓글 스타일 프롬프트</label>
               {settingsDraft.comment_prompt && (
                 <Button
                   size="sm"
@@ -294,6 +300,7 @@ export function BotSettingsPanel({
               )}
             </div>
             <Textarea
+              id="comment-prompt"
               placeholder={DEFAULT_PROMPT_PLACEHOLDER}
               rows={10}
               value={settingsDraft.comment_prompt || ""}
