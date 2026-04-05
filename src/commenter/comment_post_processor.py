@@ -90,6 +90,14 @@ def _normalize_laugh_patterns(text: str) -> str:
     return text
 
 
+def _remove_hashtags(text: str) -> str:
+    """해시태그(#단어) 제거. 댓글/답글에 해시태그는 부자연스러움."""
+    text = re.sub(r'#\S+', '', text)
+    # 해시태그 제거 후 남은 다중 공백 정리
+    text = re.sub(r'  +', ' ', text)
+    return text.strip()
+
+
 def _remove_trailing_period(text: str) -> str:
     """이모지, ㅎㅎ, ㅋㅋ 바로 뒤에 오는 마침표(.) 또는 느낌표 중복 제거.
     규칙: 이모지/ㅎㅎ/ㅋㅋ 로 끝나는 토큰 뒤에 '.' 또는 '!.' 패턴 제거.
@@ -130,6 +138,7 @@ def process(comment: str) -> str:
         return comment
 
     comment = _normalize_laugh_patterns(comment)
+    comment = _remove_hashtags(comment)
     comment = _limit_emojis(comment, max_count=2)
     comment = _remove_trailing_period(comment)
 
