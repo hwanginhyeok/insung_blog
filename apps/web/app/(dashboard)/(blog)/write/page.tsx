@@ -908,7 +908,7 @@ function WritePageContent() {
                   onChange={(e) =>
                     setSelectedPersonaId(e.target.value || null)
                   }
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
                   <option value="">기본 페르소나</option>
                   {personaList.map((p) => (
@@ -1081,7 +1081,7 @@ function WritePageContent() {
                       onChange={(e) =>
                         setDraft({ ...draft, title: e.target.value })
                       }
-                      className="w-full rounded-md border bg-background px-3 py-2 text-lg font-semibold focus:outline-none focus:ring-1 focus:ring-ring"
+                      className="w-full rounded-md border bg-background px-3 py-2 text-lg font-semibold focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     />
                   </div>
 
@@ -1096,7 +1096,7 @@ function WritePageContent() {
                         onChange={(e) =>
                           setDraft({ ...draft, body: e.target.value })
                         }
-                        className="w-full rounded-md border bg-background px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-1 focus:ring-ring"
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm leading-relaxed focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                         rows={Math.max(15, draft.body.split("\n").length + 2)}
                       />
                     ) : (
