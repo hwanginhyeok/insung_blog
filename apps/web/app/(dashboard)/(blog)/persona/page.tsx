@@ -28,10 +28,10 @@ interface Persona {
 
 const STATUS_LABELS: Record<string, { text: string; color: string }> = {
   none: { text: "미분석", color: "text-muted-foreground" },
-  crawling: { text: "크롤링 중...", color: "text-blue-500" },
-  analyzing: { text: "AI 분석 중...", color: "text-purple-500" },
-  done: { text: "분석 완료", color: "text-green-500" },
-  error: { text: "오류", color: "text-red-500" },
+  crawling: { text: "크롤링 중...", color: "text-blue-600" },
+  analyzing: { text: "AI 분석 중...", color: "text-blue-600" },
+  done: { text: "분석 완료", color: "text-primary" },
+  error: { text: "오류", color: "text-destructive" },
 };
 
 // ── 메인 페이지 ──
@@ -204,10 +204,10 @@ export default function PersonaListPage() {
               </Button>
             </div>
             {createMessage && (
-              <p className="text-sm text-blue-500">{createMessage}</p>
+              <p className="text-sm text-blue-600">{createMessage}</p>
             )}
             {error && (
-              <p className="text-sm text-red-500">{error}</p>
+              <p className="text-sm text-destructive">{error}</p>
             )}
           </CardContent>
         </Card>

@@ -929,12 +929,12 @@ function WritePageContent() {
                 이번 달 {quota.used}/{quota.limit}회 사용
               </span>
               {quota.used >= quota.limit && (
-                <span className="font-medium text-red-500">한도 초과</span>
+                <span className="font-medium text-destructive">한도 초과</span>
               )}
             </div>
           )}
           {error && (
-            <p className="text-sm text-red-600">{error}</p>
+            <p className="text-sm text-destructive">{error}</p>
           )}
           <Button
             className="w-full"
@@ -1007,7 +1007,7 @@ function WritePageContent() {
                             size="sm"
                             onClick={handlePublish}
                             disabled={isPublishing || publishResult?.success === true || isSavingDraft}
-                            className="bg-green-600 hover:bg-green-700 text-white"
+                            className=""
                           >
                             {isPublishing
                               ? "발행 중..."

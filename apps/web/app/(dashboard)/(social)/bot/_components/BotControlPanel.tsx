@@ -31,8 +31,8 @@ function ProgressBar({ result }: { result: ProgressResult }) {
     <div className="space-y-1">
       <p className="text-sm font-mono">
         {progress}/{total}개 처리
-        <span className="ml-2 text-green-600">성공 {success}</span>
-        <span className="ml-1 text-red-500">실패 {failed}</span>
+        <span className="ml-2 text-primary">성공 {success}</span>
+        <span className="ml-1 text-destructive">실패 {failed}</span>
       </p>
       <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
         <div
@@ -129,7 +129,7 @@ export function BotControlPanel({
                 ? <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 : <Search className="h-6 w-6 text-muted-foreground" />}
               <span className="text-sm font-semibold">봇 실행</span>
-              <span className="text-[11px] text-muted-foreground">댓글 수집</span>
+              <span className="text-xs text-muted-foreground">댓글 수집</span>
               {settings.daily_discover && (
                 <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-green-500" title="자동 수집 ON" />
               )}
@@ -150,7 +150,7 @@ export function BotControlPanel({
                 ? <ClipboardCheck className="h-6 w-6 text-yellow-600" />
                 : <CheckCircle2 className="h-6 w-6 text-muted-foreground" />}
               <span className="text-sm font-semibold">댓글 승인</span>
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 {pending.length > 0 ? `${pending.length}건 대기` : "대기 없음"}
               </span>
               {pending.length > 0 && (
@@ -176,7 +176,7 @@ export function BotControlPanel({
                 ? <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 : <Send className="h-6 w-6 text-muted-foreground" />}
               <span className="text-sm font-semibold">댓글 게시</span>
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 {approvedComments.length > 0 ? `${approvedComments.length}건 준비` : "승인 필요"}
               </span>
               {approvedComments.length > 0 && (
@@ -200,7 +200,7 @@ export function BotControlPanel({
                 ? <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 : <MessageSquareReply className="h-6 w-6 text-muted-foreground" />}
               <span className="text-sm font-semibold">대댓글</span>
-              <span className="text-[11px] text-muted-foreground">내 글 답글</span>
+              <span className="text-xs text-muted-foreground">내 글 답글</span>
             </button>
           </div>
 
@@ -298,9 +298,9 @@ export function BotControlPanel({
                       <span className="text-xs text-muted-foreground">{timeAgo(c.created_at)}</span>
                       <span>
                         {c.status === "completed" ? (
-                          <span className="text-green-600">{COMMAND_LABELS[c.command]} 완료</span>
+                          <span className="text-primary">{COMMAND_LABELS[c.command]} 완료</span>
                         ) : (
-                          <span className="text-red-500">{COMMAND_LABELS[c.command]} 실패</span>
+                          <span className="text-destructive">{COMMAND_LABELS[c.command]} 실패</span>
                         )}
                       </span>
                       {c.status === "failed" && (

@@ -139,7 +139,10 @@ export default function BillingPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">구독 관리</h1>
+      <div>
+        <h1 className="text-2xl font-bold">구독 관리</h1>
+        <p className="text-sm text-muted-foreground">현재 플랜과 결제 이력을 확인하세요</p>
+      </div>
 
       {/* 현재 플랜 */}
       <Card>
@@ -161,7 +164,7 @@ export default function BillingPage() {
             </div>
             <div className="text-right">
               {isActive && (
-                <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700">
+                <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                   활성
                 </span>
               )}
@@ -171,7 +174,7 @@ export default function BillingPage() {
                 </span>
               )}
               {isPastDue && (
-                <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700">
+                <span className="rounded-full bg-destructive/10 px-3 py-1 text-xs font-medium text-destructive">
                   결제 실패
                 </span>
               )}
@@ -256,10 +259,10 @@ export default function BillingPage() {
                     </div>
                     <div className="text-xs">
                       {p.status === "paid" && (
-                        <span className="text-green-600">결제 완료</span>
+                        <span className="text-primary">결제 완료</span>
                       )}
                       {p.status === "failed" && (
-                        <span className="text-red-600">실패</span>
+                        <span className="text-destructive">실패</span>
                       )}
                       {p.status === "refunded" && (
                         <span className="text-yellow-600">환불</span>

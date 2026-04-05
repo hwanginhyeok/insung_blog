@@ -68,7 +68,7 @@ export default function LandingPage() {
                   <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
                     <div className="h-full w-3/4 rounded-full bg-primary animate-pulse" />
                   </div>
-                  <span className="text-[10px] text-muted-foreground">AI 작성 중...</span>
+                  <span className="text-xs text-muted-foreground">AI 작성 중...</span>
                 </div>
               </div>
             </div>
@@ -161,8 +161,9 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">
-        인성이 AI 블로그 파트너
+      <footer className="border-t border-border py-8 text-center text-xs text-muted-foreground space-y-1">
+        <p className="font-medium text-foreground/60">인성이 — AI 블로그 파트너</p>
+        <p>문의: insungblog@gmail.com</p>
       </footer>
     </main>
   );
@@ -172,7 +173,7 @@ function MiniStat({ number, label }: { number: string; label: string }) {
   return (
     <div className="text-center rounded-xl bg-muted px-3 py-3">
       <div className="text-lg font-bold text-foreground">{number}</div>
-      <div className="text-[10px] text-muted-foreground">{label}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
     </div>
   );
 }

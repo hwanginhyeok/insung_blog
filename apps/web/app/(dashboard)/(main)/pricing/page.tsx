@@ -62,10 +62,10 @@ export default async function PricingPage() {
   const tiers: Tier[] = ["free", "basic", "pro"];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="text-center">
-        <h1 className="text-3xl font-bold">요금제</h1>
-        <p className="mt-2 text-muted-foreground">
+        <h1 className="text-2xl font-bold">요금제</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
           네이버 블로그 운영을 자동화하세요
         </p>
       </div>

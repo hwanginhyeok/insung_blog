@@ -133,7 +133,7 @@ export default function GuidePage() {
                 <CardTitle>{s.title}</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-1 flex-col justify-between gap-4">
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground whitespace-pre-line">
                   {s.lines.join("\n")}
                 </p>
                 {s.href && s.cta && (

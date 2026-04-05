@@ -81,14 +81,14 @@ export function OnboardingDialog() {
       <Card className="w-full max-w-md mx-4 shadow-xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-3 text-xl">
-            <span className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 text-sm font-semibold flex items-center justify-center">
+            <span className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 text-primary text-sm font-semibold flex items-center justify-center">
               {current.stepLabel}
             </span>
             {current.title}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-base text-gray-600 leading-relaxed">
+          <p className="text-base text-muted-foreground leading-relaxed">
             {current.description}
           </p>
 
@@ -98,7 +98,7 @@ export function OnboardingDialog() {
               <div
                 key={i}
                 className={`w-2 h-2 rounded-full ${
-                  i === step ? "bg-emerald-600" : "bg-gray-200"
+                  i === step ? "bg-primary" : "bg-muted"
                 }`}
               />
             ))}

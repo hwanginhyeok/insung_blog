@@ -282,7 +282,7 @@ export default function AnalyticsPage() {
             </Button>
           </div>
           {crawlMessage && (
-            <p className="text-sm text-blue-500">{crawlMessage}</p>
+            <p className="text-sm text-blue-600">{crawlMessage}</p>
           )}
         </CardContent>
       </Card>

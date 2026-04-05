@@ -38,10 +38,10 @@ const CATEGORIES = BLOG_CATEGORIES;
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
 const STATUS_COLORS: Record<string, string> = {
-  planned: "bg-gray-200 text-gray-700",
+  planned: "bg-muted text-muted-foreground",
   in_progress: "bg-blue-100 text-blue-700",
-  published: "bg-green-100 text-green-700",
-  cancelled: "bg-red-100 text-red-600 line-through",
+  published: "bg-primary/10 text-primary",
+  cancelled: "bg-destructive/10 text-destructive line-through",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -389,7 +389,7 @@ export default function CalendarPage() {
                                           e.stopPropagation();
                                           router.push(`/write?id=${post.id}`);
                                         }}
-                                        className="block w-full truncate rounded bg-emerald-50 px-1 py-0.5 text-left text-xs text-emerald-700 hover:bg-emerald-100 transition-colors"
+                                        className="block w-full truncate rounded bg-primary/10 px-1 py-0.5 text-left text-xs text-primary hover:bg-primary/15 transition-colors"
                                       >
                                         {post.generated_title || "제목 없음"}
                                       </button>
@@ -529,7 +529,7 @@ export default function CalendarPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-red-500"
+                      className="text-destructive hover:text-destructive"
                       onClick={() => setShowDeleteConfirm(true)}
                     >
                       삭제

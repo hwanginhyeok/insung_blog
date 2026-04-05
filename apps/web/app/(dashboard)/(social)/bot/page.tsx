@@ -248,7 +248,7 @@ export default function BotPage() {
       {toast && (
         <div
           className={`fixed bottom-6 right-6 z-50 rounded-lg px-4 py-3 shadow-lg text-sm font-medium text-white transition-all animate-fade-up ${
-            toast.type === "success" ? "bg-green-600" : "bg-red-600"
+            toast.type === "success" ? "bg-primary" : "bg-destructive"
           }`}
         >
           {toast.message}

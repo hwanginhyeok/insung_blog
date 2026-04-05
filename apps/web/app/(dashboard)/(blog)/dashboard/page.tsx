@@ -19,9 +19,9 @@ type QueueRow = Database["public"]["Tables"]["generation_queue"]["Row"];
 const statusConfig = {
   pending: { label: "대기 중", color: "bg-yellow-100 text-yellow-800" },
   processing: { label: "생성 중", color: "bg-blue-100 text-blue-800" },
-  completed: { label: "완료", color: "bg-green-100 text-green-800" },
-  failed: { label: "실패", color: "bg-red-100 text-red-800" },
-  cancelled: { label: "취소", color: "bg-stone-100 text-stone-600" },
+  completed: { label: "완료", color: "bg-primary/10 text-primary" },
+  failed: { label: "실패", color: "bg-destructive/10 text-destructive" },
+  cancelled: { label: "취소", color: "bg-muted text-muted-foreground" },
 };
 
 export default function DashboardPage() {
@@ -171,7 +171,7 @@ export default function DashboardPage() {
                 )}
                 {post.status === "failed" && post.error_message && (
                   <CardContent className="pt-0">
-                    <p className="text-sm text-red-600">
+                    <p className="text-sm text-destructive">
                       {post.error_message}
                     </p>
                   </CardContent>

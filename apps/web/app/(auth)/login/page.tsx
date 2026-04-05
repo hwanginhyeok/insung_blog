@@ -40,11 +40,13 @@ function LoginForm() {
   // OAuth 콜백 에러 메시지 표시
   const oauthError = searchParams.get("error");
   const [error, setError] = useState<string | null>(oauthError);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    setSuccessMessage(null);
 
     const supabase = createClient();
 
@@ -57,7 +59,7 @@ function LoginForm() {
         setIsLoading(false);
         return;
       }
-      setError("✓ 비밀번호 재설정 링크를 이메일로 보냈습니다. 확인해주세요.");
+      setSuccessMessage("비밀번호 재설정 링크를 이메일로 보냈습니다. 확인해주세요.");
       setMode("login");
       setIsLoading(false);
       return;
@@ -73,7 +75,7 @@ function LoginForm() {
         setIsLoading(false);
         return;
       }
-      setError("✓ 가입 완료! 이메일을 확인해 인증을 완료하세요.");
+      setSuccessMessage("가입 완료! 이메일을 확인해 인증을 완료하세요.");
       setMode("login");
       setIsLoading(false);
       return;
@@ -147,8 +149,11 @@ function LoginForm() {
               </div>
             )}
 
+            {successMessage && (
+              <p className="text-sm text-primary">{successMessage}</p>
+            )}
             {error && (
-              <p className={`text-sm ${error.startsWith("✓") ? "text-green-600" : "text-red-600"}`}>{error}</p>
+              <p className="text-sm text-destructive">{error}</p>
             )}
 
             <Button
@@ -176,7 +181,7 @@ function LoginForm() {
                   <button
                     type="button"
                     className="font-medium text-foreground underline py-2 px-1"
-                    onClick={() => { setMode("reset"); setError(null); }}
+                    onClick={() => { setMode("reset"); setError(null); setSuccessMessage(null); }}
                   >
                     비밀번호를 잊으셨나요?
                   </button>
@@ -189,7 +194,7 @@ function LoginForm() {
                     <button
                       type="button"
                       className="font-medium text-foreground underline py-2 px-1"
-                      onClick={() => { setMode("signup"); setError(null); }}
+                      onClick={() => { setMode("signup"); setError(null); setSuccessMessage(null); }}
                     >
                       회원가입
                     </button>
@@ -200,7 +205,7 @@ function LoginForm() {
                     <button
                       type="button"
                       className="font-medium text-foreground underline py-2 px-1"
-                      onClick={() => { setMode("login"); setError(null); }}
+                      onClick={() => { setMode("login"); setError(null); setSuccessMessage(null); }}
                     >
                       로그인
                     </button>

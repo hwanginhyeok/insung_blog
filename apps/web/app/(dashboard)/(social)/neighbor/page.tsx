@@ -195,7 +195,7 @@ export default function NeighborPage() {
                 <div className="flex flex-wrap gap-1.5">
                   {themes.length > 0 ? (
                     themes.map((t) => (
-                      <span key={t} className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                      <span key={t} className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
                         {t}
                       </span>
                     ))
@@ -245,7 +245,7 @@ export default function NeighborPage() {
         </div>
       )}
       {error && (
-        <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
+        <div className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
         </div>
       )}
@@ -301,10 +301,10 @@ export default function NeighborPage() {
                     </div>
                     <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
                       n.neighbor_type === "mutual"
-                        ? "bg-green-100 text-green-700"
+                        ? "bg-primary/10 text-primary"
                         : n.neighbor_type === "one_way_following"
                           ? "bg-blue-100 text-blue-700"
-                          : "bg-gray-100 text-gray-600"
+                          : "bg-muted text-muted-foreground"
                     }`}>
                       {n.neighbor_type === "mutual" ? "서로이웃" : n.neighbor_type === "one_way_following" ? "팔로잉" : "발견"}
                     </span>
