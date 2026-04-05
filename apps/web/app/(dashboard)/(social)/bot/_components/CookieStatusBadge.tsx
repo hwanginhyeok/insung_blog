@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, AlertTriangle } from "lucide-react";
 import {
   CookieStatus,
   timeAgo,
@@ -163,8 +163,9 @@ export function CookieStatusBadge({
               </span>
             )}
           </div>
-          <div className="rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
-            ⚠️ <strong>PC에서만 가능</strong> — 모바일에서는 쿠키 업로드 불가
+          <div className="flex items-center gap-1.5 rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            <span><strong>PC에서만 가능</strong> — 모바일에서는 쿠키 업로드 불가</span>
           </div>
           <p className="text-xs text-muted-foreground">
             <strong>PC Chrome</strong>에서: EditThisCookie 확장 설치 &rarr; naver.com 로그인 &rarr; 확장

@@ -45,24 +45,24 @@ export function RunHistoryPanel({ runs, avgDuration }: RunHistoryPanelProps) {
               {runs.map((r) => (
                 <div
                   key={r.id}
-                  className="flex items-center justify-between rounded border px-3 py-2 text-sm"
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border px-3 py-2 text-sm"
                 >
-                  <span className="text-muted-foreground">
+                  <span className="text-muted-foreground whitespace-nowrap">
                     {formatDateTime(r.run_at)}
                   </span>
-                  <span>
+                  <span className="whitespace-nowrap">
                     {r.bloggers_visited}명 / {r.comments_written}댓글
                     {r.comments_failed > 0 && (
                       <span className="text-red-500"> / {r.comments_failed}실패</span>
                     )}
                   </span>
-                  <span className="text-muted-foreground">
+                  <span className="text-muted-foreground whitespace-nowrap ml-auto">
                     {r.duration_seconds != null
                       ? formatElapsed(r.duration_seconds)
                       : "-"}
                   </span>
                   {r.error_message && (
-                    <span className="text-red-500" title={r.error_message}>
+                    <span className="text-red-500 whitespace-nowrap" title={r.error_message}>
                       오류
                     </span>
                   )}

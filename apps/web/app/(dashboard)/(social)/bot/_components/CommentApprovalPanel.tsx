@@ -99,10 +99,7 @@ export function CommentApprovalPanel({
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-              2
-            </span>
+          <CardTitle>
             댓글 승인 ({pending.length}건)
           </CardTitle>
           <div className="flex gap-1.5">

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChevronDown } from "lucide-react";
 import {
   PendingComment,
   STATUS_LABELS,
@@ -36,14 +37,9 @@ export function CommentHistoryTable({
             <CardTitle className="text-base">댓글 내역</CardTitle>
             <CardDescription>승인/거부/게시된 댓글 처리 이력</CardDescription>
           </div>
-          <svg
-            className={`h-5 w-5 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
+          <ChevronDown
+            className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+          />
         </div>
       </CardHeader>
 

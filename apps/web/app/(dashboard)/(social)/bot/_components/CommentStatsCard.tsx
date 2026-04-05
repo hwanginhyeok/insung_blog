@@ -26,7 +26,7 @@ export function CommentStatsCard({
         <CardContent>
           {lastRun ? (
             <>
-              <p className="text-lg font-semibold">{timeAgo(lastRun.run_at)}</p>
+              <p className="text-2xl font-bold tracking-tight">{timeAgo(lastRun.run_at)}</p>
               <p className="text-sm text-muted-foreground">
                 {formatDateTime(lastRun.run_at)}
                 {lastRun.error_message && " (오류)"}
@@ -44,7 +44,7 @@ export function CommentStatsCard({
           <CardDescription>오늘 현황</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-lg font-semibold">
+          <p className="text-2xl font-bold tracking-tight">
             {todayStats.bloggers}명 / {todayStats.comments}개
           </p>
           <p className="text-sm text-muted-foreground">
@@ -60,7 +60,7 @@ export function CommentStatsCard({
           <CardDescription>대기 현황</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-lg font-semibold">
+          <p className="text-2xl font-bold tracking-tight">
             {pendingCount}건 / {approvedCount}건
           </p>
           <p className="text-sm text-muted-foreground">

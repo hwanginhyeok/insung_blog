@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
+import { KeyRound } from "lucide-react";
 import { useBotStatus } from "./_hooks/useBotStatus";
 import { useCommentHistory } from "./_hooks/useCommentHistory";
 import { useBotSettings } from "./_hooks/useBotSettings";
@@ -149,7 +150,7 @@ export default function BotPage() {
       {!cookieStatus?.hasCookies && (
         <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-5">
           <div className="flex items-start gap-3">
-            <span className="text-2xl">🔑</span>
+            <KeyRound className="h-6 w-6 shrink-0 text-amber-600" />
             <div className="space-y-2">
               <h3 className="font-semibold text-amber-900">네이버 쿠키를 먼저 등록해주세요</h3>
               <p className="text-sm text-amber-800 leading-relaxed">

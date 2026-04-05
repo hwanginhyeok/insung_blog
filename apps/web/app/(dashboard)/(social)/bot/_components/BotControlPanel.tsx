@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Search, ClipboardCheck, CheckCircle2, Send, MessageSquareReply, Loader2 } from "lucide-react";
 import {
   BotCommandRecord,
   BotSettings,
@@ -124,9 +125,9 @@ export function BotControlPanel({
                   : "border-border hover:border-primary/50 hover:bg-accent"
               } disabled:opacity-40 disabled:cursor-not-allowed`}
             >
-              <span className="text-2xl">
-                {runningCommand === "run" && isRunning ? "⏳" : "🔍"}
-              </span>
+              {runningCommand === "run" && isRunning
+                ? <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                : <Search className="h-6 w-6 text-muted-foreground" />}
               <span className="text-sm font-semibold">봇 실행</span>
               <span className="text-[11px] text-muted-foreground">댓글 수집</span>
               {settings.daily_discover && (
@@ -145,9 +146,9 @@ export function BotControlPanel({
                   : "border-border hover:border-primary/50 hover:bg-accent"
               }`}
             >
-              <span className="text-2xl">
-                {pending.length > 0 ? "📋" : "✅"}
-              </span>
+              {pending.length > 0
+                ? <ClipboardCheck className="h-6 w-6 text-yellow-600" />
+                : <CheckCircle2 className="h-6 w-6 text-muted-foreground" />}
               <span className="text-sm font-semibold">댓글 승인</span>
               <span className="text-[11px] text-muted-foreground">
                 {pending.length > 0 ? `${pending.length}건 대기` : "대기 없음"}
@@ -171,9 +172,9 @@ export function BotControlPanel({
                     : "border-border hover:border-primary/50 hover:bg-accent"
               } disabled:opacity-40 disabled:cursor-not-allowed`}
             >
-              <span className="text-2xl">
-                {runningCommand === "execute" && isRunning ? "⏳" : "📤"}
-              </span>
+              {runningCommand === "execute" && isRunning
+                ? <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                : <Send className="h-6 w-6 text-muted-foreground" />}
               <span className="text-sm font-semibold">댓글 게시</span>
               <span className="text-[11px] text-muted-foreground">
                 {approvedComments.length > 0 ? `${approvedComments.length}건 준비` : "승인 필요"}
@@ -195,9 +196,9 @@ export function BotControlPanel({
                   : "border-border hover:border-primary/50 hover:bg-accent"
               } disabled:opacity-40 disabled:cursor-not-allowed`}
             >
-              <span className="text-2xl">
-                {runningCommand === "auto_reply" && isRunning ? "⏳" : "💬"}
-              </span>
+              {runningCommand === "auto_reply" && isRunning
+                ? <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                : <MessageSquareReply className="h-6 w-6 text-muted-foreground" />}
               <span className="text-sm font-semibold">대댓글</span>
               <span className="text-[11px] text-muted-foreground">내 글 답글</span>
             </button>
@@ -211,12 +212,12 @@ export function BotControlPanel({
                   role="switch"
                   aria-checked={settings.daily_discover}
                   onClick={() => onSaveSettingsPatch({ daily_discover: !settings.daily_discover })}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                     settings.daily_discover ? "bg-primary" : "bg-muted"
                   }`}
                 >
-                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-                    settings.daily_discover ? "translate-x-4" : "translate-x-1"
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                    settings.daily_discover ? "translate-x-5" : "translate-x-1"
                   }`} />
                 </button>
                 <span className="text-muted-foreground">
@@ -230,12 +231,12 @@ export function BotControlPanel({
                   role="switch"
                   aria-checked={settings.auto_execute}
                   onClick={() => onSaveSettingsPatch({ auto_execute: !settings.auto_execute })}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                     settings.auto_execute ? "bg-primary" : "bg-muted"
                   }`}
                 >
-                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-                    settings.auto_execute ? "translate-x-4" : "translate-x-1"
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                    settings.auto_execute ? "translate-x-5" : "translate-x-1"
                   }`} />
                 </button>
                 <span className="text-muted-foreground">자동 게시</span>
