@@ -59,6 +59,18 @@ def check_daily_bot_limit(user_id: str | None) -> dict:
 logger = setup_logger("command_worker")
 
 POLL_INTERVAL = 10  # 초
+USER_MILESTONE_CHECK_INTERVAL = 3600  # 사용자 수 임계점 체크 주기 (1시간)
+_USER_COUNT_FILE = Path("/tmp/user_count.txt")  # 워커 재시작해도 중복 알림 방지
+
+# 사용자 수 임계점 목록
+_USER_MILESTONES = [10, 50, 100, 500, 1000]
+_MILESTONE_MESSAGES = {
+    10: "📊 10명 돌파! 현행 인프라 OK",
+    50: "⚠️ 50명 돌파! 프록시+API 전환 준비 시작",
+    100: "🚨 100명 돌파! 워커 다중화+서버 스펙업 필수",
+    500: "🔥 500명 돌파! 분산 아키텍처 전환 시급",
+    1000: "🏆 1000명 돌파!",
+}
 
 # Playwright 동시 실행 제한 — .env MAX_CONCURRENT_BROWSERS로 조절 가능 (기본 3)
 MAX_CONCURRENT_BROWSERS = int(os.environ.get("MAX_CONCURRENT_BROWSERS", "3"))
@@ -1643,6 +1655,57 @@ async def _cleanup_stale_generation_queue() -> int:
         return 0
 
 
+def _load_last_user_count() -> int:
+    """이전에 저장한 사용자 수 로드 (없으면 0)."""
+    try:
+        if _USER_COUNT_FILE.exists():
+            return int(_USER_COUNT_FILE.read_text().strip())
+    except (ValueError, OSError):
+        pass
+    return 0
+
+
+def _save_user_count(count: int) -> None:
+    """현재 사용자 수를 파일에 저장."""
+    try:
+        _USER_COUNT_FILE.write_text(str(count))
+    except OSError as e:
+        logger.warning(f"사용자 수 저장 실패: {e}")
+
+
+async def _check_user_milestones() -> None:
+    """사용자 수 임계점 체크 — webhook 백업용 (1시간마다 호출).
+
+    users 테이블 count 조회 → 이전 값과 비교 → 임계점 돌파 시 텔레그램 알림.
+    _last_user_count를 /tmp/user_count.txt에 저장해서 워커 재시작해도 중복 알림 방지.
+    """
+    try:
+        sb = get_supabase()
+        result = sb.table("users").select("id", count="exact").execute()
+        current_count = result.count if result.count is not None else 0
+
+        if current_count <= 0:
+            return
+
+        last_count = _load_last_user_count()
+
+        # 임계점 돌파 체크
+        for milestone in _USER_MILESTONES:
+            if last_count < milestone <= current_count:
+                msg = _MILESTONE_MESSAGES.get(milestone, f"사용자 {milestone}명 돌파!")
+                logger.info(f"사용자 임계점 돌파: {milestone}명 (현재 {current_count}명)")
+                from src.utils.telegram_notifier import send_telegram_message
+                await send_telegram_message(
+                    f"{msg}\n\n현재 총 사용자: {current_count}명"
+                )
+
+        # 현재 값 저장 (임계점 돌파 여부와 무관하게 항상)
+        _save_user_count(current_count)
+
+    except Exception as e:
+        logger.warning(f"사용자 수 임계점 체크 실패: {e}")
+
+
 async def _notify_stale_recovery(commands: list[dict]) -> None:
     """워커 재시작으로 복구된 명령에 대해 사용자 알림 전송."""
     from src.utils.telegram_notifier import send_telegram_message
@@ -1753,9 +1816,22 @@ async def main_loop() -> None:
     # 시작 시 admin user_id 캐싱 (실패하면 즉시 종료)
     get_admin_user_id()
 
+    # 시작 시 사용자 수 임계점 1회 체크
+    await _check_user_milestones()
+
     _active_tasks: set[asyncio.Task] = set()
+    _last_milestone_check = time.monotonic()
 
     while not _shutdown:
+        # ── 주기적 사용자 수 임계점 체크 (1시간마다) ──
+        now = time.monotonic()
+        if now - _last_milestone_check >= USER_MILESTONE_CHECK_INTERVAL:
+            _last_milestone_check = now
+            try:
+                await _check_user_milestones()
+            except Exception as e:
+                logger.warning(f"주기적 임계점 체크 실패: {e}")
+
         # 완료된 태스크 정리 + 예외 로깅
         done = {t for t in _active_tasks if t.done()}
         for t in done:
