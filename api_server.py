@@ -171,26 +171,17 @@ async def generate_content(req: GenerateRequest, _=Depends(_verify_token)):
 @app.post("/publish", response_model=PublishResponse)
 async def publish_post_endpoint(req: PublishRequest, _=Depends(_verify_token)):
     """
-    승인된 초안을 네이버 블로그에 게시.
+    승인된 초안을 네이버 블로그에 게시 → 워커 큐로 오프로드.
 
-    다중 사용자:
-      - user_id 있으면 → Supabase에서 쿠키/blog_id 로드 (쿠키 전용)
-      - user_id 없으면 → .env NAVER_ID/PW/MY_BLOG_ID 폴백
+    이전: API 핸들러에서 브라우저 직접 실행 (수 분간 블로킹)
+    현재: bot_commands 큐에 publish 명령 삽입 → 워커가 비동기 처리
     """
-    from playwright.async_api import async_playwright
+    from src.storage.supabase_client import get_supabase
 
-    from src.publisher.blog_publisher import publish_post
-    from src.utils.browser import create_browser
-
-    # ── 인증 정보 결정 ──
-    use_cookie_only = False
-    naver_id = ""
-    naver_pw = ""
-    blog_id = ""
     user_id = req.user_id
 
+    # 인증 정보 사전 검증 (큐 삽입 전에 빠른 실패)
     if user_id:
-        # 다중 사용자: Supabase에서 설정 로드
         from src.storage.supabase_client import get_user_bot_config
         config = get_user_bot_config(user_id)
         if not config:
@@ -198,10 +189,7 @@ async def publish_post_endpoint(req: PublishRequest, _=Depends(_verify_token)):
                 status_code=400,
                 detail="봇 설정이 없거나 블로그 ID가 미설정입니다. /bot 페이지에서 설정하세요.",
             )
-        blog_id = config["naver_blog_id"]
-        use_cookie_only = True
     else:
-        # 단일 사용자: .env 폴백
         naver_id = os.environ.get("NAVER_ID", "")
         naver_pw = os.environ.get("NAVER_PW", "")
         blog_id = os.environ.get("MY_BLOG_ID", "")
@@ -213,69 +201,45 @@ async def publish_post_endpoint(req: PublishRequest, _=Depends(_verify_token)):
     except ValueError:
         raise HTTPException(status_code=400, detail="허용되지 않은 이미지 경로")
 
-    # DB에 초안 저장
+    # DB에 초안 저장 (queue_id로 사용)
     post_id = record_post(
         req.title, req.body, req.hashtags, safe_image_paths,
-        status="publishing", category=req.category,
+        status="queued", category=req.category,
     )
 
+    # 워커 큐에 publish 명령 삽입
+    payload = {
+        "title": req.title,
+        "body": req.body,
+        "hashtags": req.hashtags or [],
+        "image_paths": safe_image_paths,
+        "queue_id": post_id,
+        "category": req.category,
+        "dry_run": req.dry_run,
+    }
+    if req.chat_id:
+        payload["chat_id"] = req.chat_id
+
     try:
-        async with async_playwright() as pw:
-            browser, context, page = await create_browser(pw, headless=True)
-
-            try:
-                # 로그인 분기
-                if use_cookie_only:
-                    from src.auth.naver_login import ensure_login_cookie_only
-                    logged_in = await ensure_login_cookie_only(context, page, user_id)
-                    if not logged_in:
-                        update_post_status(post_id, "failed")
-                        return PublishResponse(
-                            success=False, post_id=post_id,
-                            message="쿠키 만료 또는 미등록. 웹에서 네이버 쿠키를 재업로드하세요.",
-                        )
-                else:
-                    from src.auth.naver_login import ensure_login
-                    logged_in = await ensure_login(context, page, naver_id, naver_pw)
-                    if not logged_in:
-                        update_post_status(post_id, "failed")
-                        return PublishResponse(
-                            success=False, post_id=post_id, message="로그인 실패"
-                        )
-
-                post_url = await publish_post(
-                    page=page,
-                    blog_id=blog_id,
-                    title=req.title,
-                    body=req.body,
-                    image_paths=safe_image_paths,
-                    hashtags=req.hashtags,
-                    dry_run=req.dry_run,
-                )
-            finally:
-                await browser.close()
-
-        if post_url:
-            status = "dry-run" if req.dry_run else "published"
-            update_post_status(post_id, status, post_url if not req.dry_run else None)
-
-            # 발행 완료 텔레그램 알림 (chat_id 제공 시)
-            if req.chat_id and not req.dry_run:
-                await _send_publish_notification(req.chat_id, req.title, post_url)
-
-            return PublishResponse(
-                success=True, post_url=post_url, post_id=post_id, message="발행 완료"
-            )
-        else:
-            update_post_status(post_id, "failed")
-            return PublishResponse(
-                success=False, post_id=post_id, message="발행 실패"
-            )
-
+        sb = get_supabase()
+        row = {
+            "command": "publish",
+            "status": "pending",
+            "payload": payload,
+        }
+        if user_id:
+            row["user_id"] = user_id
+        sb.table("bot_commands").insert(row).execute()
+        logger.info(f"▶ 발행 명령 큐 등록 (title={req.title[:20]}, post_id={post_id})")
     except Exception as e:
         update_post_status(post_id, "failed")
-        logger.error(f"발행 오류: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="블로그 발행 중 오류가 발생했습니다")
+        logger.error(f"발행 명령 큐 등록 실패: {e}")
+        raise HTTPException(status_code=500, detail="발행 명령 큐 등록 실패")
+
+    return PublishResponse(
+        success=True, post_id=post_id,
+        message="발행이 큐에 등록되었습니다. 워커가 처리 후 알림을 보냅니다.",
+    )
 
 
 @app.get("/status", response_model=StatusResponse)
@@ -452,168 +416,42 @@ async def execute_pending_comments(
     req: CommentExecuteRequest, _=Depends(_verify_token)
 ):
     """
-    승인된 댓글 일괄 실행.
-    
-    흐름:
-      1. DB에서 approved 상태 댓글 조회
-      2. 브라우저 생성 → 로그인
-      3. 순차적으로 댓글 작성
-      4. 성공 → posted, 실패 → retry_queue + failed
-      5. 브라우저 종료
-      6. 텔레그램 결과 알림 (chat_id 제공 시)
+    승인된 댓글 일괄 실행 → 워커 큐로 오프로드.
+
+    이전: API 핸들러에서 브라우저 직접 실행 (30분 블로킹)
+    현재: bot_commands 큐에 execute 명령 삽입 → 워커가 비동기 처리
     """
-    from playwright.async_api import async_playwright
+    from src.storage.supabase_client import get_pending_comments_sb, get_supabase
 
-    from src.auth.naver_login import ensure_login
-    from src.commenter.comment_writer import write_comment
-    from src.storage.database import add_to_retry_queue
-    from src.storage.supabase_client import (
-        get_pending_comments_sb,
-        update_pending_status_sb,
-    )
-    from src.utils.browser import create_browser
-
-    # 1. 승인된 댓글 조회 (Supabase)
+    # 승인된 댓글 존재 여부만 확인
     approved_comments = get_pending_comments_sb("approved")
     if not approved_comments:
         return CommentExecuteResponse(
             success=True, total=0, message="승인된 댓글이 없습니다"
         )
 
-    naver_id = os.environ.get("NAVER_ID", "")
-    naver_pw = os.environ.get("NAVER_PW", "")
-
-    if not all([naver_id, naver_pw]):
-        raise HTTPException(status_code=500, detail=".env 인증 정보 누락")
-
     total = len(approved_comments)
-    success_count = 0
-    failed_count = 0
-    details = []
 
-    logger.info(f"▶ 댓글 일괄 실행 시작: 총 {total}개")
-
+    # 워커 큐에 execute 명령 삽입
     try:
-        async with async_playwright() as pw:
-            browser, context, page = await create_browser(pw, headless=True)
-
-            try:
-                # 2. 로그인
-                logged_in = await ensure_login(context, page, naver_id, naver_pw)
-                if not logged_in:
-                    logger.error("로그인 실패")
-                    return CommentExecuteResponse(
-                        success=False,
-                        total=total,
-                        message="네이버 로그인 실패",
-                        details=[],
-                    )
-                logger.info("✓ 로그인 성공")
-
-                # 3. 순차 실행
-                for i, comment in enumerate(approved_comments, 1):
-                    blog_id = comment["blog_id"]
-                    post_url = comment["post_url"]
-                    post_title = comment["post_title"]
-                    comment_text = comment["comment_text"]
-                    comment_id = comment["id"]
-
-                    logger.info(f"▶ [{i}/{total}] {blog_id} 댓글 작성 중...")
-
-                    try:
-                        success, _ = await write_comment(
-                            page=page,
-                            post_url=post_url,
-                            post_title=post_title,
-                            dry_run=False,
-                            comment_text=comment_text,
-                        )
-
-                        if success:
-                            # 성공 → posted 상태로 업데이트
-                            update_pending_status_sb(comment_id, "posted", decided_by="api")
-                            success_count += 1
-                            details.append(
-                                {
-                                    "blog_id": blog_id,
-                                    "status": "success",
-                                    "message": f"댓글 작성 완료 ({len(comment_text)}자)",
-                                }
-                            )
-                            logger.info(f"✓ [{i}/{total}] 성공: {blog_id}")
-                        else:
-                            # 실패 → failed + retry_queue
-                            update_pending_status_sb(comment_id, "failed", decided_by="api")
-                            add_to_retry_queue(
-                                blog_id=blog_id,
-                                post_url=post_url,
-                                post_title=post_title,
-                                fail_reason="댓글 작성 실패",
-                            )
-                            failed_count += 1
-                            details.append(
-                                {
-                                    "blog_id": blog_id,
-                                    "status": "failed",
-                                    "message": "댓글 작성 실패 (내일 재시도 예정)",
-                                }
-                            )
-                            logger.warning(f"✗ [{i}/{total}] 실패: {blog_id}")
-
-                    except Exception as e:
-                        # 예외 발생 → failed + retry_queue
-                        update_pending_status_sb(comment_id, "failed", decided_by="api")
-                        add_to_retry_queue(
-                            blog_id=blog_id,
-                            post_url=post_url,
-                            post_title=post_title,
-                            fail_reason=str(e)[:100],
-                        )
-                        failed_count += 1
-                        details.append(
-                            {
-                                "blog_id": blog_id,
-                                "status": "error",
-                                "message": f"오류: {str(e)[:50]}",
-                            }
-                        )
-                        logger.error(f"✗ [{i}/{total}] 예외: {e}")
-
-                    # 댓글 사이 딜레이 (봇 감지 회피)
-                    if i < total:
-                        await asyncio.sleep(3)
-
-            finally:
-                await browser.close()
-                logger.info("✓ 브라우저 종료")
-
+        sb = get_supabase()
+        result = sb.table("bot_commands").insert({
+            "command": "execute",
+            "status": "pending",
+        }).execute()
+        command_id = result.data[0]["id"] if result.data else None
+        logger.info(f"▶ 댓글 실행 명령 큐 등록 (총 {total}개, cmd={command_id})")
     except Exception as e:
-        logger.error(f"댓글 실행 중 오류: {e}", exc_info=True)
+        logger.error(f"명령 큐 등록 실패: {e}")
         return CommentExecuteResponse(
-            success=False,
-            total=total,
-            success_count=success_count,
-            failed_count=failed_count,
-            message=f"실행 중 오류 발생: {str(e)[:100]}",
-            details=details,
+            success=False, total=total,
+            message=f"명령 큐 등록 실패: {str(e)[:100]}"
         )
-
-    # 6. 텔레그램 알림
-    if req.chat_id:
-        await _send_telegram_notification(
-            req.chat_id, total, success_count, failed_count, details
-        )
-
-    status_icon = "✅" if failed_count == 0 else "⚠️"
-    message = f"{status_icon} 실행 완료: 성공 {success_count}개 / 실패 {failed_count}개"
 
     return CommentExecuteResponse(
         success=True,
         total=total,
-        success_count=success_count,
-        failed_count=failed_count,
-        message=message,
-        details=details,
+        message=f"댓글 {total}개 실행이 큐에 등록되었습니다. 워커가 순차 처리합니다.",
     )
 
 
