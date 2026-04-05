@@ -21,8 +21,14 @@ async def delay_between_comments() -> None:
 
 
 async def delay_between_bloggers() -> None:
-    """블로거와 블로거 사이 대기 (30~60초)"""
-    secs = random.uniform(DELAY_BETWEEN_BLOGGERS_MIN, DELAY_BETWEEN_BLOGGERS_MAX)
+    """블로거와 블로거 사이 대기 — 정규 분포로 자연스러운 간격.
+
+    중앙값 30초 부근에 몰리고, 가끔 짧거나 길게.
+    uniform(20,40)보다 사람 패턴에 가까움.
+    """
+    center = (DELAY_BETWEEN_BLOGGERS_MIN + DELAY_BETWEEN_BLOGGERS_MAX) / 2  # 30
+    stddev = (DELAY_BETWEEN_BLOGGERS_MAX - DELAY_BETWEEN_BLOGGERS_MIN) / 4  # 5
+    secs = max(DELAY_BETWEEN_BLOGGERS_MIN * 0.75, random.gauss(center, stddev))
     await asyncio.sleep(secs)
 
 
