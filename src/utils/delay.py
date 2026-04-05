@@ -28,7 +28,8 @@ async def delay_between_bloggers() -> None:
     """
     center = (DELAY_BETWEEN_BLOGGERS_MIN + DELAY_BETWEEN_BLOGGERS_MAX) / 2  # 30
     stddev = (DELAY_BETWEEN_BLOGGERS_MAX - DELAY_BETWEEN_BLOGGERS_MIN) / 4  # 5
-    secs = max(DELAY_BETWEEN_BLOGGERS_MIN * 0.75, random.gauss(center, stddev))
+    # 하한 + 상한 클램프: gauss 극단 아웃라이어(60초+) 방지
+    secs = max(DELAY_BETWEEN_BLOGGERS_MIN * 0.75, min(DELAY_BETWEEN_BLOGGERS_MAX * 1.5, random.gauss(center, stddev)))
     await asyncio.sleep(secs)
 
 

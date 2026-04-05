@@ -9,7 +9,7 @@
  *   PORTONE_WEBHOOK_SECRET — 웹훅 서명 검증용 시크릿
  */
 
-import { createHmac } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 
 const API_BASE = "https://api.portone.io";
 
@@ -35,6 +35,8 @@ export interface ScheduleParams {
   /** 다음 결제 예정 시각 (ISO 8601) */
   timeToPay: string;
   currency?: string;
+  /** 웹훅에서 userId/tier 식별용 (JSON 문자열) */
+  customData?: string;
 }
 
 /**
@@ -53,6 +55,7 @@ export async function createPaymentSchedule(
         orderName: params.orderName,
         amount: { total: params.amount },
         currency: params.currency ?? "KRW",
+        ...(params.customData ? { customData: params.customData } : {}),
       },
       timeToPay: params.timeToPay,
     }),
@@ -77,6 +80,8 @@ export async function payWithBillingKey(params: {
   orderName: string;
   amount: number;
   currency?: string;
+  /** 웹훅에서 userId/tier 식별용 (JSON 문자열) */
+  customData?: string;
 }): Promise<{ paymentId: string; status: string }> {
   const res = await fetch(
     `${API_BASE}/payments/${params.paymentId}/billing-key`,
@@ -88,6 +93,7 @@ export async function payWithBillingKey(params: {
         orderName: params.orderName,
         amount: { total: params.amount },
         currency: params.currency ?? "KRW",
+        ...(params.customData ? { customData: params.customData } : {}),
       }),
     }
   );
@@ -121,6 +127,35 @@ export async function cancelPaymentSchedule(
     const err = await res.json().catch(() => ({}));
     throw new Error(
       `포트원 스케줄 취소 실패: ${res.status} ${JSON.stringify(err)}`
+    );
+  }
+}
+
+// ── 결제 취소 (환불) ──
+
+/**
+ * 결제 취소 (전액 환불).
+ * 스케줄 등록/DB 업데이트 실패 시 보상 트랜잭션으로 사용.
+ */
+export async function cancelPayment(
+  paymentId: string,
+  reason: string
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/payments/${paymentId}/cancel`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ reason }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    // 환불 실패는 심각한 문제이므로 상세 로그 기록
+    console.error(
+      `[CRITICAL] 포트원 결제 취소 실패 — paymentId: ${paymentId}, ` +
+      `status: ${res.status}, error: ${JSON.stringify(err)}`
+    );
+    throw new Error(
+      `포트원 결제 취소 실패: ${res.status} ${JSON.stringify(err)}`
     );
   }
 }
@@ -176,7 +211,10 @@ export function verifyWebhookSignature(
   }
 
   const expected = createHmac("sha256", secret).update(body).digest("hex");
-  return expected === signature;
+  // 타이밍 공격 방지: 문자열 길이가 다르면 즉시 false, 같으면 timingSafeEqual
+  const a = Buffer.from(expected);
+  const b = Buffer.from(signature);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 // ── 유틸리티 ──

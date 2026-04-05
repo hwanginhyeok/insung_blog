@@ -17,6 +17,19 @@ import {
   apiSendCommand,
 } from "../_lib/bot-api";
 
+// AudioContext 싱글톤 — 브라우저당 인스턴스 수 제한(6~8개) 회피
+let _audioCtx: AudioContext | null = null;
+function getAudioContext(): AudioContext {
+  if (!_audioCtx || _audioCtx.state === "closed") {
+    _audioCtx = new AudioContext();
+  }
+  // suspended 상태(자동재생 정책)면 resume
+  if (_audioCtx.state === "suspended") {
+    _audioCtx.resume();
+  }
+  return _audioCtx;
+}
+
 export interface ToastNotification {
   id: string;
   message: string;
@@ -141,9 +154,9 @@ export function useBotStatus(): BotStatusState {
       ? `✅ ${label} 완료!`
       : `❌ ${label} 실패`;
 
-    // 브라우저 알림음
+    // 브라우저 알림음 (싱글톤 AudioContext 사용)
     try {
-      const ctx = new AudioContext();
+      const ctx = getAudioContext();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);

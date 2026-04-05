@@ -6,6 +6,7 @@ import { TIER_LIMITS, type Tier } from "@/lib/tier";
 import {
   createPaymentSchedule,
   payWithBillingKey,
+  cancelPayment,
   getNextPaymentDate,
   generatePaymentId,
 } from "@/lib/portone";
@@ -52,26 +53,55 @@ export async function POST(req: NextRequest) {
   try {
     // 3. 최초 결제 실행
     const paymentId = generatePaymentId(user.id);
+    const customData = JSON.stringify({ userId: user.id, tier });
+
     await payWithBillingKey({
       paymentId,
       billingKey: body.billingKey,
       orderName: `인성이블로그 ${tierInfo.label} 플랜`,
       amount: tierInfo.price,
+      customData,
     });
 
-    // 4. 다음 달 정기결제 스케줄 등록
+    // 4. 다음 달 정기결제 스케줄 등록 — 실패 시 결제 환불
+    let scheduleResult: { scheduleId: string };
     const nextPaymentDate = getNextPaymentDate();
-    const schedulePaymentId = generatePaymentId(user.id);
-    const scheduleResult = await createPaymentSchedule({
-      billingKey: body.billingKey,
-      scheduleId: `schedule_${user.id.slice(0, 8)}_${Date.now()}`,
-      paymentId: schedulePaymentId,
-      orderName: `인성이블로그 ${tierInfo.label} 플랜 (정기결제)`,
-      amount: tierInfo.price,
-      timeToPay: nextPaymentDate.toISOString(),
-    });
+    try {
+      const schedulePaymentId = generatePaymentId(user.id);
+      scheduleResult = await createPaymentSchedule({
+        billingKey: body.billingKey,
+        scheduleId: `schedule_${user.id.slice(0, 8)}_${Date.now()}`,
+        paymentId: schedulePaymentId,
+        orderName: `인성이블로그 ${tierInfo.label} 플랜 (정기결제)`,
+        amount: tierInfo.price,
+        timeToPay: nextPaymentDate.toISOString(),
+        customData,
+      });
+    } catch (scheduleErr) {
+      // 스케줄 등록 실패 → 결제 환불 (보상 트랜잭션)
+      console.error("스케줄 등록 실패, 결제 환불 시도:", scheduleErr);
+      try {
+        await cancelPayment(paymentId, "스케줄 등록 실패로 인한 자동 환불");
+      } catch (refundErr) {
+        // 환불까지 실패 — 수동 복구 필요. 결제 이력만이라도 기록
+        console.error("[CRITICAL] 환불 실패, 수동 복구 필요:", refundErr);
+        const admin = createAdminClient();
+        await admin.from("payments").insert({
+          user_id: user.id,
+          portone_payment_id: paymentId,
+          amount: tierInfo.price,
+          tier,
+          status: "refund_failed",
+          paid_at: new Date().toISOString(),
+        }).then(() => {}, () => {});
+      }
+      return NextResponse.json(
+        { error: "정기결제 등록 실패. 결제가 환불 처리됩니다." },
+        { status: 500 }
+      );
+    }
 
-    // 5. DB 업데이트
+    // 5. DB 업데이트 — 실패 시 결제 환불
     const admin = createAdminClient();
     const now = new Date().toISOString();
 
@@ -89,9 +119,24 @@ export async function POST(req: NextRequest) {
       .eq("id", user.id);
 
     if (updateError) {
-      console.error("구독 DB 업데이트 실패:", updateError);
+      console.error("구독 DB 업데이트 실패, 결제 환불 시도:", updateError);
+      try {
+        await cancelPayment(paymentId, "DB 업데이트 실패로 인한 자동 환불");
+      } catch (refundErr) {
+        console.error("[CRITICAL] DB 업데이트+환불 모두 실패, 수동 복구 필요:", refundErr);
+      }
+      // 실패 이력 기록 (최선 노력)
+      await admin.from("payments").insert({
+        user_id: user.id,
+        portone_payment_id: paymentId,
+        amount: tierInfo.price,
+        tier,
+        status: "db_update_failed",
+        paid_at: now,
+      }).then(() => {}, () => {});
+
       return NextResponse.json(
-        { error: "구독 등록 중 오류가 발생했습니다" },
+        { error: "구독 등록 중 오류가 발생했습니다. 결제가 환불 처리됩니다." },
         { status: 500 }
       );
     }

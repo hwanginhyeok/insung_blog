@@ -171,7 +171,7 @@ async def _fill_reply_text(page: Page, comment_no: str, text: str) -> bool:
 
     # 인간적 타이핑: 한 글자씩 입력
     for char in text:
-        await input_el.type(char, delay=random.gauss(50, 15))
+        await input_el.type(char, delay=max(15, min(120, random.gauss(50, 15))))
         # 문장부호 뒤 짧은 멈춤
         if char in '.!?,':
             await page.wait_for_timeout(random.randint(100, 300))
