@@ -91,6 +91,7 @@ async def run(
     test_visit: str | None = None,
     mode: str | None = None,
     user_id: str | None = None,
+    browser_semaphore: asyncio.Semaphore | None = None,
 ) -> None:
     """
     메인 자동 댓글 실행.
@@ -389,6 +390,8 @@ async def run(
             return v, w, f
 
         # 병렬 실행: 유저당 할당 슬롯만큼 동시 방문
+        # 세마포어는 브라우저 사용 구간에만 적용 — delay 중에는 슬롯 반환
+        _sem = browser_semaphore  # None이면 세마포어 없이 실행 (레거시 호환)
         idx = 0
         while idx < len(visit_queue):
             slots = get_slots_for_user(user_id)
@@ -400,11 +403,18 @@ async def run(
                 f"(슬롯 {batch_size}/{MAX_CONCURRENT_BROWSERS})"
             )
 
-            async with async_playwright() as pw_visit:
-                results = await asyncio.gather(
-                    *[_visit_one(bid, pw_visit) for bid in batch_blogs],
-                    return_exceptions=True,
-                )
+            # 브라우저 사용 구간만 세마포어 점유
+            if _sem:
+                await _sem.acquire()
+            try:
+                async with async_playwright() as pw_visit:
+                    results = await asyncio.gather(
+                        *[_visit_one(bid, pw_visit) for bid in batch_blogs],
+                        return_exceptions=True,
+                    )
+            finally:
+                if _sem:
+                    _sem.release()
 
             for r in results:
                 if isinstance(r, Exception):
@@ -425,24 +435,31 @@ async def run(
                 logger.info(f"오늘 댓글 한도({max_comments}개) 달성 — 중단")
                 break
 
+            # 봇 감지 회피 대기 — 세마포어 밖에서 실행 (슬롯 반환 상태)
             await delay_between_bloggers()
 
         # ── retry_queue 재시도 처리 (별도 브라우저) ──
-        async with async_playwright() as pw_retry:
-            r_browser, r_context, r_page = await create_browser(pw_retry, headless=True)
-            try:
-                if use_cookie_only:
-                    await ensure_login_cookie_only(r_context, r_page, user_id)
-                else:
-                    await ensure_login(r_context, r_page, naver_id, naver_pw)
-                retry_ok, retry_fail = await _process_retry_queue(
-                    r_page, r_context, naver_id, naver_pw, my_blog_id, dry_run,
-                    user_id=user_id,
-                )
-                comments_written += retry_ok
-                comments_failed += retry_fail
-            finally:
-                await r_browser.close()
+        if _sem:
+            await _sem.acquire()
+        try:
+            async with async_playwright() as pw_retry:
+                r_browser, r_context, r_page = await create_browser(pw_retry, headless=True)
+                try:
+                    if use_cookie_only:
+                        await ensure_login_cookie_only(r_context, r_page, user_id)
+                    else:
+                        await ensure_login(r_context, r_page, naver_id, naver_pw)
+                    retry_ok, retry_fail = await _process_retry_queue(
+                        r_page, r_context, naver_id, naver_pw, my_blog_id, dry_run,
+                        user_id=user_id,
+                    )
+                    comments_written += retry_ok
+                    comments_failed += retry_fail
+                finally:
+                    await r_browser.close()
+        finally:
+            if _sem:
+                _sem.release()
 
     except Exception as e:
         run_error = str(e)

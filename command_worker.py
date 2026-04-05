@@ -245,8 +245,9 @@ async def handle_run(user_id: str | None = None) -> dict:
 
     uid_label = user_id[:8] if user_id else "admin"
     logger.info(f"▶ 봇 실행 시작 (user={uid_label})")
-    async with _browser_semaphore:
-        await run(dry_run=False, user_id=user_id)
+    # 세마포어를 전체 run()에 걸지 않음 — orchestrator 내부에서
+    # 브라우저 사용 구간만 세마포어 점유, delay 중에는 슬롯 반환
+    await run(dry_run=False, user_id=user_id, browser_semaphore=_browser_semaphore)
     logger.info(f"✓ 봇 실행 완료 (user={uid_label})")
 
     # auto_execute: 봇 실행 완료 후 pending 댓글 자동 승인 + execute 명령 큐
