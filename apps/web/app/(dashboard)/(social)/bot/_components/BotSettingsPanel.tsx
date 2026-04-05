@@ -80,7 +80,7 @@ export function BotSettingsPanel({
               <p className="mt-1 text-xs text-muted-foreground">
                 blog.naver.com/<strong>여기ID</strong> 형식의 블로그 주소에서 확인
                 {settingsDraft.naver_blog_id && cookieStatus?.hasCookies && (
-                  <span className="ml-2 text-green-600 font-medium">
+                  <span className="ml-2 text-primary font-medium">
                     &#10003; 자동 감지: {settingsDraft.naver_blog_id}
                   </span>
                 )}

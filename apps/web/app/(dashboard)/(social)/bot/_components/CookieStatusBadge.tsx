@@ -156,7 +156,7 @@ export function CookieStatusBadge({
             {cookieMsg && (
               <span
                 className={`text-sm ${
-                  cookieMsg.type === "ok" ? "text-green-600" : "text-red-500"
+                  cookieMsg.type === "ok" ? "text-primary" : "text-destructive"
                 }`}
               >
                 {cookieMsg.text}

@@ -53,7 +53,7 @@ export function RunHistoryPanel({ runs, avgDuration }: RunHistoryPanelProps) {
                   <span className="whitespace-nowrap">
                     {r.bloggers_visited}명 / {r.comments_written}댓글
                     {r.comments_failed > 0 && (
-                      <span className="text-red-500"> / {r.comments_failed}실패</span>
+                      <span className="text-destructive"> / {r.comments_failed}실패</span>
                     )}
                   </span>
                   <span className="text-muted-foreground whitespace-nowrap ml-auto">
@@ -62,7 +62,7 @@ export function RunHistoryPanel({ runs, avgDuration }: RunHistoryPanelProps) {
                       : "-"}
                   </span>
                   {r.error_message && (
-                    <span className="text-red-500 whitespace-nowrap" title={r.error_message}>
+                    <span className="text-destructive whitespace-nowrap" title={r.error_message}>
                       오류
                     </span>
                   )}

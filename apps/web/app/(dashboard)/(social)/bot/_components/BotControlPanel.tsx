@@ -54,7 +54,7 @@ function ProgressBar({ result }: { result: ProgressResult }) {
 type ErrorClass = { badge: string; badgeColor: string; remedy: string };
 
 function classifyError(msg: string | null | undefined): ErrorClass {
-  if (!msg) return { badge: "오류", badgeColor: "text-red-500", remedy: "로그를 확인하세요." };
+  if (!msg) return { badge: "오류", badgeColor: "text-destructive", remedy: "로그를 ��인하세요." };
   const m = msg.toLowerCase();
   if (m.includes("nid_aut") || m.includes("쿠키 만료") || m.includes("쿠키를 재업로드"))
     return { badge: "쿠키 만료", badgeColor: "text-orange-600", remedy: "웹 대시보드 → [봇 설정] → 쿠키 업로드" };
@@ -64,7 +64,7 @@ function classifyError(msg: string | null | undefined): ErrorClass {
     return { badge: "셀렉터 오류", badgeColor: "text-yellow-600", remedy: "네이버 DOM 변경 가능성 — 개발자 확인 필요" };
   if (m.includes("timeout") || m.includes("타임아웃"))
     return { badge: "타임아웃", badgeColor: "text-yellow-600", remedy: "네트워크 상태를 확인하고 재시도하세요." };
-  return { badge: "오류", badgeColor: "text-red-500", remedy: "로그를 확인하세요." };
+  return { badge: "오류", badgeColor: "text-destructive", remedy: "로그를 확인하세요." };
 }
 
 // ── Props ────────────────────────────────────────────────────
@@ -131,7 +131,7 @@ export function BotControlPanel({
               <span className="text-sm font-semibold">봇 실행</span>
               <span className="text-xs text-muted-foreground">댓글 수집</span>
               {settings.daily_discover && (
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-green-500" title="자동 수집 ON" />
+                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary" title="자�� 수집 ON" />
               )}
             </button>
 
@@ -282,7 +282,7 @@ export function BotControlPanel({
 
           {/* 에러 표시 */}
           {commandError && (
-            <p className="text-sm text-red-500">{commandError}</p>
+            <p className="text-sm text-destructive">{commandError}</p>
           )}
 
           {/* 최근 완료 명령 */}
