@@ -37,12 +37,49 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* 데스크톱 — 요약 스탯 카드 (2/5) */}
+          {/* 데스크톱 — 제품 프리뷰 + 스탯 (2/5) */}
           <div className="hidden md:block md:col-span-2 animate-slide-in-right delay-300">
-            <div className="bg-muted rounded-2xl p-8 space-y-6">
-              <StatItem number="1분" label="글 하나 완성까지" />
-              <StatItem number="30개" label="일일 자동 댓글" />
-              <StatItem number="24/7" label="이웃 관리 자동화" />
+            {/* 미니 제품 UI 프리뷰 */}
+            <div className="rounded-2xl border border-border bg-card shadow-lg overflow-hidden">
+              {/* 브라우저 바 */}
+              <div className="flex items-center gap-1.5 px-4 py-2.5 bg-muted border-b border-border">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                <span className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
+                <span className="w-2.5 h-2.5 rounded-full bg-green-400" />
+                <span className="ml-3 text-xs text-muted-foreground">인성이 — AI 글쓰기</span>
+              </div>
+              {/* 프리뷰 콘텐츠 */}
+              <div className="p-5 space-y-3">
+                <div className="flex gap-2">
+                  <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center text-muted-foreground text-lg">
+                    &#128247;
+                  </div>
+                  <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center text-muted-foreground text-lg">
+                    &#128247;
+                  </div>
+                  <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center text-xs text-muted-foreground">
+                    +2
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="h-2.5 w-4/5 rounded bg-foreground/10" />
+                  <div className="h-2.5 w-full rounded bg-foreground/10" />
+                  <div className="h-2.5 w-3/5 rounded bg-foreground/10" />
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full w-3/4 rounded-full bg-primary animate-pulse" />
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">AI 작성 중...</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 스탯 */}
+            <div className="mt-4 grid grid-cols-3 gap-3">
+              <MiniStat number="1분" label="완성" />
+              <MiniStat number="30개" label="자동 댓글" />
+              <MiniStat number="24/7" label="이웃관리" />
             </div>
           </div>
         </div>
@@ -132,11 +169,11 @@ export default function LandingPage() {
   );
 }
 
-function StatItem({ number, label }: { number: string; label: string }) {
+function MiniStat({ number, label }: { number: string; label: string }) {
   return (
-    <div className="flex items-baseline gap-3">
-      <span className="text-2xl font-bold text-foreground">{number}</span>
-      <span className="text-sm text-muted-foreground">{label}</span>
+    <div className="text-center rounded-xl bg-muted px-3 py-3">
+      <div className="text-lg font-bold text-foreground">{number}</div>
+      <div className="text-[10px] text-muted-foreground">{label}</div>
     </div>
   );
 }
