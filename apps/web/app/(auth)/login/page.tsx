@@ -123,8 +123,9 @@ function LoginForm() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">이메일</label>
+              <label htmlFor="email" className="text-sm font-medium">이메일</label>
               <Input
+                id="email"
                 type="email"
                 placeholder="이메일을 입력하세요"
                 value={email}
@@ -134,8 +135,9 @@ function LoginForm() {
             </div>
             {mode !== "reset" && (
               <div className="space-y-2">
-                <label className="text-sm font-medium">비밀번호</label>
+                <label htmlFor="password" className="text-sm font-medium">비밀번호</label>
                 <Input
+                  id="password"
                   type="password"
                   placeholder="비밀번호를 입력하세요"
                   value={password}
