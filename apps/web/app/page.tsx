@@ -38,7 +38,7 @@ export default function LandingPage() {
           </div>
 
           {/* 데스크톱 — 제품 프리뷰 + 스탯 (2/5) */}
-          <div className="hidden md:block md:col-span-2 animate-slide-in-right anim-delay-3">
+          <div className="hidden md:block md:col-span-2 animate-fade-up anim-delay-3">
             {/* 미니 제품 UI 프리뷰 */}
             <div className="rounded-2xl border border-border bg-card shadow-lg overflow-hidden">
               {/* 브라우저 바 */}

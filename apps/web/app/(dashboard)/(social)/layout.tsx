@@ -56,13 +56,13 @@ export default function SocialLayout({
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
+                    "flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-3 text-sm font-medium transition-colors",
                     active
                       ? "border-primary text-primary"
                       : "border-transparent text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  <Icon className="h-3.5 w-3.5" />
+                  <Icon className="h-4 w-4" />
                   {item.label}
                 </Link>
               );
@@ -71,7 +71,7 @@ export default function SocialLayout({
           <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-background/80 to-transparent" />
         </div>
 
-        <div className="px-4 py-6">
+        <div className="px-4 py-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
           <div className="mx-auto max-w-5xl">{children}</div>
         </div>
       </div>

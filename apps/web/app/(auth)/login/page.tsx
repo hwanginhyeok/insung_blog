@@ -110,7 +110,7 @@ function LoginForm() {
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold">
-            <Link href="/" className="hover:opacity-80">인성이</Link>
+            <Link href="/" className="hover:opacity-80 inline-block py-1">인성이</Link>
           </CardTitle>
           <CardDescription>
             {mode === "login"
@@ -171,25 +171,25 @@ function LoginForm() {
                     : "회원가입"}
             </Button>
 
-            <div className="space-y-2 text-center text-sm text-muted-foreground">
+            <div className="space-y-1 text-center text-sm text-muted-foreground">
               {mode === "login" && (
                 <p>
                   <button
                     type="button"
-                    className="font-medium text-foreground underline"
+                    className="font-medium text-foreground underline py-2 px-1"
                     onClick={() => { setMode("reset"); setError(null); }}
                   >
                     비밀번호를 잊으셨나요?
                   </button>
                 </p>
               )}
-              <p>
+              <p className="py-1">
                 {mode === "login" ? (
                   <>
                     계정이 없으신가요?{" "}
                     <button
                       type="button"
-                      className="font-medium text-foreground underline"
+                      className="font-medium text-foreground underline py-2 px-1"
                       onClick={() => { setMode("signup"); setError(null); }}
                     >
                       회원가입
@@ -200,7 +200,7 @@ function LoginForm() {
                     {mode === "reset" ? "비밀번호가 기억나셨나요?" : "이미 계정이 있으신가요?"}{" "}
                     <button
                       type="button"
-                      className="font-medium text-foreground underline"
+                      className="font-medium text-foreground underline py-2 px-1"
                       onClick={() => { setMode("login"); setError(null); }}
                     >
                       로그인
@@ -224,6 +224,7 @@ function LoginForm() {
 
             <Button
               type="button"
+              size="lg"
               className="w-full border-0 font-medium bg-[#FEE500] text-[#191919] hover:bg-[#FDD800]"
               onClick={() =>
                 (window.location.href = `/api/auth/kakao/login?redirect=${encodeURIComponent(redirect)}`)
@@ -234,6 +235,7 @@ function LoginForm() {
 
             <Button
               type="button"
+              size="lg"
               className="w-full border-0 font-medium text-white bg-[#03C75A] hover:bg-[#02b350]"
               onClick={() =>
                 (window.location.href = `/api/auth/naver/login?redirect=${encodeURIComponent(redirect)}`)
