@@ -8,6 +8,7 @@
   4. 이미 추천한 이웃 제외
   5. neighbor_recommendations 테이블에 INSERT
 """
+import math
 from datetime import datetime, timezone, timedelta
 
 from src.storage.supabase_client import get_supabase, _resolve_user_id
@@ -95,14 +96,28 @@ def generate_recommendations(
         .execute()
     )
 
-    # blog_id별 교류 횟수 + 최근 교류 여부
+    # blog_id별 감쇠 적용 교류 점수 + 최근 교류 여부
+    # 지수 감쇠: decay = exp(-0.05 * days_ago) → 약 14일 반감기
+    _DECAY_RATE = 0.05
+    interaction_scores: dict[str, float] = {}
     interaction_counts: dict[str, int] = {}
     recent_interaction: dict[str, bool] = {}
-    recent_threshold = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    now_utc = datetime.now(timezone.utc)
+    recent_threshold = (now_utc - timedelta(days=7)).isoformat()
 
     for row in (interactions_result.data or []):
         bid = row["blog_id"]
         interaction_counts[bid] = interaction_counts.get(bid, 0) + 1
+
+        # 시간 감쇠 계산
+        try:
+            created = datetime.fromisoformat(row["created_at"].replace("Z", "+00:00"))
+            days_ago = max((now_utc - created).total_seconds() / 86400, 0)
+            decay = math.exp(-_DECAY_RATE * days_ago)
+        except (ValueError, TypeError):
+            decay = 0.5  # 파싱 실패 시 중간 감쇠
+        interaction_scores[bid] = interaction_scores.get(bid, 0.0) + decay
+
         if row["created_at"] >= recent_threshold:
             recent_interaction[bid] = True
 
@@ -120,9 +135,10 @@ def generate_recommendations(
 
         score = _BASE_SCORE
 
-        # 교류 빈도 점수
+        # 교류 빈도 점수 (시간 감쇠 적용)
         interactions = interaction_counts.get(bid, 0)
-        score += interactions * _INTERACTION_WEIGHT
+        decayed_score = interaction_scores.get(bid, 0.0)
+        score += decayed_score * _INTERACTION_WEIGHT
 
         # 최근 교류 보너스
         if recent_interaction.get(bid):
@@ -141,7 +157,7 @@ def generate_recommendations(
         # 추천 이유 생성
         reasons = []
         if interactions > 0:
-            reasons.append(f"최근 30일 교류 {interactions}회")
+            reasons.append(f"최근 30일 교류 {interactions}회 (감쇠점수 {decayed_score:.1f})")
         if theme_matched:
             reasons.append(f"테마 일치 ({candidate_category})")
         if not reasons:

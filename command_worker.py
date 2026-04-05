@@ -885,6 +885,47 @@ async def handle_neighbor_request(user_id: str | None = None, payload: dict | No
                 await browser.close()
 
 
+async def _check_cookie_expiry_on_page(page, context, user_id: str) -> bool:
+    """브라우저 작업 후 쿠키 만료 여부 확인.
+
+    로그인 페이지 리다이렉트 또는 NID_AUT 쿠키 부재를 감지한다.
+    Returns: True이면 쿠키 만료 상태.
+    """
+    # 로그인 페이지 리다이렉트 감지
+    current_url = page.url or ""
+    if "nidlogin" in current_url or "nid.naver.com" in current_url:
+        logger.warning(f"쿠키 만료 감지: 로그인 페이지 리다이렉트 (user={user_id[:8]})")
+        return True
+
+    # NID_AUT 쿠키 존재 여부 확인
+    try:
+        all_cookies = await context.cookies()
+        has_nid = any(c["name"] == "NID_AUT" for c in all_cookies)
+        if not has_nid:
+            logger.warning(f"쿠키 만료 감지: NID_AUT 없음 (user={user_id[:8]})")
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
+async def _handle_cookie_expiry(user_id: str) -> None:
+    """쿠키 만료 시 기록 + 텔레그램 알림."""
+    from src.storage.supabase_client import record_cookie_expiry, get_chat_id_for_user
+    from src.utils.telegram_notifier import send_telegram_message
+
+    record_cookie_expiry(user_id)
+
+    chat_id = get_chat_id_for_user(user_id) if user_id else None
+    await send_telegram_message(
+        f"⚠️ 쿠키 만료 감지 (이웃봇)\n"
+        f"네이버 세션이 만료되었습니다.\n"
+        f"웹 대시보드 → [봇 설정] → 쿠키 업로드에서 새 쿠키를 업로드해주세요.",
+        chat_id=chat_id,
+    )
+
+
 async def handle_discover_neighbors(
     user_id: str | None = None, payload: dict | None = None
 ) -> dict:
@@ -920,11 +961,16 @@ async def handle_discover_neighbors(
             try:
                 logged_in = await ensure_login_cookie_only(context, page, user_id)
                 if not logged_in:
+                    await _handle_cookie_expiry(user_id)
                     raise RuntimeError("네이버 로그인 실패 — 쿠키 재업로드 필요")
-                return await discover_neighbors(
+                result = await discover_neighbors(
                     page=page, keywords=keywords, user_id=user_id,
                     my_blog_id=my_blog_id, my_blog_ids=my_blog_ids,
                 )
+                # 작업 완료 후 쿠키 만료 감지
+                if await _check_cookie_expiry_on_page(page, context, user_id):
+                    await _handle_cookie_expiry(user_id)
+                return result
             finally:
                 await browser.close()
 
@@ -956,6 +1002,7 @@ async def handle_visit_neighbors(
             try:
                 logged_in = await ensure_login_cookie_only(context, page, user_id)
                 if not logged_in:
+                    await _handle_cookie_expiry(user_id)
                     raise RuntimeError("네이버 로그인 실패 — 쿠키 재업로드 필요")
                 my_blog_ids_set = set(config.get("naver_blog_ids", []))
                 my_blog_ids_set.add(config["naver_blog_id"])
@@ -965,6 +1012,9 @@ async def handle_visit_neighbors(
                     settings=config["settings"],
                     my_blog_ids=my_blog_ids_set,
                 )
+                # 작업 완료 후 쿠키 만료 감지
+                if await _check_cookie_expiry_on_page(page, context, user_id):
+                    await _handle_cookie_expiry(user_id)
             finally:
                 await browser.close()
 
@@ -1295,6 +1345,7 @@ async def handle_feed_comment(
             try:
                 logged_in = await ensure_login_cookie_only(context, page, user_id)
                 if not logged_in:
+                    await _handle_cookie_expiry(user_id)
                     raise RuntimeError("네이버 로그인 실패 — 쿠키 재업로드 필요")
                 my_blog_ids_set = set(config.get("naver_blog_ids", []))
                 my_blog_ids_set.add(config["naver_blog_id"])
@@ -1304,6 +1355,9 @@ async def handle_feed_comment(
                     settings=config["settings"],
                     my_blog_ids=my_blog_ids_set,
                 )
+                # 작업 완료 후 쿠키 만료 감지
+                if await _check_cookie_expiry_on_page(page, context, user_id):
+                    await _handle_cookie_expiry(user_id)
             finally:
                 await browser.close()
 
@@ -1476,6 +1530,20 @@ async def handle_auto_reply(user_id: str | None = None, payload: dict | None = N
                             success=True,
                             user_id=user_id,
                         )
+                        # 대댓글 교류 기록 (이웃 추천 시 반영)
+                        try:
+                            from src.neighbor.interaction_tracker import record_interaction
+                            commenter_id = comment.get("commenter_id", "")
+                            if commenter_id:
+                                record_interaction(
+                                    blog_id=commenter_id,
+                                    interaction_type="reply_sent",
+                                    post_url=comment.get("post_url"),
+                                    content=reply_text[:200] if reply_text else None,
+                                    user_id=user_id,
+                                )
+                        except Exception as e_track:
+                            logger.debug(f"대댓글 교류 기록 실패 (무시): {e_track}")
                         stats["posted"] += 1
                         logger.info(
                             f"답글 게시 완료: {comment['commenter_id']} → {reply_text[:30]}..."

@@ -9,31 +9,52 @@
   5. 확인 클릭
 """
 import asyncio
+from datetime import date, datetime, timezone
 
 from playwright.async_api import BrowserContext, Page
 
+from src.storage.supabase_client import get_supabase, _resolve_user_id
 from src.utils.logger import setup_logger
 
 logger = setup_logger("neighbor_requester")
 
-# 일일 신청 카운터 — 사용자별 분리 (프로세스 수명 동안 유지)
-_daily_counts: dict[str, int] = {}
-_daily_date: str | None = None
-
 
 def _check_daily_limit(max_per_day: int, user_id: str = "default") -> bool:
-    """일일 한도 확인. True면 신청 가능."""
-    global _daily_counts, _daily_date
-    from datetime import date
-    today = date.today().isoformat()
-    if _daily_date != today:
-        _daily_counts = {}
-        _daily_date = today
-    return _daily_counts.get(user_id, 0) < max_per_day
+    """일일 한도 확인 (Supabase 기반). True면 신청 가능."""
+    try:
+        uid = _resolve_user_id(user_id)
+        sb = get_supabase()
+        today_start = date.today().isoformat()  # 'YYYY-MM-DD'
+        result = (
+            sb.table("neighbor_requests")
+            .select("id", count="exact")
+            .eq("user_id", uid)
+            .gte("created_at", today_start)
+            .execute()
+        )
+        count = result.count or 0
+        return count < max_per_day
+    except Exception as e:
+        logger.warning(f"일일 한도 DB 조회 실패, 안전하게 차단: {e}")
+        return False
 
 
-def _increment_daily(user_id: str = "default"):
-    _daily_counts[user_id] = _daily_counts.get(user_id, 0) + 1
+def _get_today_count(user_id: str = "default") -> int:
+    """오늘 신청 건수 조회 (로그용)."""
+    try:
+        uid = _resolve_user_id(user_id)
+        sb = get_supabase()
+        today_start = date.today().isoformat()
+        result = (
+            sb.table("neighbor_requests")
+            .select("id", count="exact")
+            .eq("user_id", uid)
+            .gte("created_at", today_start)
+            .execute()
+        )
+        return result.count or 0
+    except Exception:
+        return 0
 
 
 async def send_neighbor_request(
@@ -174,10 +195,10 @@ async def send_neighbor_request(
         if not popup.is_closed():
             await popup.close()
 
-        _increment_daily(user_id)
+        today_count = _get_today_count(user_id)
         logger.info(
             f"서로이웃 신청 완료: {blog_id} "
-            f"(오늘 {_daily_counts.get(user_id, 0)}건)"
+            f"(오늘 {today_count}건)"
         )
         return {"success": True, "message": f"서로이웃 신청 완료: {blog_id}"}
 

@@ -23,7 +23,7 @@ def record_interaction(
 
     Args:
         blog_id: 대상 블로그 ID
-        interaction_type: 'comment_sent' | 'comment_received' | 'visit'
+        interaction_type: 'comment_sent' | 'comment_received' | 'visit' | 'reply_sent'
         post_url: 관련 게시물 URL
         content: 댓글 내용 등
         user_id: 사용자 ID (None이면 admin 폴백)
