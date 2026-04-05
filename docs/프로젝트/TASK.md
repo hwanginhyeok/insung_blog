@@ -51,6 +51,10 @@ Supabase (공유 제어 평면)
 | FAIL-FAST | 댓글 입력창 탐색 타임아웃 최적화 (~70초 -> ~20초) | P1 | ✅ 완료 | 주력 셀렉터 10초 + 폴백 2초 (2026-03-30) |
 | MIGRATION-UNIQUE | pending_comments UNIQUE partial index 적용 | P0 | ✅ 완료 | supabase db push로 적용 + 중복 삽입 차단 검증 완료 (2026-04-03) |
 | MIGRATION-AUTO-MODE | bot_settings에 daily_discover/auto_execute 컬럼 추가 | P0 | ✅ 완료 | supabase db push로 적용 + 컬럼 존재 검증 완료 (2026-04-03) |
+| PERSONA-SPLIT | 페르소나 용도별 분리 — 글쓰기용 vs 댓글용 | P0 | 진행중 | 댓글에 "유유베어가~" 닉네임 누출 버그. 페르소나를 글쓰기/댓글 별도 관리 필요 (2026-04-04) |
+| COMMENT-REVOKE | 승인 취소 기능 (approved → pending 되돌리기) | P1 | 진행중 | API revoke 추가 완료, 웹 UI "승인 취소" 버튼 추가. 테스트 필요 (2026-04-04) |
+| AUTO-REPLY | 대댓글 자동 답글 (내 블로그 댓글에 AI 답글) | P1 | 진행중 | 백엔드 완료 (수집+생성+게시), E2E 1건 성공. 웹 UI 버튼 추가됨. 쿠키 복호화 수정 완료 (2026-04-04) |
+| BUG-REPORT | 버그/오류 리포팅 프로세스 구축 | P1 | 대기 | 이슈 발생 시 자동 수집+추적 체계 필요 (2026-04-04) |
 
 #### MIGRATION-UNIQUE 실행 절차 (집에서 직접 수행)
 

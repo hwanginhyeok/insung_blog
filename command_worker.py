@@ -1447,11 +1447,12 @@ async def handle_auto_reply(user_id: str | None = None, payload: dict | None = N
 
             for comment in pending:
                 try:
-                    # AI 답글 생성
+                    # AI 답글 생성 (reply용 페르소나 전달)
                     reply_text = generate_reply(
                         comment_text=comment["comment_text"],
                         post_title=comment.get("post_title", ""),
                         commenter_name=comment.get("commenter_name"),
+                        persona_tone=config.get("reply_persona_prompt"),
                     )
                     update_incoming_reply_sb(comment["id"], "generated", reply_text)
                     stats["generated"] += 1

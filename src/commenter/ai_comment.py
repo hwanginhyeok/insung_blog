@@ -212,7 +212,11 @@ def _build_system_prompt(
         완성된 시스템 프롬프트 문자열
     """
     rules = custom_rules if custom_rules else _BASE_RULES
-    parts = [persona_tone or _SYSTEM_TONE, rules]
+    # 페르소나가 있으면 직접 사용 (persona_builder에서 이미 댓글용으로 빌드됨)
+    tone = _SYSTEM_TONE
+    if persona_tone:
+        tone = _SYSTEM_TONE + "\n\n" + persona_tone
+    parts = [tone, rules]
 
     if category_hint:
         parts.append(f"\n카테고리 힌트: {category_hint}")
@@ -456,7 +460,7 @@ def _try_ollama_comment(
     """Ollama로 단건 댓글 생성 시도. 실패 시 None."""
     system = _SYSTEM_TONE
     if persona_tone:
-        system += f"\n\n페르소나 말투: {persona_tone}"
+        system = _SYSTEM_TONE + "\n\n" + persona_tone
     if tone_hint:
         system += f"\n\n{tone_hint}"
     if category_hint:

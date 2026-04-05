@@ -84,10 +84,10 @@ def generate_reply(
     """
     tone = random.choice(_REPLY_TONES)
 
-    # 시스템 프롬프트 구성
+    # 시스템 프롬프트 구성 (persona_tone은 reply용으로 이미 빌드됨)
     system = _REPLY_SYSTEM
     if persona_tone:
-        system += f"\n\n[내 블로그 톤] {persona_tone}"
+        system += f"\n\n{persona_tone}"
     if custom_prompt:
         system += f"\n\n[추가 지시] {custom_prompt}"
 
