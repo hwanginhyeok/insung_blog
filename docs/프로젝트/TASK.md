@@ -73,6 +73,8 @@ Supabase (공유 제어 평면)
 | NEIGHBOR-IMPROVE | 이웃봇 10건 이슈 일괄 개선 | P1 | ✅ 완료 | DB 한도/추천 감쇠/셀렉터 폴백/쿠키 감지/RLS/UI/테스트 (2026-04-05) |
 | PROXY-READY | 프록시 인프라 코드 준비 | P1 | ✅ 완료 | browser.py proxy_url 파라미터 + bot_settings 컬럼. 30명+ 시 구매 (2026-04-05) |
 | PROXY-DEPLOY | 프록시 실제 도입 | P2 | 대기 | 30명 도달 시 주거용 프록시 구매 + 유저별 할당 (docs/프로젝트/요구사항/프록시-전략.md) |
+| TOAST-NOTIFY | 봇 명령 완료/실패 시 팝업 알림 + 알림음 | P1 | ✅ 완료 | 토스트 팝업(우하단 4초) + Web Audio 비프음 + 브라우저 Notification(탭 비활성 시). AudioContext 싱글톤 (2026-04-05) |
+| MILESTONE-15 | 사용자 15명/20명 마일스톤 알림 추가 | P1 | ✅ 완료 | 15명=동글 구매 알림, 20명=IP 로테이션 구현 착수 알림. 텔레그램 자동 발송 (2026-04-05) |
 
 #### MIGRATION-UNIQUE 실행 절차 (집에서 직접 수행)
 
