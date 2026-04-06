@@ -326,7 +326,7 @@ priority 기준 (1~10):
 
   const response = await client.messages.create({
     model: ANALYSIS_MODEL,
-    max_tokens: 3000,
+    max_tokens: 6000,
     system: systemPrompt,
     messages: [
       {
