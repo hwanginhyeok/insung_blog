@@ -19,7 +19,8 @@ const HASHTAG_MODEL = "claude-haiku-4-5-20251001";
 const CATEGORIES = BLOG_CATEGORIES;
 const DEFAULT_CATEGORY = "일상";
 const POST_BODY_MIN_CHARS = 300;
-const POST_BODY_MAX_CHARS = 1500;
+const POST_BODY_BASE_MAX_CHARS = 1500;
+const POST_BODY_PER_PHOTO_CHARS = 200; // 사진당 추가 허용 글자수
 const POST_TITLE_MAX_CHARS = 40;
 const HASHTAG_MIN_COUNT = 15;
 const HASHTAG_MAX_COUNT = 25;
@@ -335,7 +336,8 @@ async function generateDraft(
   category: string,
   spec: string,
   categoryInstruction: string | null = null,
-  usePersonaPhotoLayout: boolean = false
+  usePersonaPhotoLayout: boolean = false,
+  photoCount: number = 1
 ): Promise<{ title: string; body: string }> {
 
   // 페르소나에 레이아웃 패턴이 있으면 그 패턴을 따르도록 지시
@@ -365,8 +367,9 @@ ${spec}
 === 최종 출력 규칙 ===
 - 카테고리: ${category}
 - 제목은 ${POST_TITLE_MAX_CHARS}자 이내
-- 본문은 ${POST_BODY_MIN_CHARS}~${POST_BODY_MAX_CHARS}자
+- 본문은 ${POST_BODY_MIN_CHARS}~${POST_BODY_BASE_MAX_CHARS + photoCount * POST_BODY_PER_PHOTO_CHARS}자
 - body에 줄바꿈은 \\n으로 표현
+- 사진은 총 ${photoCount}장이므로 **모든 사진을 빠짐없이** [PHOTO_1]~[PHOTO_${photoCount}] 마커로 포함할 것
 ${layoutRules}
 - 출력 형식: 반드시 아래 JSON만 출력. 인사말, 설명, 마크다운 등 다른 텍스트 절대 금지.
 {"title": "제목", "body": "본문"}`;
@@ -468,7 +471,7 @@ export async function generatePost(
   // Step 3: 초안 생성 (카테고리별 추가 지시 + 사진 배치 패턴 포함)
   const categoryInstruction = personaResult?.categoryPrompts[category] || null;
   const usePersonaPhotoLayout = personaResult?.hasPhotoLayout ?? false;
-  const draft = await generateDraft(client, analysis, memo, category, spec, categoryInstruction, usePersonaPhotoLayout);
+  const draft = await generateDraft(client, analysis, memo, category, spec, categoryInstruction, usePersonaPhotoLayout, photos.length);
 
   // Step 4: 해시태그
   const hashtags = await generateHashtags(client, draft.title, draft.body);
@@ -520,7 +523,7 @@ ${spec}
 - 사용자 피드백을 **정확히** 반영하여 수정
 - 피드백에서 언급하지 않은 부분은 기존 내용 유지
 - 제목은 ${POST_TITLE_MAX_CHARS}자 이내
-- 본문은 ${POST_BODY_MIN_CHARS}~${POST_BODY_MAX_CHARS}자
+- 본문은 ${POST_BODY_MIN_CHARS}~${POST_BODY_BASE_MAX_CHARS * 2}자
 - body에 줄바꿈은 \\n으로 표현
 ${markerRule}
 - 출력 형식: 반드시 아래 JSON만 출력. 다른 텍스트 절대 금지.
