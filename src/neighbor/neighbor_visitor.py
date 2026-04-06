@@ -3,11 +3,12 @@
 
 흐름:
   1. neighbors 테이블에서 last_interaction_at 기준 오래된 순으로 선택
-  2. 각 이웃 블로그 방문 → 게시물 수집 → 본문 추출
+  2. 각 이웃 블로그 방문 → 게시물 수집 → 본문 추출 (동시 최대 3명)
   3. AI 댓글 배치 생성 → pending_comments에 저장 (승인 대기)
   4. 이웃이 아닌 경우 서로이웃 신청
   5. last_interaction_at 갱신
 """
+import asyncio
 from datetime import datetime, timezone, timedelta
 
 from playwright.async_api import Page, BrowserContext
@@ -69,61 +70,90 @@ async def visit_neighbors(
                 "failed": 0, "errors": [],
                 "message": "방문할 이웃이 없습니다 (모두 최근 방문)"}
 
-    logger.info(f"▶ 이웃 방문 시작: {len(targets)}명")
+    logger.info(f"▶ 이웃 방문 시작: {len(targets)}명 (동시 최대 3명)")
 
     visited = 0
     comments_generated = 0
     neighbor_requests_sent = 0
     errors: list[str] = []
 
-    for neighbor in targets:
+    # 동시 방문 수 제한 (네이버 감지 방지)
+    MAX_CONCURRENT = 3
+    sem = asyncio.Semaphore(MAX_CONCURRENT)
+
+    async def _visit_with_semaphore(neighbor: dict) -> tuple[int, int, list[str]]:
+        """세마포어로 동시 방문 수 제한. 각 태스크가 별도 page 사용."""
         blog_id = neighbor["blog_id"]
         blog_name = neighbor.get("blog_name") or blog_id
         neighbor_type = neighbor.get("neighbor_type")
+        local_comments = 0
+        local_requests = 0
+        local_errors: list[str] = []
 
-        try:
-            # 1. 댓글 생성
-            count = await _visit_one_neighbor(
-                page=page, context=context, blog_id=blog_id,
-                my_blog_id=my_blog_id, my_blog_ids=my_blog_ids,
-                user_id=user_id,
-                approval_mode=approval_mode, comment_prompt=comment_prompt,
-            )
-            visited += 1
-            comments_generated += count
+        async with sem:
+            # 병렬 방문을 위해 별도 페이지 생성
+            visit_page = await context.new_page()
+            try:
+                # 1. 댓글 생성
+                count = await _visit_one_neighbor(
+                    page=visit_page, context=context, blog_id=blog_id,
+                    my_blog_id=my_blog_id, my_blog_ids=my_blog_ids,
+                    user_id=user_id,
+                    approval_mode=approval_mode, comment_prompt=comment_prompt,
+                )
+                local_comments = count
 
-            # 2. 이웃 상태 확인 + 서로이웃 신청 (discovered/미이웃인 경우)
-            if neighbor_type in ("discovered", None):
-                status = await check_neighbor_status(page, blog_id)
-                if status:
-                    # 이미 이웃 → 타입 업데이트
-                    upsert_neighbor(blog_id=blog_id, neighbor_type=status, user_id=user_id)
-                    logger.info(f"  {blog_id}: 이웃 상태 → {status}")
-                else:
-                    # 이웃 아님 → 서로이웃 신청
-                    req_result = await send_neighbor_request(
-                        page=page, blog_id=blog_id,
-                        message=request_message, max_per_day=max_requests,
-                        user_id=user_id, context=context,
-                    )
-                    if req_result["success"]:
-                        neighbor_requests_sent += 1
-                        save_neighbor_request(
-                            target_blog_id=blog_id, target_blog_name=blog_name,
-                            message=request_message, status="sent", user_id=user_id,
-                        )
-                        logger.info(f"  {blog_id}: 서로이웃 신청 완료")
+                # 2. 이웃 상태 확인 + 서로이웃 신청
+                if neighbor_type in ("discovered", None):
+                    status = await check_neighbor_status(visit_page, blog_id)
+                    if status:
+                        upsert_neighbor(blog_id=blog_id, neighbor_type=status, user_id=user_id)
+                        logger.info(f"  {blog_id}: 이웃 상태 → {status}")
                     else:
-                        logger.debug(f"  {blog_id}: 서로이웃 신청 스킵 — {req_result['message']}")
+                        req_result = await send_neighbor_request(
+                            page=visit_page, blog_id=blog_id,
+                            message=request_message, max_per_day=max_requests,
+                            user_id=user_id, context=context,
+                        )
+                        if req_result["success"]:
+                            local_requests = 1
+                            save_neighbor_request(
+                                target_blog_id=blog_id, target_blog_name=blog_name,
+                                message=request_message, status="sent", user_id=user_id,
+                            )
+                            logger.info(f"  {blog_id}: 서로이웃 신청 완료")
+                        else:
+                            logger.debug(f"  {blog_id}: 서로이웃 신청 스킵 — {req_result['message']}")
 
-            update_last_interaction(blog_id, user_id=user_id)
-            logger.info(f"✓ {blog_name}({blog_id}) 방문 완료: 댓글 {count}개")
-        except Exception as e:
-            errors.append(f"{blog_name}: {e}")
-            logger.warning(f"✗ {blog_id} 방문 실패: {e}")
+                update_last_interaction(blog_id, user_id=user_id)
+                logger.info(f"✓ {blog_name}({blog_id}) 방문 완료: 댓글 {count}개")
+            except Exception as e:
+                local_errors.append(f"{blog_name}: {e}")
+                logger.warning(f"✗ {blog_id} 방문 실패: {e}")
+            finally:
+                await visit_page.close()
 
-        if visited < len(targets):
-            await delay_between_bloggers()
+        # 딜레이는 세마포어 밖 — 대기 중에도 다른 태스크가 슬롯 사용 가능
+        await delay_between_bloggers()
+
+        return local_comments, local_requests, local_errors
+
+    # 모든 이웃을 동시 실행 (세마포어가 3개로 제한)
+    results = await asyncio.gather(
+        *[_visit_with_semaphore(n) for n in targets],
+        return_exceptions=True,
+    )
+
+    for r in results:
+        if isinstance(r, Exception):
+            errors.append(str(r))
+        else:
+            c, req, errs = r
+            if not errs:
+                visited += 1  # 에러 없으면 방문 성공 (댓글 0개도 성공)
+            comments_generated += c
+            neighbor_requests_sent += req
+            errors.extend(errs)
 
     failed = len(errors)
     msg = f"이웃 {visited}명 방문, 댓글 {comments_generated}개, 이웃 신청 {neighbor_requests_sent}건"
