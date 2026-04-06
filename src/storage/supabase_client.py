@@ -169,7 +169,7 @@ def get_user_bot_config(user_id: str) -> dict | None:
         _TIER_LIMITS = {
             "free":  {"comments": 10, "bloggers": 3,  "replies": 5,   "neighbor": False},
             "basic": {"comments": 50, "bloggers": 15, "replies": 30,  "neighbor": True},
-            "pro":   {"comments": 200,"bloggers": 50, "replies": 100, "neighbor": True},
+            "pro":   {"comments": 1000,"bloggers": 1000, "replies": 500, "neighbor": True},
         }
         limits = _TIER_LIMITS.get(tier, _TIER_LIMITS["free"])
 

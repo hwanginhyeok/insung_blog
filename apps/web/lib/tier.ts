@@ -38,7 +38,7 @@ export const TIER_LIMITS: Record<
 > = {
   free:  { label: "무료",   max: 5,    price: 0,     commentsPerDay: 10,  bloggersPerDay: 3,  repliesPerDay: 5,   neighborBot: false },
   basic: { label: "베이직", max: 30,   price: 7900,  commentsPerDay: 50,  bloggersPerDay: 15, repliesPerDay: 30,  neighborBot: true },
-  pro:   { label: "프로",   max: 9999, price: 14900, commentsPerDay: 200, bloggersPerDay: 50, repliesPerDay: 100, neighborBot: true },
+  pro:   { label: "프로",   max: 9999, price: 14900, commentsPerDay: 1000, bloggersPerDay: 1000, repliesPerDay: 500, neighborBot: true },
 };
 
 export interface UsageResult {
