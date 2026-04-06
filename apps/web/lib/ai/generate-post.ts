@@ -307,6 +307,23 @@ function parseDraftJson(raw: string): { title: string; body: string } {
     }
   }
 
+  // 3차: JSON 중괄호 경계 추출 후 재시도
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    const jsonCandidate = cleaned.slice(firstBrace, lastBrace + 1);
+    try {
+      const result = JSON.parse(jsonCandidate);
+      if (result.title?.trim() && result.body?.trim()) {
+        return { title: result.title.trim(), body: result.body.trim() };
+      }
+    } catch {
+      // 최종 폴백 실패
+    }
+  }
+
+  // 디버깅용 로그
+  console.error("AI 초안 JSON 파싱 실패. 원문 (500자):", cleaned.slice(0, 500));
   throw new Error("AI 초안 JSON 파싱 실패");
 }
 
