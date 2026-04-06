@@ -30,6 +30,14 @@ export interface BlockSequenceItem {
   type: string;
   /** text 블록: 글자 수 (빈 줄이면 0) */
   charCount?: number;
+  /** text 블록: 정렬 (left/center/right) */
+  align?: string;
+  /** text 블록: 폰트 클래스 (se-ff-* 에서 접두사 제거) */
+  font?: string;
+  /** text 블록: 크기 클래스 (se-fs-* 에서 접두사 제거) */
+  fontSize?: string;
+  /** text 블록: 볼드 텍스트 목록 (최대 3개) */
+  boldTexts?: string[];
   /** image 블록: 캡션 텍스트 (없으면 undefined) */
   caption?: string;
   /** sticker 블록: 스티커팩 ID (ogq_XXXXX 형태) */
@@ -304,7 +312,37 @@ function extractHtmlMetadata(
         meta.empty_line_positions.push(blockIndex);
       }
 
-      // 정렬 분석
+      // 블록별 정렬 (첫 번째 paragraph 기준)
+      const firstParagraph = $el.find(".se-text-paragraph").first();
+      const pCls = (firstParagraph.attr("class") || "");
+      if (pCls.includes("align-center")) block.align = "center";
+      else if (pCls.includes("align-right")) block.align = "right";
+      else block.align = "left";
+
+      // 블록별 폰트/크기 (첫 번째 span 기준 — 대표값)
+      const firstSpan = $el.find("[class*='se-ff-'], [class*='se-fs-']").first();
+      if (firstSpan.length) {
+        const spanCls = (firstSpan.attr("class") || "").split(/\s+/);
+        for (const c of spanCls) {
+          if (c.startsWith("se-ff-") && !block.font) {
+            const f = c.replace("se-ff-", "");
+            if (f) block.font = f;
+          }
+          if (c.startsWith("se-fs-") && !block.fontSize) {
+            block.fontSize = c.replace("se-fs-", "");
+          }
+        }
+      }
+
+      // 블록별 볼드 텍스트 (최대 3개)
+      const boldTexts: string[] = [];
+      $el.find("b, strong").each((_, b) => {
+        const t = $(b).text().trim();
+        if (t && boldTexts.length < 3) boldTexts.push(t.slice(0, 30));
+      });
+      if (boldTexts.length > 0) block.boldTexts = boldTexts;
+
+      // 정렬 통계 (기존 집계 유지)
       $el.find(".se-text-paragraph").each((_, p) => {
         const pClasses = ($(p).attr("class") || "").split(/\s+/);
         if (pClasses.some((c) => c.includes("align-center"))) {
@@ -318,7 +356,7 @@ function extractHtmlMetadata(
         }
       });
 
-      // 폰트/사이즈 클래스 분석
+      // 폰트/사이즈 클래스 통계 (기존 집계 유지)
       $el.find("[class*='se-ff-'], [class*='se-fs-']").each((_, span) => {
         const spanClasses = ($(span).attr("class") || "").split(/\s+/);
         for (const cls of spanClasses) {

@@ -41,7 +41,13 @@ function formatBlockSequence(blocks: BlockSequenceItem[]): string {
   return blocks.map((b) => {
     if (b.type === "text") {
       if (b.charCount === 0) return "빈줄";
-      return `text(${b.charCount}자)`;
+      // 블록별 속성 표시: text(130자,center,nanumbareunhipi,fs16,볼드:"쉐프스키친")
+      const parts = [`${b.charCount}자`];
+      if (b.align && b.align !== "left") parts.push(b.align);
+      if (b.font) parts.push(b.font);
+      if (b.fontSize) parts.push(b.fontSize);
+      if (b.boldTexts?.length) parts.push(`볼드:"${b.boldTexts[0]}"`);
+      return `text(${parts.join(",")})`;
     }
     if (b.type === "image") {
       return b.caption ? `image[캡션:"${b.caption.slice(0, 30)}"]` : "image";
