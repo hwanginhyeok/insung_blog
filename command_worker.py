@@ -384,6 +384,11 @@ async def handle_execute(user_id: str | None = None, command_id: str | None = No
                 )
         return logged_in
 
+    # 댓글 게시 병렬화 — 동시 3개 페이지로 게시
+    EXECUTE_CONCURRENT = 3
+    execute_sem = asyncio.Semaphore(EXECUTE_CONCURRENT)
+    _abort = False  # 연속 실패 시 전체 중단 플래그
+
     async with _browser_semaphore:
         browser = None
         context = None
@@ -393,152 +398,149 @@ async def handle_execute(user_id: str | None = None, command_id: str | None = No
         try:
             pw_instance = await async_playwright().start()
 
-            for i, comment in enumerate(approved, 1):
-                # 종료 시그널 수신 시 즉시 중단 — 남은 댓글 approved 롤백 (재시도 가능)
-                if _shutdown:
-                    remaining = approved[i - 1:]
-                    logger.info(f"종료 시그널로 중단 — {len(remaining)}개 approved 롤백")
-                    for rc in remaining:
-                        update_pending_status_sb(rc["id"], "approved", decided_by="worker")
+            # 배치 단위로 처리 (BATCH_SIZE마다 브라우저 재시작)
+            for batch_start in range(0, total, BATCH_SIZE):
+                if _shutdown or _abort:
                     break
 
-                # 브라우저 시작 또는 BATCH_SIZE마다 재시작
-                if browser is None or ((i - 1) % BATCH_SIZE == 0 and i > 1):
-                    if browser:
-                        logger.info(f"▶ 브라우저 재시작 ({i - 1}개 처리 완료)")
-                        await browser.close()
-                        await asyncio.sleep(3)
-                    browser, context, page = await create_browser(pw_instance, headless=True)
-                    logged_in = await _login(context, page)
-                    if not logged_in:
-                        raise RuntimeError("네이버 로그인 실패")
-                    consecutive_failures = 0
+                batch = approved[batch_start:batch_start + BATCH_SIZE]
+                batch_num = batch_start // BATCH_SIZE + 1
 
-                comment_id = comment["id"]
-                blog_id = comment["blog_id"]
-                post_url = comment["post_url"]
-                post_title = comment["post_title"]
-                comment_text = comment["comment_text"]
-
-                logger.info(f"▶ [{i}/{total}] {blog_id} 댓글 작성 중...")
-
-                try:
-                    ok, _ = await write_comment(
-                        page=page,
-                        post_url=post_url,
-                        post_title=post_title,
-                        dry_run=False,
-                        comment_text=comment_text,
-                    )
-                    if ok:
-                        update_pending_status_sb(comment_id, "posted", decided_by="worker")
-                        # SQLite comment_history 기록 — is_post_commented() 중복 방지용
-                        record_comment(post_url, blog_id, post_title, comment_text, True, user_id=user_id)
-                        success_count += 1
-                        consecutive_failures = 0
-                        logger.info(f"✓ [{i}/{total}] 성공: {blog_id}")
-                    elif ok is None:
-                        # 댓글 입력창 없음 — 게시물 자체 문제 (비공개/설정 차단)
-                        # 연속 실패 카운터 증가 안 함 (브라우저 크래시와 무관)
-                        update_pending_status_sb(comment_id, "failed", decided_by="worker")
-                        failed_count += 1
-                        fail_reasons["no_input"] += 1
-                        logger.warning(f"✗ [{i}/{total}] 스킵 (입력창 없음): {blog_id}")
-                    else:
-                        update_pending_status_sb(comment_id, "failed", decided_by="worker")
-                        add_to_retry_queue(
-                            blog_id, post_url, post_title, "댓글 작성 실패",
-                            user_id=user_id,
-                        )
-                        failed_count += 1
-                        consecutive_failures += 1
-                        fail_reasons["cookie"] += 1
-                        logger.warning(f"✗ [{i}/{total}] 실패: {blog_id}")
-                except Exception as e:
-                    update_pending_status_sb(comment_id, "failed", decided_by="worker")
-                    add_to_retry_queue(
-                        blog_id, post_url, post_title, str(e)[:100],
-                        user_id=user_id,
-                    )
-                    failed_count += 1
-                    consecutive_failures += 1
-                    fail_reasons["other"] += 1
-                    logger.error(f"✗ [{i}/{total}] 예외: {e}")
-
-                # 3연속 실패 시 텔레그램 조기 경고 (abort 2회 전)
-                if consecutive_failures == WARN_CONSECUTIVE_FAILURES and user_id:
-                    try:
-                        from src.utils.telegram_notifier import send_telegram_message
-                        from src.storage.supabase_client import get_chat_id_for_user
-                        chat_id = get_chat_id_for_user(user_id)
-                        if chat_id:
-                            await send_telegram_message(
-                                f"⚠️ 댓글 게시 중 연속 {WARN_CONSECUTIVE_FAILURES}회 실패\n"
-                                f"진행: {i}/{total} (성공 {success_count}, 실패 {failed_count})\n"
-                                f"계속 진행 중입니다. {MAX_CONSECUTIVE_FAILURES}회 연속 실패 시 자동 중단됩니다.",
-                                chat_id=chat_id,
-                            )
-                    except Exception as warn_err:
-                        logger.warning(f"조기 경고 전송 실패: {warn_err}")
-
-                # 연속 실패 한도 초과 → 셀렉터 깨짐 또는 브라우저 크래시로 판단, 중단
-                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                    remaining_count = total - i
-                    logger.error(
-                        f"연속 {MAX_CONSECUTIVE_FAILURES}회 실패 — 셀렉터 깨짐 또는 브라우저 크래시 판단, "
-                        f"나머지 {remaining_count}개 approved 롤백 (수정 후 재시도 가능)"
-                    )
-                    # 미처리 댓글을 approved로 롤백 — failed로 처리하지 않음
-                    # 셀렉터 수정 후 재실행 시 자동 재시도 가능
-                    for remaining_comment in approved[i:]:
-                        update_pending_status_sb(
-                            remaining_comment["id"], "approved", decided_by="worker"
-                        )
-                    break
-
-                # N개마다 웹 진행 상황 업데이트 (폴링으로 실시간 표시)
-                if command_id and i % PROGRESS_UPDATE_INTERVAL == 0:
-                    update_command(
-                        command_id,
-                        result={
-                            "progress": i,
-                            "total": total,
-                            "success": success_count,
-                            "failed": failed_count,
-                            "fail_reasons": fail_reasons,
-                        },
-                    )
-
-                # 30개마다 텔레그램 중간 보고 (마지막 배치 제외하여 최종 알림과 중복 방지)
-                if user_id and i % 30 == 0 and i < total:
-                    try:
-                        from src.utils.telegram_notifier import send_telegram_message
-                        from src.storage.supabase_client import get_chat_id_for_user
-                        chat_id = get_chat_id_for_user(user_id)
-                        if chat_id:
-                            reason_parts = []
-                            if fail_reasons["cookie"]:
-                                reason_parts.append(f"쿠키 만료 {fail_reasons['cookie']}건")
-                            if fail_reasons["no_input"]:
-                                reason_parts.append(f"댓글창 미탐지 {fail_reasons['no_input']}건")
-                            if fail_reasons["other"]:
-                                reason_parts.append(f"기타 {fail_reasons['other']}건")
-                            reason_str = ", ".join(reason_parts) if reason_parts else "없음"
-                            await send_telegram_message(
-                                f"📊 진행 중 ({i}/{total})\n"
-                                f"✅ 성공: {success_count} | ❌ 실패: {failed_count}\n"
-                                f"🔍 실패 원인: {reason_str}",
-                                chat_id=chat_id,
-                            )
-                        else:
-                            logger.warning(
-                                f"텔레그램 중간 보고 스킵: chat_id 미설정 (user={user_id[:8]})"
-                            )
-                    except Exception as tg_err:
-                        logger.warning(f"텔레그램 중간 보고 전송 실패 (loop 계속): {tg_err}")
-
-                if i < total:
+                # 브라우저 시작/재시작
+                if browser:
+                    logger.info(f"▶ 브라우저 재시작 (배치 {batch_num})")
+                    await browser.close()
                     await asyncio.sleep(3)
+                browser, context, page = await create_browser(pw_instance, headless=True)
+                logged_in = await _login(context, page)
+                if not logged_in:
+                    raise RuntimeError("네이버 로그인 실패")
+                consecutive_failures = 0
+
+                async def _post_one_comment(idx: int, comment: dict) -> None:
+                    """세마포어로 동시 게시 수 제한. 각 태스크가 별도 page 사용."""
+                    nonlocal success_count, failed_count, consecutive_failures, fail_reasons, _abort
+
+                    if _abort or _shutdown:
+                        return
+
+                    comment_id = comment["id"]
+                    blog_id = comment["blog_id"]
+                    post_url = comment["post_url"]
+                    post_title = comment["post_title"]
+                    comment_text = comment["comment_text"]
+
+                    async with execute_sem:
+                        if _abort:
+                            return
+
+                        comment_page = await context.new_page()
+                        try:
+                            logger.info(f"▶ [{idx}/{total}] {blog_id} 댓글 작성 중...")
+                            ok, _ = await write_comment(
+                                page=comment_page,
+                                post_url=post_url,
+                                post_title=post_title,
+                                dry_run=False,
+                                comment_text=comment_text,
+                            )
+                            if ok:
+                                update_pending_status_sb(comment_id, "posted", decided_by="worker")
+                                record_comment(post_url, blog_id, post_title, comment_text, True, user_id=user_id)
+                                success_count += 1
+                                consecutive_failures = 0
+                                logger.info(f"✓ [{idx}/{total}] 성공: {blog_id}")
+                            elif ok is None:
+                                update_pending_status_sb(comment_id, "failed", decided_by="worker")
+                                failed_count += 1
+                                fail_reasons["no_input"] += 1
+                                logger.warning(f"✗ [{idx}/{total}] 스킵 (입력창 없음): {blog_id}")
+                            else:
+                                update_pending_status_sb(comment_id, "failed", decided_by="worker")
+                                add_to_retry_queue(blog_id, post_url, post_title, "댓글 작성 실패", user_id=user_id)
+                                failed_count += 1
+                                consecutive_failures += 1
+                                fail_reasons["cookie"] += 1
+                                logger.warning(f"✗ [{idx}/{total}] 실패: {blog_id}")
+                        except Exception as e:
+                            update_pending_status_sb(comment_id, "failed", decided_by="worker")
+                            add_to_retry_queue(blog_id, post_url, post_title, str(e)[:100], user_id=user_id)
+                            failed_count += 1
+                            consecutive_failures += 1
+                            fail_reasons["other"] += 1
+                            logger.error(f"✗ [{idx}/{total}] 예외: {e}")
+                        finally:
+                            await comment_page.close()
+
+                        # 댓글 간 딜레이 (세마포어 밖으로 이동하면 더 빠르지만, 네이버 감지 방지)
+                        await asyncio.sleep(3)
+
+                    # 연속 실패 체크 (전체 중단)
+                    if consecutive_failures == WARN_CONSECUTIVE_FAILURES and user_id:
+                        try:
+                            from src.utils.telegram_notifier import send_telegram_message
+                            from src.storage.supabase_client import get_chat_id_for_user
+                            chat_id = get_chat_id_for_user(user_id)
+                            if chat_id:
+                                await send_telegram_message(
+                                    f"⚠️ 댓글 게시 중 연속 {WARN_CONSECUTIVE_FAILURES}회 실패\n"
+                                    f"진행: {idx}/{total} (성공 {success_count}, 실패 {failed_count})\n"
+                                    f"계속 진행 중입니다. {MAX_CONSECUTIVE_FAILURES}회 연속 실패 시 자동 중단됩니다.",
+                                    chat_id=chat_id,
+                                )
+                        except Exception:
+                            pass
+
+                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                        logger.error(
+                            f"연속 {MAX_CONSECUTIVE_FAILURES}회 실패 — 전체 중단"
+                        )
+                        _abort = True
+
+                # 배치 내 댓글을 동시 실행
+                results = await asyncio.gather(
+                    *[_post_one_comment(batch_start + j + 1, c) for j, c in enumerate(batch)],
+                    return_exceptions=True,
+                )
+
+                # gather 예외 처리
+                for r in results:
+                    if isinstance(r, Exception):
+                        logger.error(f"댓글 게시 태스크 예외: {r}")
+
+                # 진행 상황 업데이트
+                processed = batch_start + len(batch)
+                if command_id:
+                    update_command(command_id, result={
+                        "progress": processed, "total": total,
+                        "success": success_count, "failed": failed_count,
+                        "fail_reasons": fail_reasons,
+                    })
+
+                # 텔레그램 중간 보고 (배치마다)
+                if user_id and processed < total:
+                    try:
+                        from src.utils.telegram_notifier import send_telegram_message
+                        from src.storage.supabase_client import get_chat_id_for_user
+                        chat_id = get_chat_id_for_user(user_id)
+                        if chat_id:
+                            await send_telegram_message(
+                                f"📊 진행 중 ({processed}/{total})\n"
+                                f"✅ 성공: {success_count} | ❌ 실패: {failed_count}",
+                                chat_id=chat_id,
+                            )
+                    except Exception:
+                        pass
+
+                # 중단 시 남은 댓글 롤백
+                if _abort:
+                    remaining = approved[processed:]
+                    if remaining:
+                        logger.info(f"중단 — {len(remaining)}개 approved 롤백")
+                        for rc in remaining:
+                            update_pending_status_sb(rc["id"], "approved", decided_by="worker")
+                    break
+
         finally:
             if browser:
                 await browser.close()
