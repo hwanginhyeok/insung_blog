@@ -42,9 +42,9 @@ const COMPARISON_ROWS: {
   pro: string;
 }[] = [
   { label: "AI 글쓰기", free: "5회/월", basic: "30회/월", pro: "무제한" },
-  { label: "댓글/일", free: "10개", basic: "50개", pro: "1,000개" },
-  { label: "블로거/일", free: "3명", basic: "15명", pro: "1,000명" },
-  { label: "대댓글/일", free: "5개", basic: "30개", pro: "500개" },
+  { label: "댓글/일", free: "10개", basic: "50개", pro: "400개" },
+  { label: "블로거/일", free: "3명", basic: "15명", pro: "200명" },
+  { label: "대댓글/일", free: "5개", basic: "30개", pro: "200개" },
   { label: "이웃봇", free: "no", basic: "yes", pro: "yes" },
   { label: "페르소나 분석", free: "yes", basic: "yes", pro: "yes" },
   { label: "우선 지원", free: "no", basic: "no", pro: "yes" },
