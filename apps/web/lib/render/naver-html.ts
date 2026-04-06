@@ -235,6 +235,24 @@ function makeImageBlock(url: string): string {
   ].join("");
 }
 
+/** 구분선 블록 — SmartEditor 가로줄 컴포넌트 */
+function makeSeparatorBlock(): string {
+  return [
+    `<div class="se-component se-horizontalLine se-l-default">`,
+    `<div class="se-component-content">`,
+    `<div class="se-section se-section-horizontalLine se-l-default se-section-align-center">`,
+    `<div class="se-module se-module-horizontalLine">`,
+    `<hr class="se-hr">`,
+    `</div></div></div></div>`,
+  ].join("");
+}
+
+/** 스티커 블록 — 빈 줄 2개로 대체 (실제 스티커 삽입은 에디터에서만 가능) */
+function makeStickerPlaceholder(config: RenderConfig): string {
+  // 네이버 에디터 외부에서 스티커 삽입 불가 → 시각적 간격으로 대체
+  return makeEmptyBlock(config);
+}
+
 // ── 메인 렌더러 ──
 
 /**
@@ -244,6 +262,9 @@ function makeImageBlock(url: string): string {
  *  - \n = 줄바꿈 (같은 문단 내 또는 새 문단)
  *  - \n\n = 문단 구분 (빈 줄 삽입)
  *  - [PHOTO_N] = 사진 마커 (단독 줄)
+ *  - [STICKER] = 스티커/장식 (빈 줄로 대체)
+ *  - [SEPARATOR] = 가로 구분선
+ *  - [MAP] = 지도 (빈 줄로 대체, 에디터에서 수동 삽입)
  *  - **텍스트** = 볼드
  *
  * @param title 제목
@@ -289,6 +310,28 @@ export function renderToNaverHtml(
           blocks.push(makeImageBlock(photoUrls[idx]));
           blocks.push(makeEmptyBlock(config));
         }
+        continue;
+      }
+
+      // [SEPARATOR] 마커 → 가로 구분선
+      if (trimmed === "[SEPARATOR]") {
+        blocks.push(makeEmptyBlock(config));
+        blocks.push(makeSeparatorBlock());
+        blocks.push(makeEmptyBlock(config));
+        continue;
+      }
+
+      // [STICKER] 마커 → 빈 줄 (에디터에서 스티커 수동 삽입)
+      if (trimmed === "[STICKER]") {
+        blocks.push(makeStickerPlaceholder(config));
+        blocks.push(makeEmptyBlock(config));
+        continue;
+      }
+
+      // [MAP] 마커 → 빈 줄 (에디터에서 지도 수동 삽입)
+      if (trimmed === "[MAP]") {
+        blocks.push(makeEmptyBlock(config));
+        blocks.push(makeEmptyBlock(config));
         continue;
       }
 

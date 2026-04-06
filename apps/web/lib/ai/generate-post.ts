@@ -487,6 +487,12 @@ export async function regeneratePost(
   const personaResult = userId ? await loadUserPersona(userId, personaId) : null;
   const spec = personaResult?.spec || loadProductionSpec();
   const categoryInstruction = personaResult?.categoryPrompts[category] || null;
+  const usePersonaLayout = personaResult?.hasPhotoLayout ?? false;
+
+  // 재생성 시에도 페르소나 레이아웃 마커 유지
+  const markerRule = usePersonaLayout
+    ? "- [PHOTO_N], [STICKER], [SEPARATOR], [MAP] 마커 위치는 유지 (피드백에서 변경 요청하지 않는 한)"
+    : "- [PHOTO_N] 마커 위치는 유지 (피드백에서 변경 요청하지 않는 한)";
 
   let systemPrompt = `너는 네이버 블로그 작성자야. 아래 제작 스펙을 준수하여 블로그 게시물을 **수정**해.
 
@@ -499,7 +505,7 @@ ${spec}
 - 제목은 ${POST_TITLE_MAX_CHARS}자 이내
 - 본문은 ${POST_BODY_MIN_CHARS}~${POST_BODY_MAX_CHARS}자
 - body에 줄바꿈은 \\n으로 표현
-- [PHOTO_N] 마커 위치는 유지 (피드백에서 변경 요청하지 않는 한)
+${markerRule}
 - 출력 형식: 반드시 아래 JSON만 출력. 다른 텍스트 절대 금지.
 {"title": "제목", "body": "본문"}`;
 

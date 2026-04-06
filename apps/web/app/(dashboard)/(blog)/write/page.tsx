@@ -427,6 +427,9 @@ function WritePageContent() {
     if (!draft) return;
     const cleanBody = draft.body
       .replace(/\[PHOTO_\d+\]/g, "")
+      .replace(/\[STICKER\]/g, "")
+      .replace(/\[SEPARATOR\]/g, "---")
+      .replace(/\[MAP\]/g, "")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
     const text = `${draft.title}\n\n${cleanBody}\n\n${draft.hashtags.map((t) => `#${t}`).join(" ")}`;
@@ -467,7 +470,7 @@ function WritePageContent() {
 
       const htmlBlob = new Blob([html], { type: "text/html" });
       const textBlob = new Blob(
-        [draft.title + "\n\n" + draft.body.replace(/\[PHOTO_\d+\]/g, "").trim()],
+        [draft.title + "\n\n" + draft.body.replace(/\[PHOTO_\d+\]|\[STICKER\]|\[SEPARATOR\]|\[MAP\]/g, "").trim()],
         { type: "text/plain" }
       );
       await navigator.clipboard.write([
@@ -1218,7 +1221,8 @@ function WritePageContent() {
                     ) : (
                       <div className="space-y-3">
                         {draft.body.split("\n\n").map((paragraph, i) => {
-                          const photoMatch = paragraph.match(
+                          const trimmedPara = paragraph.trim();
+                          const photoMatch = trimmedPara.match(
                             /^\[PHOTO_(\d+)\]$/
                           );
                           if (photoMatch) {
@@ -1238,6 +1242,18 @@ function WritePageContent() {
                                 </div>
                               );
                             }
+                          }
+                          // [SEPARATOR] → 구분선 프리뷰
+                          if (trimmedPara === "[SEPARATOR]") {
+                            return <hr key={i} className="border-border" />;
+                          }
+                          // [STICKER] → 장식 간격
+                          if (trimmedPara === "[STICKER]") {
+                            return <div key={i} className="py-2 text-center text-muted-foreground text-xs">~ ~ ~</div>;
+                          }
+                          // [MAP] → 지도 플레이스홀더
+                          if (trimmedPara === "[MAP]") {
+                            return <div key={i} className="rounded border border-dashed border-muted-foreground/30 py-3 text-center text-xs text-muted-foreground">지도 (발행 시 수동 삽입)</div>;
                           }
                           return (
                             <p

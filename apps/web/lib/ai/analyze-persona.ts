@@ -53,32 +53,38 @@ function formatBlockSequence(blocks: BlockSequenceItem[]): string {
   }).join(" → ");
 }
 
-/** 블록 시퀀스 통계 요약 (이미지 수, 텍스트 평균 길이 등) */
+/** 블록 시퀀스 통계 요약 — 1회 순회로 모든 통계 수집 */
 function buildBlockStats(meta: CrawledPost["htmlMeta"]): string {
-  const textBlocks = meta.block_sequence.filter(b => b.type === "text" && (b.charCount ?? 0) > 0);
-  const avgChars = textBlocks.length > 0
-    ? Math.round(textBlocks.reduce((s, b) => s + (b.charCount ?? 0), 0) / textBlocks.length)
-    : 0;
-  const stickerPacks = new Set(
-    meta.block_sequence
-      .filter(b => b.type === "sticker" && b.stickerPackId)
-      .map(b => b.stickerPackId)
-  );
+  let textCount = 0;
+  let textCharSum = 0;
+  let separatorCount = 0;
+  let stickerCount = 0;
+  let captionCount = 0;
+  const stickerPacks = new Set<string>();
 
+  for (const b of meta.block_sequence) {
+    if (b.type === "text" && (b.charCount ?? 0) > 0) {
+      textCount++;
+      textCharSum += b.charCount ?? 0;
+    } else if (b.type === "separator") {
+      separatorCount++;
+    } else if (b.type === "sticker") {
+      stickerCount++;
+      if (b.stickerPackId) stickerPacks.add(b.stickerPackId);
+    } else if (b.type === "image" && b.caption) {
+      captionCount++;
+    }
+  }
+
+  const avgChars = textCount > 0 ? Math.round(textCharSum / textCount) : 0;
   const parts: string[] = [
     `사진 ${meta.image_count}장`,
-    `텍스트 ${textBlocks.length}블록 (평균 ${avgChars}자)`,
+    `텍스트 ${textCount}블록 (평균 ${avgChars}자)`,
     `빈줄 ${meta.empty_text_blocks}개`,
   ];
-
-  const separators = meta.block_sequence.filter(b => b.type === "separator").length;
-  if (separators > 0) parts.push(`구분선 ${separators}개`);
-
-  const stickers = meta.block_sequence.filter(b => b.type === "sticker").length;
-  if (stickers > 0) parts.push(`스티커 ${stickers}개 (${stickerPacks.size}종)`);
-
-  const captions = meta.block_sequence.filter(b => b.type === "image" && b.caption).length;
-  if (captions > 0) parts.push(`캡션 있는 사진 ${captions}장`);
+  if (separatorCount > 0) parts.push(`구분선 ${separatorCount}개`);
+  if (stickerCount > 0) parts.push(`스티커 ${stickerCount}개 (${stickerPacks.size}종)`);
+  if (captionCount > 0) parts.push(`캡션 있는 사진 ${captionCount}장`);
 
   return parts.join(", ");
 }

@@ -111,7 +111,7 @@ export default function PersonaDetailPage() {
   const [isCrawling, setIsCrawling] = useState(false);
   const [crawlMessage, setCrawlMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [openCategory, setOpenCategory] = useState<CategoryKey | null>(null);
+  const [openCategories, setOpenCategories] = useState<Set<CategoryKey>>(new Set());
   const [openGroups, setOpenGroups] = useState<Set<number>>(new Set([0]));
   const [addingTo, setAddingTo] = useState<CategoryKey | null>(null);
   const [newKey, setNewKey] = useState("");
@@ -588,7 +588,7 @@ export default function PersonaDetailPage() {
                       const activeCount = catItems.filter(
                         (i) => i.is_active
                       ).length;
-                      const isOpen = openCategory === cat.key;
+                      const isOpen = openCategories.has(cat.key);
 
                       return (
                         <div
@@ -597,9 +597,12 @@ export default function PersonaDetailPage() {
                         >
                           <button
                             onClick={() =>
-                              setOpenCategory(
-                                isOpen ? null : cat.key
-                              )
+                              setOpenCategories((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(cat.key)) next.delete(cat.key);
+                                else next.add(cat.key);
+                                return next;
+                              })
                             }
                             className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-secondary/30 transition-colors rounded-lg"
                           >
