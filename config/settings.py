@@ -48,13 +48,13 @@ MOBILE_VIEWPORT = {"width": 390, "height": 844}
 COMMENT_LOAD_WAIT = 5  # 댓글 lazy-load 대기 (초)
 
 # 대댓글(답글) 설정
-MAX_REPLIES_PER_RUN = 20          # 1회 실행 시 최대 답글 수
-MAX_REPLIES_PER_DAY = 50          # 하루 최대 답글 수
+MAX_REPLIES_PER_RUN = 50          # 1회 실행 시 최대 답글 수
+MAX_REPLIES_PER_DAY = 200         # 하루 최대 답글 수 (상한)
 REPLY_SCAN_POSTS = 10             # 답글 스캔할 최근 게시물 수
 
 # 일일 한도
-MAX_BLOGGERS_PER_DAY = 10       # 하루 최대 방문 블로거 수
-MAX_COMMENTS_PER_DAY = 30       # 하루 최대 총 댓글 수 (봇 감지 방지)
+MAX_BLOGGERS_PER_DAY = 200      # 하루 최대 방문 블로거 수 (상한. 기본 설정은 Supabase bot_settings에서)
+MAX_COMMENTS_PER_DAY = 400      # 하루 최대 총 댓글 수 (상한. 실사용 50-100 권장)
 POSTS_PER_BLOGGER_MIN = 3       # 블로거당 최소 댓글 게시물
 POSTS_PER_BLOGGER_MAX = 5       # 블로거당 최대 댓글 게시물
 COMMENT_ADMIN_MAX_PAGES = 3     # 댓글 관리자 최대 페이지 수
