@@ -62,6 +62,8 @@ Supabase (공유 제어 평면)
 | OAUTH-COOKIE-FIX | OAuth 쿠키 secure 플래그 동적 설정 | P1 | ✅ 완료 | HTTP 환경에서 OAuth 쿠키 설정 안 되는 문제 수정 (2026-04-05) |
 | COLLECT-PARALLEL | 블로그 수집 병렬화 설계 | P1 | 계획 | 방문+수집 단계 asyncio.gather 병렬화. 수집 5분→2분 예상 (2026-04-05) |
 | SCALING-REPORT | 스케일링 공학 분석 레포트 | P0 | ✅ 완료 | 10/100/1000명 시나리오별 인프라+비용+병목 분석 (2026-04-05) |
+| SCALING-DETAIL | 동시 접속자 기준 스케일링 정밀 분석 | P1 | ✅ 완료 | 10/50/100/500/1000명 5단계, 7개 분석 항목, ASCII 아키텍처 다이어그램 포함 (2026-04-07) |
+| PREVIEW-MARKER-FIX | 글 프리뷰 마커 파싱 렌더러 동기화 | P2 | ✅ 완료 | \n\n 단독 분할 → \n\n+ 문단 + \n 라인 분할로 렌더러와 통일 (2026-04-07) |
 | PRODUCT-REPORT | 프로덕트 레포트 + 성능 문서 | P1 | ✅ 완료 | PRODUCT_REPORT.md + PERFORMANCE.md + docs 정리 (2026-04-05) |
 | DESIGN-REVIEW-2 | 홈페이지 전체 디자인 리뷰 + 모바일 UX | P1 | ✅ 완료 | 15건 수정 + Pretendard 폰트 + 입장 애니메이션 + 제품 프리뷰 + 모바일 터치타겟. Design Score B-→B+ (2026-04-05) |
 | STABILITY-FIX | 서버 안정성 버그 5건 수정 | P0 | ✅ 완료 | Elastic Semaphore 작동, Task 루프 바운딩, API 워커 오프로드, 세마포어 구조 개선 (2026-04-05) |
