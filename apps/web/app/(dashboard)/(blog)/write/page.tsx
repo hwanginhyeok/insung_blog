@@ -438,37 +438,71 @@ function WritePageContent() {
     setTimeout(() => setCopyLabel("복사하기"), 2000);
   }
 
+  /**
+   * 이미지를 Canvas로 리사이즈+압축하여 base64 반환.
+   * 가로 800px, JPEG 70% → 원본 3MB가 ~150KB로 축소.
+   * 10장이어도 base64 합계 ~2MB로 네이버 5MB 제한 이내.
+   */
+  async function compressImageToBase64(url: string): Promise<string> {
+    const MAX_WIDTH = 800;
+    const QUALITY = 0.7;
+
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const scale = Math.min(1, MAX_WIDTH / img.width);
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(img, 0, 0, w, h);
+
+        resolve(canvas.toDataURL("image/jpeg", QUALITY));
+      };
+      img.onerror = () => resolve(""); // 실패 시 빈 문자열
+      img.src = url;
+    });
+  }
+
   async function handleCopyHtml() {
     if (!draft) return;
 
     try {
-      // 이미지 URL → base64 data URI 변환 (네이버 paste 시 이미지 포함)
-      setHtmlCopyLabel("이미지 변환중...");
-      const base64Urls = await Promise.all(
+      // 이미지 압축 후 base64 변환 (네이버 5MB 제한 대응)
+      setHtmlCopyLabel("이미지 압축중...");
+      const compressedUrls = await Promise.all(
         cachedPhotoUrls.map(async (url) => {
-          if (!url) return url;
+          if (!url) return "";
           try {
-            const resp = await fetch(url);
-            const blob = await resp.blob();
-            return new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result as string);
-              reader.readAsDataURL(blob);
-            });
+            return await compressImageToBase64(url);
           } catch {
-            return url; // 변환 실패 시 원본 URL 유지
+            return "";
           }
         })
       );
 
+      // 전체 크기 체크: 5MB 초과 시 이미지 제외
       const html = renderPostHtml(
         draft.title,
         draft.body,
-        base64Urls,
+        compressedUrls,
         cachedFormatting
       );
 
-      const htmlBlob = new Blob([html], { type: "text/html" });
+      const totalSize = new Blob([html]).size;
+      const finalHtml = totalSize > 4.5 * 1024 * 1024
+        ? renderPostHtml(draft.title, draft.body, cachedPhotoUrls.map(() => ""), cachedFormatting)
+        : html;
+
+      if (totalSize > 4.5 * 1024 * 1024) {
+        setHtmlCopyLabel("사진 제외 복사됨");
+      }
+
+      const htmlBlob = new Blob([finalHtml], { type: "text/html" });
       const textBlob = new Blob(
         [draft.title + "\n\n" + draft.body.replace(/\[PHOTO_\d+\]|\[STICKER\]|\[SEPARATOR\]|\[MAP\]/g, "").trim()],
         { type: "text/plain" }
@@ -480,7 +514,9 @@ function WritePageContent() {
         }),
       ]);
 
-      setHtmlCopyLabel("복사됨!");
+      if (totalSize <= 4.5 * 1024 * 1024) {
+        setHtmlCopyLabel("복사됨! (사진 포함)");
+      }
       setTimeout(() => setHtmlCopyLabel("HTML 복사"), 2000);
     } catch {
       handleCopy();
@@ -791,9 +827,9 @@ function WritePageContent() {
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* 왼쪽: 입력 영역 */}
-        <div className="space-y-4">
+      <div className="grid gap-6 lg:grid-cols-2 lg:h-[calc(100vh-10rem)]">
+        {/* 왼쪽: 입력 영역 (독립 스크롤) */}
+        <div className="space-y-4 lg:overflow-y-auto lg:pr-2">
           {/* 사진 업로드 */}
           <Card>
             <CardHeader className="pb-3">
@@ -963,8 +999,8 @@ function WritePageContent() {
           </Button>
         </div>
 
-        {/* 오른쪽: 초안 미리보기 */}
-        <div className="space-y-4">
+        {/* 오른쪽: 초안 미리보기 (독립 스크롤) */}
+        <div className="space-y-4 lg:overflow-y-auto lg:pr-2">
           {draft ? (
             <>
               <Card>
@@ -999,30 +1035,6 @@ function WritePageContent() {
                             disabled={isUpdating}
                           >
                             {isUpdating ? "저장 중..." : "수정 저장"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={handleSaveDraft}
-                            disabled={isSavingDraft || draftSaveResult?.success === true || isPublishing}
-                          >
-                            {isSavingDraft
-                              ? "저장 중..."
-                              : draftSaveResult?.success
-                                ? "임시저장 완료"
-                                : "네이버 임시저장"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={handlePublish}
-                            disabled={isPublishing || publishResult?.success === true || isSavingDraft}
-                            className=""
-                          >
-                            {isPublishing
-                              ? "발행 중..."
-                              : publishResult?.success
-                                ? "발행 완료"
-                                : "네이버 발행"}
                           </Button>
                         </>
                       ) : (
@@ -1220,49 +1232,55 @@ function WritePageContent() {
                       />
                     ) : (
                       <div className="space-y-3">
-                        {draft.body.split("\n\n").map((paragraph, i) => {
-                          const trimmedPara = paragraph.trim();
-                          const photoMatch = trimmedPara.match(
-                            /^\[PHOTO_(\d+)\]$/
-                          );
-                          if (photoMatch) {
-                            const photoIdx = parseInt(photoMatch[1]) - 1;
-                            const photo = photos[photoIdx];
-                            if (photo) {
-                              return (
-                                <div
-                                  key={i}
-                                  className="overflow-hidden rounded-lg"
-                                >
-                                  <img
-                                    src={photo.preview}
-                                    alt={`사진 ${photoIdx + 1}`}
-                                    className="w-full"
-                                  />
-                                </div>
-                              );
+                        {draft.body.split(/\n\n+/).flatMap((paragraph, pi) => {
+                          // 렌더러(naver-html.ts)와 동일하게 문단을 \n으로 라인 분할 후 마커 처리
+                          const lines = paragraph.split("\n");
+                          const elements: React.ReactNode[] = [];
+
+                          for (let li = 0; li < lines.length; li++) {
+                            const line = lines[li];
+                            const trimmed = line.trim();
+                            if (!trimmed) continue;
+                            const key = `${pi}-${li}`;
+
+                            // [PHOTO_N] → 사진 프리뷰
+                            const photoMatch = trimmed.match(/^\[PHOTO_(\d+)\]$/);
+                            if (photoMatch) {
+                              const photoIdx = parseInt(photoMatch[1]) - 1;
+                              const photo = photos[photoIdx];
+                              if (photo) {
+                                elements.push(
+                                  <div key={key} className="overflow-hidden rounded-lg">
+                                    <img src={photo.preview} alt={`사진 ${photoIdx + 1}`} className="w-full" />
+                                  </div>
+                                );
+                              }
+                              continue;
                             }
+                            // [SEPARATOR] → 구분선 프리뷰
+                            if (trimmed === "[SEPARATOR]") {
+                              elements.push(<hr key={key} className="border-border" />);
+                              continue;
+                            }
+                            // [STICKER] → 장식 간격
+                            if (trimmed === "[STICKER]") {
+                              elements.push(<div key={key} className="py-2 text-center text-muted-foreground text-xs">~ ~ ~</div>);
+                              continue;
+                            }
+                            // [MAP] → 지도 플레이스홀더
+                            if (trimmed === "[MAP]") {
+                              elements.push(<div key={key} className="rounded border border-dashed border-muted-foreground/30 py-3 text-center text-xs text-muted-foreground">지도 (발행 시 수동 삽입)</div>);
+                              continue;
+                            }
+                            // 일반 텍스트
+                            elements.push(
+                              <p key={key} className="text-sm leading-relaxed text-foreground">
+                                {line}
+                              </p>
+                            );
                           }
-                          // [SEPARATOR] → 구분선 프리뷰
-                          if (trimmedPara === "[SEPARATOR]") {
-                            return <hr key={i} className="border-border" />;
-                          }
-                          // [STICKER] → 장식 간격
-                          if (trimmedPara === "[STICKER]") {
-                            return <div key={i} className="py-2 text-center text-muted-foreground text-xs">~ ~ ~</div>;
-                          }
-                          // [MAP] → 지도 플레이스홀더
-                          if (trimmedPara === "[MAP]") {
-                            return <div key={i} className="rounded border border-dashed border-muted-foreground/30 py-3 text-center text-xs text-muted-foreground">지도 (발행 시 수동 삽입)</div>;
-                          }
-                          return (
-                            <p
-                              key={i}
-                              className="text-sm leading-relaxed text-foreground"
-                            >
-                              {paragraph}
-                            </p>
-                          );
+
+                          return elements;
                         })}
                       </div>
                     )}
@@ -1314,48 +1332,6 @@ function WritePageContent() {
                     </div>
                   )}
 
-                  {/* 임시저장 결과 */}
-                  {draftSaveResult && (
-                    <div
-                      className={`rounded-lg p-4 ${
-                        draftSaveResult.success
-                          ? "bg-blue-50 border border-blue-200"
-                          : "bg-red-50 border border-red-200"
-                      }`}
-                    >
-                      <p
-                        className={`text-sm font-medium ${
-                          draftSaveResult.success ? "text-blue-800" : "text-red-800"
-                        }`}
-                      >
-                        {draftSaveResult.success ? "✅" : "❌"} {draftSaveResult.message}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* 임시저장 진행 중 표시 */}
-                  {isSavingDraft && (
-                    <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
-                      <p className="text-sm text-blue-800">
-                        ⏳ 네이버 블로그에 임시저장 중입니다... (최대 5분 소요)
-                      </p>
-                      <p className="mt-1 text-xs text-blue-600">
-                        로컬 워커가 Playwright로 스마트에디터에 HTML을 주입하고 있습니다.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* 발행 진행 중 표시 */}
-                  {isPublishing && (
-                    <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
-                      <p className="text-sm text-blue-800">
-                        ⏳ 네이버 블로그에 발행 중입니다... (최대 5분 소요)
-                      </p>
-                      <p className="mt-1 text-xs text-blue-600">
-                        로컬 워커가 Playwright로 스마트에디터를 조작하고 있습니다.
-                      </p>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
 
