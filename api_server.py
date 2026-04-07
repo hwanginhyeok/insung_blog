@@ -125,6 +125,7 @@ class CommentExecuteResponse(BaseModel):
     failed_count: int = 0
     message: str = ""
     details: list[dict] = []
+    command_id: str | None = None
 
 
 # ── 댓글 봇 실행 상태 ──
@@ -452,7 +453,46 @@ async def execute_pending_comments(
         success=True,
         total=total,
         message=f"댓글 {total}개 실행이 큐에 등록되었습니다. 워커가 순차 처리합니다.",
+        command_id=command_id,
     )
+
+
+@app.get("/comment/progress/{command_id}")
+async def get_comment_progress(command_id: str, _=Depends(_verify_token)):
+    """
+    댓글 게시 진행률 조회.
+
+    워커가 bot_commands.result에 저장하는 {progress, total, success, failed} 반환.
+    웹 UI에서 polling으로 호출.
+    """
+    from src.storage.supabase_client import get_supabase
+
+    sb = get_supabase()
+    try:
+        result = (
+            sb.table("bot_commands")
+            .select("status, result, error_message")
+            .eq("id", command_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception:
+        raise HTTPException(status_code=404, detail="명령을 찾을 수 없습니다")
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail="명령을 찾을 수 없습니다")
+
+    row = result.data[0]
+    progress = row.get("result") or {}
+
+    return {
+        "status": row["status"],
+        "progress": progress.get("progress", 0),
+        "total": progress.get("total", 0),
+        "success": progress.get("success", 0),
+        "failed": progress.get("failed", 0),
+        "error_message": row.get("error_message"),
+    }
 
 
 async def _send_publish_notification(
