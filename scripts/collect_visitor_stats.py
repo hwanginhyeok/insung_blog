@@ -1,9 +1,12 @@
-#!/usr/bin/env python3
+#!/home/window11/insung_blog/.venv/bin/python
 """
 블로그 방문자수 수집 스크립트.
 
 사용자별 네이버 블로그 일일/전체 방문자수를 수집하여 Supabase에 저장.
 m.blog.naver.com의 __INITIAL_STATE__ JSON에서 파싱.
+
+실행: .venv/bin/python scripts/collect_visitor_stats.py
+  ⚠️ 반드시 .venv의 Python으로 실행해야 함 (supabase 패키지 필요)
 
 cron 예시 (일 3회: 09:00, 15:00, 23:50):
   0 9,15 * * * cd ~/insung_blog && .venv/bin/python scripts/collect_visitor_stats.py
