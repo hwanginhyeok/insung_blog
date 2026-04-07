@@ -22,3 +22,11 @@
 | SCALING-DETAIL | 동시 접속자 기준 스케일링 정밀 분석 | 04-07 | 5단계 7개 분석 항목, ASCII 아키텍처 다이어그램 |
 | PREVIEW-MARKER-FIX | 글 프리뷰 마커 파싱 렌더러 동기화 | 04-07 | \n\n 분할 → \n\n+ 문단 + \n 라인 분할로 통일 |
 | WORKER-ELASTIC | 워커 슬롯 탄력 분배 (Elastic Semaphore) | 04-05 | acquire/release_user_slot + 세마포어 구조 개선 |
+| COMMENT-REVOKE | 승인 취소 기능 (approved → pending) | 04-06 | API + UI + DB 검증 완료 |
+| AUTO-REPLY | 대댓글 자동 답글 | 04-06 | 마이그레이션 적용 + posted 1건 동작 확인 |
+| PERSONA-UI | 페르소나 UI 3그룹 + 크롤러 블록 상세화 + 레이아웃 패턴 | 04-06 | 렌더러 마커 + regeneratePost + 다중열림 |
+| EXECUTE-PARALLEL | 댓글 게시 병렬화 (동시 3개) | 04-06 | asyncio.gather + Semaphore(3) |
+| VISIT-PARALLEL | 이웃 방문 병렬화 (동시 3명) | 04-06 | 13분→8분 (35% 단축) |
+| PERSONA-RLS | 페르소나 RLS + 예시 테이블 생성 | 04-06 | user_personas/persona_items/persona_feedback RLS |
+| GEN-QUEUE-FIX | generation_queue CHECK 제약 수정 | 04-06 | publishing/saving/save_failed 추가 |
+| TIER-SYNC | Pro 한도 동기화 (400/200/200) | 04-06 | tier.ts + supabase_client.py + settings.py + pricing |
