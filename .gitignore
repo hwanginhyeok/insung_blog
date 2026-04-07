@@ -19,3 +19,10 @@ output/
 .vercel
 .next/
 .gstack/
+
+# Tailscale 인증서
+*.crt
+*.key
+
+# Supabase CLI 임시 파일
+supabase/.temp/
