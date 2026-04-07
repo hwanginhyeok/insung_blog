@@ -176,5 +176,5 @@ CREATE TABLE retry_queue (
 | IMPLEMENTATION_STATUS.md | 구현 현황 — Phase별 완료도 | `docs/` |
 | PRODUCTION_SPEC.md | AI 블로그 제작 스펙 | `skills/` |
 | INPUT_GUIDE.md | 텔레그램 입력 가이드 | `skills/` |
-| TASK.md | 작업 현황 실시간 추적 | `docs/프로젝트/` |
+| TASK.md / CURRENT_TASK.md / PREPARED_TASK.md | 작업 현황 | 프로젝트 루트 |
 | CODE_MAP.md | 코드베이스 지도 | `docs/프로젝트/` |

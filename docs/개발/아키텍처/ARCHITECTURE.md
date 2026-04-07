@@ -2,7 +2,7 @@
 
 > **단일 진실 공급원(Single Source of Truth)**
 > 아키텍처, 데이터 모델, 구현 현황, 요구사항을 이 문서 하나로 관리한다.
-> 코드 수준 상세는 `docs/프로젝트/CODE_MAP.md`, 작업 추적은 `docs/프로젝트/TASK.md` 참조.
+> 코드 수준 상세는 `docs/프로젝트/CODE_MAP.md`, 작업 추적은 루트 `CURRENT_TASK.md` / `PREPARED_TASK.md` 참조.
 >
 > **최종 업데이트**: 2026-03-12
 > **버전**: 3.0

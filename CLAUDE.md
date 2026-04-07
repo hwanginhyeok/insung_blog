@@ -67,7 +67,7 @@ python -c "import py_compile; py_compile.compile('파일.py', doraise=True)"
 
 - **Python 3.12+** — async/await, type hints (`str | None` 신문법)
 - **Playwright** — 브라우저 자동화 (headless/headed)
-- **Claude API** — Vision(Sonnet) + Text(Haiku) 조합
+- **Claude API** — 글쓰기(Haiku) + 페르소나 분석(Sonnet) + 댓글 생성(Ollama gemma3:4b)
 - **Supabase** — 제어 평면 (pending_comments, bot_settings, bot_run_log)
 - **SQLite** — 로컬 운영 DB (data/comments.db)
 - **Next.js 14** — 웹 플랫폼 (apps/web, Vercel 배포)

@@ -277,7 +277,7 @@
 | 파일 | 역할 |
 |------|------|
 | `개발/아키텍처/ARCHITECTURE.md` | **시스템 설계서 (단일 진실 공급원)** — 블록도, 데이터 흐름, DB 스키마, 구현 현황, 이슈, 비용, 실행법 | ✅ v3.0 |
-| `프로젝트/TASK.md` | 작업 현황 실시간 추적 | ✅ |
+| 루트 `TASK.md` → `CURRENT_TASK.md` / `PREPARED_TASK.md` / `FINISHED_TASK.md` | 작업 현황 (루트로 이동) | ✅ |
 | `프로젝트/CODE_MAP.md` | 코드베이스 지도 (이 파일) | ✅ |
 | `프로젝트/매뉴얼/coding-rules.md` | Python 코딩 규칙 | ✅ |
 | `프로젝트/매뉴얼/workflow-rules.md` | 워크플로우 + 코드리뷰 규칙 | ✅ |

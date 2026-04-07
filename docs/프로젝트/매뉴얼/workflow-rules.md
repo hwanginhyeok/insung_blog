@@ -10,7 +10,7 @@
 4. **코드리뷰 필수** — 아래 프로세스 수행
 5. 리뷰 결과를 사용자와 논의 → Critical/Major 이슈 수정
 6. CODE_MAP.md 갱신 (파일 추가/삭제 시)
-7. TASK.md 갱신
+7. 태스크 갱신 (CURRENT_TASK.md / PREPARED_TASK.md / FINISHED_TASK.md)
 
 ---
 
@@ -100,14 +100,16 @@ REVIEW_LOG.md 기록
 
 ---
 
-## TASK.md 실시간 갱신 규칙
+## 태스크 실시간 갱신 규칙
+
+> 태스크 파일은 프로젝트 루트: `CURRENT_TASK.md` / `PREPARED_TASK.md` / `FINISHED_TASK.md`
 
 | 트리거 | 행동 |
 |--------|------|
-| **작업 착수 시** | "현재 진행 중"에 등록 + 상태 → `진행` |
-| **작업 완료 시** | 완료 섹션으로 이동 + "현재 진행 중" 비우기 |
-| **새 작업 발견 시** | 즉시 작업 현황에 등록 |
-| **커밋 직전** | TASK.md + CODE_MAP.md + REVIEW_LOG.md 모두 최신인지 점검 |
+| **작업 착수 시** | `CURRENT_TASK.md`에 등록 |
+| **작업 완료 시** | `CURRENT_TASK.md` → `FINISHED_TASK.md`로 이동 |
+| **새 작업 발견 시** | `PREPARED_TASK.md`에 즉시 등록 |
+| **커밋 직전** | 태스크 파일 + CODE_MAP.md + REVIEW_LOG.md 최신인지 점검 |
 | **세션 종료 시** | 미완료 작업 진행 상황 기록 |
 
 ---
@@ -118,7 +120,7 @@ REVIEW_LOG.md 기록
 □ py_compile 구문 검증 통과
 □ 코드리뷰 완료 (Critical 이슈 0건)
 □ REVIEW_LOG.md 기록
-□ TASK.md 상태 반영
+□ CURRENT_TASK.md / FINISHED_TASK.md 상태 반영
 □ CODE_MAP.md 갱신 (파일 변경 시)
 □ Conventional Commit 메시지 형식
 ```
