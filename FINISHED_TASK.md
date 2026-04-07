@@ -30,3 +30,7 @@
 | PERSONA-RLS | 페르소나 RLS + 예시 테이블 생성 | 04-06 | user_personas/persona_items/persona_feedback RLS |
 | GEN-QUEUE-FIX | generation_queue CHECK 제약 수정 | 04-06 | publishing/saving/save_failed 추가 |
 | TIER-SYNC | Pro 한도 동기화 (400/200/200) | 04-06 | tier.ts + supabase_client.py + settings.py + pricing |
+| VISITOR-TRACK | 블로그 방문자수 수집 시스템 | 04-08 | 수집 스크립트 + DB 마이그레이션 + 자정 초기화 실측확인 |
+| NOTIFY-KAKAO | 다중 채널 알림 라우터 | 04-08 | NotificationRouter (텔레그램/FCM/카카오) 추상화. 실 연동은 설정 후 |
+| BOT-PROGRESS | 댓글 게시 진행률 API | 04-08 | GET /comment/progress/{command_id} + execute 응답에 command_id 포함 |
+| NEIGHBOR-E2E | 이웃 연동 E2E 로직 테스트 | 04-08 | 18건 테스트 (sync/discoverer/feed/imports). 브라우저 E2E는 TODO |

@@ -40,7 +40,7 @@ journalctl --user -u blog-worker -n 20 --no-pager
 ```
 
 > **주의**: `pkill -f command_worker.py` 금지 — systemd가 자동 재시작해서 충돌.
-> `start_services.sh` 실행 금지 — tmux 기반 구버전, 삭제됨.
+> `start_services.sh` 실행 금지 — tmux 기반 구버전, 미사용 (`scripts/` 보관).
 
 ---
 
