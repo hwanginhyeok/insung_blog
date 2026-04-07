@@ -12,6 +12,10 @@
 | 3 | 텔레그램 봇 + Supabase 제어 평면 | 완료 |
 | 4 | 피드백 루프 (스킬 개선) | 완료 |
 
+## Tasks
+
+- [CURRENT_TASK.md](CURRENT_TASK.md) | [PREPARED_TASK.md](PREPARED_TASK.md) | [FINISHED_TASK.md](FINISHED_TASK.md)
+
 ---
 
 ## 서비스 운영 (systemd)
@@ -98,7 +102,7 @@ systemctl --user status blog-api blog-worker blog-telegram | grep -E "●|Active
 
 ### STEP 1 — TASK 현황 점검
 
-`docs/프로젝트/TASK.md` 읽기
+`CURRENT_TASK.md` + `PREPARED_TASK.md` 읽기
 
 ### STEP 2 — 브리핑 보고
 
