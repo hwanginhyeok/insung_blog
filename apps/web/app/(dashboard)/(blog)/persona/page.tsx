@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
 
 // ── 타입 ──
 
@@ -26,6 +27,17 @@ interface Persona {
   created_at: string;
 }
 
+interface ExamplePersona {
+  id: string;
+  display_name: string;
+  category: string;
+  description: string;
+  style_preview: string;
+  sort_order: number;
+  items: { category: string; key: string; value: string; priority: number }[];
+  itemCount: number;
+}
+
 const STATUS_LABELS: Record<string, { text: string; color: string }> = {
   none: { text: "미분석", color: "text-muted-foreground" },
   crawling: { text: "크롤링 중...", color: "text-blue-600" },
@@ -34,10 +46,19 @@ const STATUS_LABELS: Record<string, { text: string; color: string }> = {
   error: { text: "오류", color: "text-destructive" },
 };
 
+const CATEGORY_LABELS: Record<string, string> = {
+  맛집: "🍜",
+  카페: "☕",
+  여행: "✈️",
+  일상: "📝",
+  리뷰: "⭐",
+};
+
 // ── 메인 페이지 ──
 
 export default function PersonaListPage() {
   const router = useRouter();
+  const { toast } = useToast();
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNewForm, setShowNewForm] = useState(false);
@@ -46,6 +67,11 @@ export default function PersonaListPage() {
   const [createMessage, setCreateMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [settingDefault, setSettingDefault] = useState<string | null>(null);
+
+  // 예시 페르소나 관련 상태
+  const [examples, setExamples] = useState<ExamplePersona[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [copyingId, setCopyingId] = useState<string | null>(null);
 
   // ── 데이터 로드 ──
 
@@ -62,8 +88,20 @@ export default function PersonaListPage() {
     }
   }
 
+  async function loadExamples() {
+    try {
+      const res = await fetch("/api/persona/examples");
+      if (!res.ok) return;
+      const data = await res.json();
+      setExamples(data);
+    } catch {
+      // 예시 로드 실패 무시
+    }
+  }
+
   useEffect(() => {
     loadPersonas();
+    loadExamples();
   }, []);
 
   // ── 새 페르소나 생성 (크롤링 + 분석) ──
@@ -151,6 +189,39 @@ export default function PersonaListPage() {
     }
   }
 
+  // ── 예시 페르소나 복사 ──
+
+  async function handleCopyExample(exampleId: string) {
+    setCopyingId(exampleId);
+    try {
+      const res = await fetch("/api/persona/examples/copy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ exampleId }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        toast(err.error || "복사 실패", "error");
+        return;
+      }
+
+      const data = await res.json();
+      toast(data.message, "success");
+      await loadPersonas();
+    } catch {
+      toast("복사 중 오류가 발생했습니다", "error");
+    } finally {
+      setCopyingId(null);
+    }
+  }
+
+  // 카테고리 필터링
+  const categories = [...new Set(examples.map((e) => e.category))];
+  const filteredExamples = selectedCategory
+    ? examples.filter((e) => e.category === selectedCategory)
+    : examples;
+
   // ── 로딩 ──
 
   if (loading) {
@@ -221,77 +292,154 @@ export default function PersonaListPage() {
           <CardContent className="py-10 text-center text-muted-foreground">
             등록된 페르소나가 없습니다.
             <br />
-            &quot;새 페르소나 추가&quot; 버튼을 클릭하여 블로그 스타일을 분석해보세요.
+            블로그 URL을 분석하거나, 아래 예시에서 마음에 드는 스타일을 복사해보세요.
           </CardContent>
         </Card>
       )}
 
-      {/* 페르소나 카드 그리드 */}
+      {/* 내 페르소나 카드 그리드 */}
       {personas.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {personas.map((persona) => {
-            const status =
-              STATUS_LABELS[persona.crawl_status] || STATUS_LABELS.none;
+        <>
+          <h2 className="text-lg font-semibold">내 페르소나</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {personas.map((persona) => {
+              const status =
+                STATUS_LABELS[persona.crawl_status] || STATUS_LABELS.none;
 
-            return (
-              <Card
-                key={persona.id}
-                className="cursor-pointer transition-shadow hover:shadow-md"
-                onClick={() => router.push(`/persona/${persona.id}`)}
+              return (
+                <Card
+                  key={persona.id}
+                  className="cursor-pointer transition-shadow hover:shadow-md"
+                  onClick={() => router.push(`/persona/${persona.id}`)}
+                >
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base">
+                        {persona.display_name || "이름 없음"}
+                      </CardTitle>
+                      {persona.is_default && (
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                          기본
+                        </span>
+                      )}
+                    </div>
+                    {persona.source_blog_url && (
+                      <CardDescription className="truncate text-xs">
+                        {persona.source_blog_url}
+                      </CardDescription>
+                    )}
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className={status.color}>{status.text}</span>
+                      {persona.crawl_post_count > 0 && (
+                        <span className="text-muted-foreground">
+                          {persona.crawl_post_count}편
+                        </span>
+                      )}
+                    </div>
+                    {persona.crawled_at && (
+                      <p className="text-xs text-muted-foreground">
+                        분석일:{" "}
+                        {new Date(persona.crawled_at).toLocaleDateString("ko-KR")}
+                      </p>
+                    )}
+                    {/* 기본 설정 버튼 */}
+                    {!persona.is_default && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-xs"
+                        disabled={settingDefault === persona.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSetDefault(persona.id);
+                        }}
+                      >
+                        {settingDefault === persona.id
+                          ? "설정 중..."
+                          : "기본으로 설정"}
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* 예시 페르소나 섹션 */}
+      {examples.length > 0 && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">추천 예시</h2>
+            <p className="text-sm text-muted-foreground">
+              마음에 드는 스타일을 복사하여 바로 사용하세요
+            </p>
+          </div>
+
+          {/* 카테고리 필터 */}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant={selectedCategory === null ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSelectedCategory(null)}
+            >
+              전체
+            </Button>
+            {categories.map((cat) => (
+              <Button
+                key={cat}
+                variant={selectedCategory === cat ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedCategory(cat)}
               >
+                {CATEGORY_LABELS[cat] || ""} {cat}
+              </Button>
+            ))}
+          </div>
+
+          {/* 예시 카드 그리드 */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {filteredExamples.map((example) => (
+              <Card key={example.id} className="flex flex-col">
                 <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">
+                      {CATEGORY_LABELS[example.category] || ""}
+                    </span>
                     <CardTitle className="text-base">
-                      {persona.display_name || "이름 없음"}
+                      {example.display_name}
                     </CardTitle>
-                    {persona.is_default && (
-                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                        기본
-                      </span>
-                    )}
                   </div>
-                  {persona.source_blog_url && (
-                    <CardDescription className="truncate text-xs">
-                      {persona.source_blog_url}
-                    </CardDescription>
-                  )}
+                  <CardDescription>{example.description}</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="flex items-center gap-3 text-sm">
-                    <span className={status.color}>{status.text}</span>
-                    {persona.crawl_post_count > 0 && (
-                      <span className="text-muted-foreground">
-                        {persona.crawl_post_count}편
-                      </span>
-                    )}
-                  </div>
-                  {persona.crawled_at && (
-                    <p className="text-xs text-muted-foreground">
-                      분석일:{" "}
-                      {new Date(persona.crawled_at).toLocaleDateString("ko-KR")}
-                    </p>
+                <CardContent className="flex flex-1 flex-col justify-between space-y-3">
+                  {/* 미리보기 */}
+                  {example.style_preview && (
+                    <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground italic leading-relaxed">
+                      &ldquo;{example.style_preview}&rdquo;
+                    </div>
                   )}
-                  {/* 기본 설정 버튼 */}
-                  {!persona.is_default && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">
+                      스타일 항목 {example.itemCount}개
+                    </span>
                     <Button
-                      variant="ghost"
                       size="sm"
-                      className="w-full text-xs"
-                      disabled={settingDefault === persona.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSetDefault(persona.id);
-                      }}
+                      disabled={copyingId === example.id}
+                      onClick={() => handleCopyExample(example.id)}
                     >
-                      {settingDefault === persona.id
-                        ? "설정 중..."
-                        : "기본으로 설정"}
+                      {copyingId === example.id
+                        ? "복사 중..."
+                        : "내 것으로 복사"}
                     </Button>
-                  )}
+                  </div>
                 </CardContent>
               </Card>
-            );
-          })}
+            ))}
+          </div>
         </div>
       )}
     </div>
