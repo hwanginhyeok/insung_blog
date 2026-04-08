@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -143,6 +143,29 @@ export default function PersonaListPage() {
     loadPersonas();
     loadExamples();
   }, []);
+
+  // ── 모달 ESC 키 닫기 + body 스크롤 잠금 ──
+
+  const isAnyModalOpen = !!(expandedId || myPersonaPopup || (compareLeft && compareRight));
+
+  useEffect(() => {
+    if (!isAnyModalOpen) return;
+    document.body.style.overflow = "hidden";
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setExpandedId(null);
+        setMyPersonaPopup(null);
+        setCompareLeft(null);
+        setCompareRight(null);
+        setCompareMode(false);
+      }
+    };
+    window.addEventListener("keydown", handleEsc);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handleEsc);
+    };
+  }, [isAnyModalOpen]);
 
   // ── 새 페르소나 생성 (크롤링 + 분석) ──
 
@@ -294,7 +317,7 @@ export default function PersonaListPage() {
   async function selectForCompare(unified: UnifiedPersona) {
     if (!compareLeft) {
       setCompareLeft(unified);
-    } else if (!compareRight) {
+    } else if (!compareRight && unified.id !== compareLeft.id) {
       setCompareRight(unified);
     }
   }
@@ -631,7 +654,8 @@ export default function PersonaListPage() {
             }
             return (
               <div
-                className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+                role="dialog" aria-modal="true"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
                 onClick={() => setExpandedId(null)}
               >
                 <div
@@ -651,7 +675,8 @@ export default function PersonaListPage() {
                     </div>
                     <button
                       onClick={() => setExpandedId(null)}
-                      className="text-muted-foreground hover:text-foreground text-xl leading-none"
+                      className="text-muted-foreground hover:text-foreground text-xl leading-none p-2 -m-2"
+                    aria-label="닫기"
                     >
                       ×
                     </button>
@@ -726,6 +751,7 @@ export default function PersonaListPage() {
         }
         return (
           <div
+            role="dialog" aria-modal="true"
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
             onClick={() => setMyPersonaPopup(null)}
           >
@@ -850,8 +876,8 @@ export default function PersonaListPage() {
                                 {/* 다른 쪽이 내 페르소나면 복사 버튼 표시 */}
                                 {other.type === "mine" && !existsInOther && (
                                   <button
-                                    className="shrink-0 text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity"
-                                    title={`"${other.display_name}"에 복사`}
+                                    className="shrink-0 text-xs text-primary md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+                                    aria-label={`${other.display_name}에 복사`}
                                     disabled={copyingItem}
                                     onClick={() => copyItemToPersona(item, other.id)}
                                   >
@@ -871,6 +897,7 @@ export default function PersonaListPage() {
 
         return (
           <div
+            role="dialog" aria-modal="true"
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
             onClick={() => {
               setCompareLeft(null);
@@ -898,9 +925,10 @@ export default function PersonaListPage() {
               <p className="text-xs text-muted-foreground mb-4">
                 상대 페르소나에 없는 항목에 hover하면 "→복사" 버튼이 나타납니다 (내 페르소나에만 복사 가능)
               </p>
-              <div className="flex gap-6">
+              <div className="flex flex-col md:flex-row gap-6">
                 {renderSide(compareLeft, compareRight)}
-                <div className="w-px bg-border shrink-0" />
+                <div className="hidden md:block w-px bg-border shrink-0" />
+                <div className="md:hidden w-full h-px bg-border" />
                 {renderSide(compareRight, compareLeft)}
               </div>
               <div className="flex justify-end mt-6 pt-4 border-t">

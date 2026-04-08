@@ -465,7 +465,12 @@ async def get_comment_progress(command_id: str, _=Depends(_verify_token)):
     워커가 bot_commands.result에 저장하는 {progress, total, success, failed} 반환.
     웹 UI에서 polling으로 호출.
     """
+    import re as _re
     from src.storage.supabase_client import get_supabase
+
+    # UUID 형식 검증 (SQL 인젝션 방지)
+    if not _re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", command_id):
+        raise HTTPException(status_code=404, detail="명령을 찾을 수 없습니다")
 
     sb = get_supabase()
     try:
@@ -476,8 +481,9 @@ async def get_comment_progress(command_id: str, _=Depends(_verify_token)):
             .limit(1)
             .execute()
         )
-    except Exception:
-        raise HTTPException(status_code=404, detail="명령을 찾을 수 없습니다")
+    except Exception as e:
+        logger.error(f"진행률 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail="서버 오류")
 
     if not result.data:
         raise HTTPException(status_code=404, detail="명령을 찾을 수 없습니다")
