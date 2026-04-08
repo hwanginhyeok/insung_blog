@@ -18,3 +18,5 @@
 | MARKETING-01 | 마케팅 방안 — AI 명시 홍보 + 커뮤니티 10명 확보 | P2 | — | AI기본법 준수 겸 홍보. 블수모/아이보스/크몽. 가격 월19,900원. 상세: [plans/biz-growth-plan.md](docs/프로젝트/plans/biz-growth-plan.md) |
 | NOTIFY-KAKAO-CONNECT | 알림 실 연동 — FCM+카카오 환경변수 설정 | P2 | 사업자등록(알림톡) | 라우터 코드 완료. Firebase 콘솔/카카오 OAuth 설정 필요 |
 | BIZ-MODEL | 체험단 플랫폼 — 블로거↔가게 무료 알선→유료 컨설팅 | P2 | 블로거 20명+ | MVP 설계 완료. 상세: [plans/biz-growth-plan.md](docs/프로젝트/plans/biz-growth-plan.md) |
+| PERSONA-EDITOR | 페르소나 편집 UX 개선 — 팝업+비교+드래그 복사 | P1 | — | 내 페르소나 팝업 보기 + 수정 버튼 + 두 페르소나 비교 + 항목 드래그 복사/삭제 |
+| SUPABASE-MAXROWS | Supabase PostgREST max_rows 설정 조정 | P2 | — | 예시 페르소나 84개 중 45개만 반환. 대시보드에서 max_rows 올려야 함 |
