@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
+import { Modal, ModalHeader, ModalFooter } from "@/components/ui/modal";
 
 // ── 타입 ──
 
@@ -74,12 +75,13 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const ITEM_CATEGORY_LABELS: Record<string, { label: string; color: string }> = {
-  voice: { label: "말투", color: "bg-blue-100 text-blue-700" },
-  structure: { label: "구성", color: "bg-green-100 text-green-700" },
-  emoji: { label: "이모지", color: "bg-yellow-100 text-yellow-700" },
-  ending: { label: "마무리", color: "bg-purple-100 text-purple-700" },
-  forbidden: { label: "금지", color: "bg-red-100 text-red-700" },
-  custom: { label: "특징", color: "bg-orange-100 text-orange-700" },
+  voice: { label: "말투", color: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200" },
+  structure: { label: "구성", color: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200" },
+  emoji: { label: "이모지", color: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200" },
+  ending: { label: "마무리", color: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-200" },
+  forbidden: { label: "금지", color: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200" },
+  custom: { label: "특징", color: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-200" },
+  formatting: { label: "포맷팅", color: "bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-200" },
 };
 
 // ── 메인 페이지 ──
@@ -143,29 +145,6 @@ export default function PersonaListPage() {
     loadPersonas();
     loadExamples();
   }, []);
-
-  // ── 모달 ESC 키 닫기 + body 스크롤 잠금 ──
-
-  const isAnyModalOpen = !!(expandedId || myPersonaPopup || (compareLeft && compareRight));
-
-  useEffect(() => {
-    if (!isAnyModalOpen) return;
-    document.body.style.overflow = "hidden";
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setExpandedId(null);
-        setMyPersonaPopup(null);
-        setCompareLeft(null);
-        setCompareRight(null);
-        setCompareMode(false);
-      }
-    };
-    window.addEventListener("keydown", handleEsc);
-    return () => {
-      document.body.style.overflow = "";
-      window.removeEventListener("keydown", handleEsc);
-    };
-  }, [isAnyModalOpen]);
 
   // ── 새 페르소나 생성 (크롤링 + 분석) ──
 
@@ -643,311 +622,251 @@ export default function PersonaListPage() {
             ))}
           </div>
 
-          {/* 상세 팝업 모달 */}
-          {expandedId && (() => {
-            const selected = examples.find((e) => e.id === expandedId);
-            if (!selected) return null;
-            const grouped: Record<string, typeof selected.items> = {};
-            for (const item of selected.items) {
-              if (!grouped[item.category]) grouped[item.category] = [];
-              grouped[item.category].push(item);
-            }
-            return (
-              <div
-                role="dialog" aria-modal="true"
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-                onClick={() => setExpandedId(null)}
-              >
-                <div
-                  className="relative w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto rounded-lg bg-background p-6 shadow-xl"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {/* 헤더 */}
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">
-                        {CATEGORY_LABELS[selected.category] || ""}
-                      </span>
-                      <div>
-                        <h3 className="text-lg font-semibold">{selected.display_name}</h3>
-                        <p className="text-sm text-muted-foreground">{selected.description}</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setExpandedId(null)}
-                      className="text-muted-foreground hover:text-foreground text-xl leading-none p-2 -m-2"
-                    aria-label="닫기"
-                    >
-                      ×
-                    </button>
-                  </div>
-
-                  {/* 미리보기 */}
-                  {selected.style_preview && (
-                    <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground italic leading-relaxed mb-4">
-                      &ldquo;{selected.style_preview}&rdquo;
-                    </div>
-                  )}
-
-                  {/* 스타일 항목 */}
-                  <div className="space-y-4">
-                    {Object.entries(grouped)
-                      .sort(([a], [b]) => {
-                        const order = ["voice", "structure", "emoji", "ending", "custom", "forbidden"];
-                        return order.indexOf(a) - order.indexOf(b);
-                      })
-                      .map(([cat, catItems]) => {
-                        const meta = ITEM_CATEGORY_LABELS[cat] || { label: cat, color: "bg-gray-100 text-gray-700" };
-                        return (
-                          <div key={cat} className="space-y-2">
-                            <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${meta.color}`}>
-                              {meta.label}
-                            </span>
-                            {catItems
-                              .sort((a, b) => b.priority - a.priority)
-                              .map((item, i) => (
-                                <div key={i} className="flex gap-2 text-sm pl-1">
-                                  <span className="text-muted-foreground shrink-0">·</span>
-                                  <span>{item.value}</span>
-                                </div>
-                              ))}
-                          </div>
-                        );
-                      })}
-                  </div>
-
-                  {/* 하단 버튼 */}
-                  <div className="flex justify-end gap-2 mt-6 pt-4 border-t">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setExpandedId(null)}
-                    >
-                      닫기
-                    </Button>
-                    <Button
-                      size="sm"
-                      disabled={copyingId === selected.id}
-                      onClick={() => handleCopyExample(selected.id)}
-                    >
-                      {copyingId === selected.id ? "복사 중..." : "내 것으로 복사"}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
+          {/* 예시 상세 팝업 모달 */}
+          <ExampleDetailModal
+            example={examples.find((e) => e.id === expandedId) || null}
+            onClose={() => setExpandedId(null)}
+            onCopy={handleCopyExample}
+            copyingId={copyingId}
+          />
         </div>
       )}
 
-      {/* ── 내 페르소나 팝업 모달 ── */}
-      {myPersonaPopup && (() => {
-        const selected = personas.find((p) => p.id === myPersonaPopup);
-        if (!selected) return null;
-        const grouped: Record<string, PersonaItem[]> = {};
-        for (const item of myPersonaItems) {
-          if (!grouped[item.category]) grouped[item.category] = [];
-          grouped[item.category].push(item);
-        }
-        return (
-          <div
-            role="dialog" aria-modal="true"
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-            onClick={() => setMyPersonaPopup(null)}
-          >
-            <div
-              className="relative w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto rounded-lg bg-background p-6 shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold">{selected.display_name || "이름 없음"}</h3>
-                  {selected.source_blog_url && (
-                    <p className="text-sm text-muted-foreground truncate">{selected.source_blog_url}</p>
-                  )}
-                </div>
-                <button
-                  onClick={() => setMyPersonaPopup(null)}
-                  className="text-muted-foreground hover:text-foreground text-xl leading-none"
-                >
-                  ×
-                </button>
-              </div>
+      {/* 내 페르소나 팝업 모달 */}
+      <MyPersonaModal
+        persona={personas.find((p) => p.id === myPersonaPopup) || null}
+        items={myPersonaItems}
+        loading={loadingItems}
+        onClose={() => setMyPersonaPopup(null)}
+        onEdit={(id) => { setMyPersonaPopup(null); router.push(`/persona/${id}`); }}
+      />
 
-              {loadingItems ? (
-                <p className="text-center text-muted-foreground py-8">로딩 중...</p>
-              ) : myPersonaItems.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">스타일 항목이 없습니다. 블로그를 분석해보세요.</p>
-              ) : (
-                <div className="space-y-4">
-                  {Object.entries(grouped)
-                    .sort(([a], [b]) => {
-                      const order = ["voice", "structure", "emoji", "ending", "custom", "forbidden", "formatting"];
-                      return order.indexOf(a) - order.indexOf(b);
-                    })
-                    .map(([cat, catItems]) => {
-                      const meta = ITEM_CATEGORY_LABELS[cat] || { label: cat, color: "bg-gray-100 text-gray-700" };
+      {/* 비교 모달 */}
+      <CompareModal
+        left={compareLeft}
+        right={compareRight}
+        onClose={() => { setCompareLeft(null); setCompareRight(null); setCompareMode(false); }}
+        onCopyItem={copyItemToPersona}
+        copyingItem={copyingItem}
+      />
+    </div>
+  );
+}
+
+// ── 카테고리 정렬 순서 ──
+const CATEGORY_ORDER = ["voice", "structure", "emoji", "ending", "custom", "forbidden", "formatting"];
+
+function sortCategories([a]: [string, unknown], [b]: [string, unknown]) {
+  return CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b);
+}
+
+function groupItems(items: PersonaItem[]): Record<string, PersonaItem[]> {
+  const grouped: Record<string, PersonaItem[]> = {};
+  for (const item of items) {
+    if (!grouped[item.category]) grouped[item.category] = [];
+    grouped[item.category].push(item);
+  }
+  return grouped;
+}
+
+// ── 카테고리별 항목 렌더러 (공용) ──
+function CategoryItems({ grouped, showKey }: { grouped: Record<string, PersonaItem[]>; showKey?: boolean }) {
+  return (
+    <div className="space-y-4">
+      {Object.entries(grouped)
+        .sort(sortCategories)
+        .map(([cat, catItems]) => {
+          const meta = ITEM_CATEGORY_LABELS[cat] || { label: cat, color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200" };
+          return (
+            <div key={cat} className="space-y-2">
+              <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${meta.color}`}>
+                {meta.label}
+              </span>
+              {catItems
+                .sort((a, b) => b.priority - a.priority)
+                .map((item, i) => (
+                  <div key={i} className="flex gap-2 text-sm pl-1">
+                    <span className="text-muted-foreground shrink-0">·</span>
+                    {showKey ? (
+                      <div>
+                        <span className="font-medium">{item.key}</span>
+                        <span className="text-muted-foreground"> — {item.value}</span>
+                      </div>
+                    ) : (
+                      <span>{item.value}</span>
+                    )}
+                  </div>
+                ))}
+            </div>
+          );
+        })}
+    </div>
+  );
+}
+
+// ── 예시 페르소나 상세 모달 ──
+function ExampleDetailModal({
+  example,
+  onClose,
+  onCopy,
+  copyingId,
+}: {
+  example: ExamplePersona | null;
+  onClose: () => void;
+  onCopy: (id: string) => void;
+  copyingId: string | null;
+}) {
+  if (!example) return null;
+  const grouped = groupItems(example.items);
+
+  return (
+    <Modal open={!!example} onClose={onClose}>
+      <ModalHeader
+        title={example.display_name}
+        subtitle={example.description}
+        icon={<span className="text-2xl">{CATEGORY_LABELS[example.category] || ""}</span>}
+        onClose={onClose}
+      />
+      {example.style_preview && (
+        <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground italic leading-relaxed mb-4">
+          &ldquo;{example.style_preview}&rdquo;
+        </div>
+      )}
+      <CategoryItems grouped={grouped} />
+      <ModalFooter>
+        <Button variant="outline" size="sm" onClick={onClose}>닫기</Button>
+        <Button size="sm" disabled={copyingId === example.id} onClick={() => onCopy(example.id)}>
+          {copyingId === example.id ? "복사 중..." : "내 것으로 복사"}
+        </Button>
+      </ModalFooter>
+    </Modal>
+  );
+}
+
+// ── 내 페르소나 상세 모달 ──
+function MyPersonaModal({
+  persona,
+  items,
+  loading,
+  onClose,
+  onEdit,
+}: {
+  persona: Persona | null;
+  items: PersonaItem[];
+  loading: boolean;
+  onClose: () => void;
+  onEdit: (id: string) => void;
+}) {
+  if (!persona) return null;
+  const grouped = groupItems(items);
+
+  return (
+    <Modal open={!!persona} onClose={onClose}>
+      <ModalHeader
+        title={persona.display_name || "이름 없음"}
+        subtitle={persona.source_blog_url || undefined}
+        onClose={onClose}
+      />
+      {loading ? (
+        <p className="text-center text-muted-foreground py-8">로딩 중...</p>
+      ) : items.length === 0 ? (
+        <p className="text-center text-muted-foreground py-8">스타일 항목이 없습니다. 블로그를 분석해보세요.</p>
+      ) : (
+        <CategoryItems grouped={grouped} showKey />
+      )}
+      <ModalFooter>
+        <Button variant="outline" size="sm" onClick={onClose}>닫기</Button>
+        <Button size="sm" onClick={() => onEdit(persona.id)}>수정하기</Button>
+      </ModalFooter>
+    </Modal>
+  );
+}
+
+// ── 비교 모달 ──
+function CompareModal({
+  left,
+  right,
+  onClose,
+  onCopyItem,
+  copyingItem,
+}: {
+  left: UnifiedPersona | null;
+  right: UnifiedPersona | null;
+  onClose: () => void;
+  onCopyItem: (item: PersonaItem, targetId: string) => void;
+  copyingItem: boolean;
+}) {
+  if (!left || !right) return null;
+
+  function renderSide(p: UnifiedPersona, other: UnifiedPersona) {
+    const grouped = groupItems(p.items);
+    const otherKeys = new Set(other.items.map((i) => `${i.category}:${i.key}`));
+
+    return (
+      <div className="flex-1 min-w-0">
+        <div className="mb-3 pb-2 border-b">
+          <h4 className="font-semibold">{p.display_name}</h4>
+          <p className="text-xs text-muted-foreground">
+            {p.type === "example" ? `예시 (${p.category})` : "내 페르소나"} — {p.items.length}개 항목
+          </p>
+        </div>
+        <div className="space-y-3">
+          {Object.entries(grouped)
+            .sort(sortCategories)
+            .map(([cat, catItems]) => {
+              const meta = ITEM_CATEGORY_LABELS[cat] || { label: cat, color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200" };
+              return (
+                <div key={cat} className="space-y-1">
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${meta.color}`}>
+                    {meta.label}
+                  </span>
+                  {catItems
+                    .sort((a, b) => b.priority - a.priority)
+                    .map((item, i) => {
+                      const existsInOther = otherKeys.has(`${item.category}:${item.key}`);
                       return (
-                        <div key={cat} className="space-y-2">
-                          <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${meta.color}`}>
-                            {meta.label}
-                          </span>
-                          {catItems
-                            .sort((a, b) => b.priority - a.priority)
-                            .map((item, i) => (
-                              <div key={i} className="flex gap-2 text-sm pl-1">
-                                <span className="text-muted-foreground shrink-0">·</span>
-                                <div>
-                                  <span className="font-medium">{item.key}</span>
-                                  <span className="text-muted-foreground"> — {item.value}</span>
-                                </div>
-                              </div>
-                            ))}
+                        <div
+                          key={i}
+                          className={`flex items-start gap-1 text-sm pl-1 group ${existsInOther ? "opacity-50" : ""}`}
+                        >
+                          <span className="text-muted-foreground shrink-0">·</span>
+                          <span className="flex-1 text-xs">{item.value}</span>
+                          {other.type === "mine" && !existsInOther && (
+                            <button
+                              className="shrink-0 text-xs text-primary md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+                              aria-label={`${other.display_name}에 복사`}
+                              disabled={copyingItem}
+                              onClick={() => onCopyItem(item, other.id)}
+                            >
+                              →복사
+                            </button>
+                          )}
                         </div>
                       );
                     })}
                 </div>
-              )}
+              );
+            })}
+        </div>
+      </div>
+    );
+  }
 
-              <div className="flex justify-end gap-2 mt-6 pt-4 border-t">
-                <Button variant="outline" size="sm" onClick={() => setMyPersonaPopup(null)}>
-                  닫기
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setMyPersonaPopup(null);
-                    router.push(`/persona/${selected.id}`);
-                  }}
-                >
-                  수정하기
-                </Button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ── 비교 모달 ── */}
-      {compareLeft && compareRight && (() => {
-        function renderSide(p: UnifiedPersona, other: UnifiedPersona) {
-          const grouped: Record<string, PersonaItem[]> = {};
-          for (const item of p.items) {
-            if (!grouped[item.category]) grouped[item.category] = [];
-            grouped[item.category].push(item);
-          }
-          const otherKeys = new Set(other.items.map((i) => `${i.category}:${i.key}`));
-
-          return (
-            <div className="flex-1 min-w-0">
-              <div className="mb-3 pb-2 border-b">
-                <h4 className="font-semibold">{p.display_name}</h4>
-                <p className="text-xs text-muted-foreground">
-                  {p.type === "example" ? `예시 (${p.category})` : "내 페르소나"} — {p.items.length}개 항목
-                </p>
-              </div>
-              <div className="space-y-3">
-                {Object.entries(grouped)
-                  .sort(([a], [b]) => {
-                    const order = ["voice", "structure", "emoji", "ending", "custom", "forbidden", "formatting"];
-                    return order.indexOf(a) - order.indexOf(b);
-                  })
-                  .map(([cat, catItems]) => {
-                    const meta = ITEM_CATEGORY_LABELS[cat] || { label: cat, color: "bg-gray-100 text-gray-700" };
-                    return (
-                      <div key={cat} className="space-y-1">
-                        <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${meta.color}`}>
-                          {meta.label}
-                        </span>
-                        {catItems
-                          .sort((a, b) => b.priority - a.priority)
-                          .map((item, i) => {
-                            const itemKey = `${item.category}:${item.key}`;
-                            const existsInOther = otherKeys.has(itemKey);
-                            return (
-                              <div
-                                key={i}
-                                className={`flex items-start gap-1 text-sm pl-1 group ${
-                                  existsInOther ? "opacity-50" : ""
-                                }`}
-                              >
-                                <span className="text-muted-foreground shrink-0">·</span>
-                                <span className="flex-1 text-xs">{item.value}</span>
-                                {/* 다른 쪽이 내 페르소나면 복사 버튼 표시 */}
-                                {other.type === "mine" && !existsInOther && (
-                                  <button
-                                    className="shrink-0 text-xs text-primary md:opacity-0 md:group-hover:opacity-100 transition-opacity"
-                                    aria-label={`${other.display_name}에 복사`}
-                                    disabled={copyingItem}
-                                    onClick={() => copyItemToPersona(item, other.id)}
-                                  >
-                                    →복사
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })}
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          );
-        }
-
-        return (
-          <div
-            role="dialog" aria-modal="true"
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-            onClick={() => {
-              setCompareLeft(null);
-              setCompareRight(null);
-              setCompareMode(false);
-            }}
-          >
-            <div
-              className="relative w-full max-w-4xl mx-4 max-h-[85vh] overflow-y-auto rounded-lg bg-background p-6 shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">페르소나 비교</h3>
-                <button
-                  onClick={() => {
-                    setCompareLeft(null);
-                    setCompareRight(null);
-                    setCompareMode(false);
-                  }}
-                  className="text-muted-foreground hover:text-foreground text-xl leading-none"
-                >
-                  ×
-                </button>
-              </div>
-              <p className="text-xs text-muted-foreground mb-4">
-                상대 페르소나에 없는 항목에 hover하면 "→복사" 버튼이 나타납니다 (내 페르소나에만 복사 가능)
-              </p>
-              <div className="flex flex-col md:flex-row gap-6">
-                {renderSide(compareLeft, compareRight)}
-                <div className="hidden md:block w-px bg-border shrink-0" />
-                <div className="md:hidden w-full h-px bg-border" />
-                {renderSide(compareRight, compareLeft)}
-              </div>
-              <div className="flex justify-end mt-6 pt-4 border-t">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setCompareLeft(null);
-                    setCompareRight(null);
-                    setCompareMode(false);
-                  }}
-                >
-                  닫기
-                </Button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-    </div>
+  return (
+    <Modal open onClose={onClose} maxWidth="max-w-4xl">
+      <ModalHeader title="페르소나 비교" onClose={onClose} />
+      <p className="text-xs text-muted-foreground mb-4">
+        상대 페르소나에 없는 항목에 hover하면 &quot;→복사&quot; 버튼이 나타납니다 (내 페르소나에만 복사 가능)
+      </p>
+      <div className="flex flex-col md:flex-row gap-6">
+        {renderSide(left, right)}
+        <div className="hidden md:block w-px bg-border shrink-0" />
+        <div className="md:hidden w-full h-px bg-border" />
+        {renderSide(right, left)}
+      </div>
+      <ModalFooter>
+        <Button variant="outline" size="sm" onClick={onClose}>닫기</Button>
+      </ModalFooter>
+    </Modal>
   );
 }
