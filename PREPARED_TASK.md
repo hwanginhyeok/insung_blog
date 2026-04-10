@@ -4,11 +4,10 @@
 |---|--------|----------|---------|------|
 | TG-E2E | 텔레그램 봇 통합 E2E 테스트 | P1 | — | 텔레그램 앱에서 수동 테스트 필요 |
 | UX-C01 | 카카오 로그인 프로덕션 실동작 검증 | P1 | — | 실제 카카오 로그인 직접 클릭 테스트 필요 |
-| COLLECT-PARALLEL | 블로그 수집 병렬화 설계 | P1 | — | 분석 완료: 방문/게시 이미 병렬화됨. 남은 건 comment_collector 폴백 경로 최적화 |
+| IP-ROTATION | LTE 동글 IP 로테이션 구현 | P1 | 유저 20명+ | 화웨이 E8372 + HiLink API + WSL2 mirrored |
 | IP-ROTATION | LTE 동글 IP 로테이션 구현 | P1 | 유저 20명+ | 화웨이 E8372 + HiLink API + WSL2 mirrored |
 | INFRA-SERVER | 로컬 PC 의존 탈피 — 클라우드 서버 이전 | P1 | 유저 50명+ | Oracle Cloud Free 먼저 시도 → 실패 시 Vultr 도쿄 |
 | BOT-PROGRESS-UI | 댓글 진행률 웹 UI — 게시 버튼 근처 프로그레스바 | P1 | — | API 완료(GET /comment/progress). 웹 UI polling + %바 구현 남음 |
-| VISITOR-TRACK-UI | 방문자수 웹 대시보드 — Chart.js 추이 그래프 | P2 | — | 수집 완료. cron 등록 + 웹 UI 시각화 남음 |
 | BLOG-AUTO | 네이버 블로그 글 자동화 (AI 글 생성 → 자동 발행 파이프라인) | P2 | — | 기존 PUBLISH(수동 발행) 확장 |
 | PROXY-DEPLOY | 프록시 실제 도입 | P2 | 유저 30명+ | 주거용 프록시 구매 + 유저별 할당 |
 | SUPABASE-PRO | Supabase Pro 플랜 전환 검토 | P2 | 유저 50명+ | ₩35,000/월. Storage 1GB/API 500K 한도 |
