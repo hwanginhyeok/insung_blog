@@ -94,8 +94,8 @@ _BASE_RULES = """\
 # 게시물 작성 스타일과 통일된 톤
 _SYSTEM_TONE = (
     "너는 다른 사람의 네이버 블로그에 방문해서 댓글을 남기는 30대 직장인이야. "
-    "반드시 3줄 이상, 120자 이상으로 댓글을 써. 한 줄짜리 짧은 댓글은 절대 금지. "
-    "글을 꼼꼼히 읽고, 본문 속 구체적인 정보 2~3가지를 골라 "
+    "반드시 150~250자로 댓글을 써. "
+    "글을 꼼꼼히 읽고, 본문 속 구체적인 정보 1~2가지를 골라 "
     "센스있고 위트있게 공감 댓글을 남겨. "
     "줄바꿈(\\n)으로 호흡을 나누고, 이모티콘도 자연스럽게 써."
 )
@@ -266,7 +266,7 @@ def _check_ollama() -> bool:
     return _ollama_available
 
 
-def _call_ollama(system: str, user_msg: str, max_tokens: int = 300) -> str | None:
+def _call_ollama(system: str, user_msg: str, max_tokens: int = 1200) -> str | None:
     """Ollama API로 텍스트 생성. 실패 시 None."""
     if not _check_ollama():
         return None
@@ -380,7 +380,7 @@ def generate_comment(
 
     # ── 1차: Ollama 우선 시도 (크레딧 불필요) ──
     ollama_comment = _try_ollama_comment(body, post_title, tone_hint, category_hint, persona_tone)
-    if ollama_comment and len(ollama_comment) >= 100 and _is_valid_comment(ollama_comment):
+    if ollama_comment and 100 <= len(ollama_comment) <= 300 and _is_valid_comment(ollama_comment):
         if not any(_is_similar(ollama_comment, rc) for rc in recent_comments):
             comment = post_process(_clean_comment(ollama_comment))
             logger.info(f"Ollama 댓글 생성 완료 ({len(comment)}자): {comment[:40]}...")
@@ -408,7 +408,7 @@ def generate_comment(
 
                 response = client.messages.create(
                     model=COMMENT_AI_MODEL,
-                    max_tokens=300,
+                    max_tokens=1200,
                     system=system_prompt,
                     messages=[{"role": "user", "content": user_message}],
                 )
@@ -420,8 +420,9 @@ def generate_comment(
 
                 if comment.startswith('"') and comment.endswith('"'):
                     comment = comment[1:-1]
-                if len(comment) > 300:
-                    comment = comment[:297] + "..."
+                # 300자 넘거나 100자 미만이면 재시도
+                if len(comment) > 300 or len(comment) < 100:
+                    continue
 
                 if not _is_valid_comment(comment):
                     continue
@@ -444,11 +445,15 @@ def generate_comment(
 
 
 def _clean_comment(comment: str) -> str:
-    """댓글 후처리: 따옴표 제거 + 길이 제한."""
+    """댓글 후처리: 따옴표 제거 + 길이 검증."""
     if comment.startswith('"') and comment.endswith('"'):
         comment = comment[1:-1]
+    # 300자 넘으면 재시도 유도 (자르지 않음)
     if len(comment) > 300:
-        comment = comment[:297] + "..."
+        return None
+    # 100자 미만이어도 재시도 유도
+    if len(comment) < 100:
+        return None
     return comment
 
 
@@ -473,7 +478,7 @@ def _try_ollama_comment(
         f"[제목] {title}\n\n[본문]\n{body}\n\n"
         "위 게시물에 3줄 이상, 120자 이상의 공감 댓글을 작성해. 댓글 텍스트만 출력."
     )
-    result = _call_ollama(system, user_msg, max_tokens=300)
+    result = _call_ollama(system, user_msg, max_tokens=1200)
     if result:
         # \\n 리터럴 → 실제 줄바꿈
         result = result.replace("\\n", "\n")
@@ -637,7 +642,7 @@ def generate_comments_batch(
             )
             response = client.messages.create(
                 model=COMMENT_AI_MODEL,
-                max_tokens=800,
+                max_tokens=1200,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_message}],
             )
