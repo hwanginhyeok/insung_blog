@@ -5,7 +5,7 @@
 | TG-E2E | 텔레그램 봇 통합 E2E 테스트 | P1 | — | 텔레그램 앱에서 수동 테스트 필요 |
 | UX-C01 | 카카오 로그인 프로덕션 실동작 검증 | P1 | — | 실제 카카오 로그인 직접 클릭 테스트 필요 |
 | IP-ROTATION | LTE 동글 IP 로테이션 구현 | P1 | 유저 20명+ | 화웨이 E8372 + HiLink API + WSL2 mirrored |
-| IP-ROTATION | LTE 동글 IP 로테이션 구현 | P1 | 유저 20명+ | 화웨이 E8372 + HiLink API + WSL2 mirrored |
+| ADMIN-USAGE-LOGS | 관리페이지 사용 내역 Phase 2 — 로그인/에러/API 수집 | P2 | ADMIN-USAGE-DETAIL | 신규 login_log + error_log 테이블. auth.audit_log_entries view wrapper 검토. API는 집계 테이블(daily_api_usage) 방식 |
 | INFRA-SERVER | 로컬 PC 의존 탈피 — 클라우드 서버 이전 | P1 | 유저 50명+ | Oracle Cloud Free 먼저 시도 → 실패 시 Vultr 도쿄 |
 | BOT-PROGRESS-UI | 댓글 진행률 웹 UI — 게시 버튼 근처 프로그레스바 | P1 | — | API 완료(GET /comment/progress). 웹 UI polling + %바 구현 남음 |
 | BLOG-AUTO | 네이버 블로그 글 자동화 (AI 글 생성 → 자동 발행 파이프라인) | P2 | — | 기존 PUBLISH(수동 발행) 확장 |
