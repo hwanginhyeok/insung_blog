@@ -3,11 +3,13 @@
  *
  * 환경변수:
  *   TELEGRAM_BOT_TOKEN — 텔레그램 봇 토큰
- *   TELEGRAM_ADMIN_CHAT_ID — 관리자 채팅 ID
+ *   TELEGRAM_ADMIN_CHAT_ID — 관리자 채팅 ID (우선)
+ *   TELEGRAM_CHAT_ID — Python 쪽과 공유하는 기본값 (fallback)
  */
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN ?? "";
-const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID ?? "";
+const ADMIN_CHAT_ID =
+  process.env.TELEGRAM_ADMIN_CHAT_ID ?? process.env.TELEGRAM_CHAT_ID ?? "";
 
 /**
  * 관리자에게 텔레그램 메시지 전송.

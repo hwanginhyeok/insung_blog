@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { verifyWebhookSignature } from "@/lib/portone";
+import { notifyAdmin } from "@/lib/telegram";
 
 /**
  * POST /api/webhooks/portone
@@ -89,6 +90,15 @@ export async function POST(req: NextRequest) {
             })
             .eq("id", userId);
         }
+
+        // 관리자 알림 — 결제 성공
+        notifyAdmin(
+          `💰 <b>결제 성공</b>\n` +
+            `금액: ${(amount?.total ?? 0).toLocaleString()}원\n` +
+            `플랜: ${tier ?? "basic"}\n` +
+            (userId ? `userId: <code>${userId.slice(0, 8)}</code>\n` : "") +
+            `paymentId: <code>${paymentId}</code>`
+        ).catch(() => {});
         break;
       }
 
@@ -107,6 +117,13 @@ export async function POST(req: NextRequest) {
             .update({ subscription_status: "past_due" })
             .eq("id", userId)
             .eq("subscription_status", "active");
+
+          // 관리자 알림 — 결제 실패
+          notifyAdmin(
+            `⚠️ <b>결제 실패</b>\n` +
+              `userId: <code>${userId.slice(0, 8)}</code>\n` +
+              `subscription_status → past_due`
+          ).catch(() => {});
         }
         break;
       }
@@ -132,6 +149,12 @@ export async function POST(req: NextRequest) {
               portone_schedule_id: null,
             })
             .eq("id", userData.id);
+
+          // 관리자 알림 — 구독 해지
+          notifyAdmin(
+            `🔓 <b>구독 해지</b>\n` +
+              `userId: <code>${userData.id.slice(0, 8)}</code>`
+          ).catch(() => {});
         }
         break;
       }

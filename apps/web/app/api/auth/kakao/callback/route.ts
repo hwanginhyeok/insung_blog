@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/auth-helpers-nextjs";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { notifyAdmin } from "@/lib/telegram";
 
 /**
  * GET /api/auth/kakao/callback
@@ -112,6 +113,13 @@ export async function GET(req: NextRequest) {
         .eq("id", newUser.user.id);
 
       userEmail = email;
+
+      // 관리자 알림 — 신규 가입 (실패해도 로그인 흐름 영향 없음)
+      notifyAdmin(
+        `🎉 <b>신규 가입</b> (카카오)\n` +
+          (name ? `이름: ${name}\n` : "") +
+          `이메일: ${email}`
+      ).catch(() => {});
     }
   }
 

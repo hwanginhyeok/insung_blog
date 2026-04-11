@@ -24,7 +24,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import Depends, FastAPI, HTTPException
+import time
+import traceback
+
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
@@ -61,6 +65,53 @@ app = FastAPI(title="인성이 블로그 자동화 API", version="1.0.0")
 
 # 서버 시작 시 DB 초기화
 init_db()
+
+
+# ── 전역 예외 핸들러 — 5xx 발생 시 관리자 텔레그램 알림 ────────────────────
+# 같은 path+에러로 반복 알림 방지: 경로별 마지막 알림 시각 기록, 5분 쓰로틀
+_last_error_notify: dict[str, float] = {}
+_ERROR_THROTTLE_SEC = 300
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    """
+    HTTPException이 아닌 모든 예외 → 관리자 텔레그램 알림 + 500 응답.
+
+    HTTPException(4xx/5xx)은 FastAPI 기본 핸들러가 처리하므로 여기 안 들어옴.
+    여기엔 ValueError, RuntimeError, DB 오류 등 "의도치 않은" 에러만 도달.
+    """
+    path = request.url.path
+    method = request.method
+    err_type = type(exc).__name__
+    err_msg = str(exc)[:300]
+
+    # 로그는 항상 남김
+    logger.error(
+        f"Unhandled exception: {method} {path} — {err_type}: {err_msg}\n"
+        f"{traceback.format_exc()[:1500]}"
+    )
+
+    # 스팸 방지: 같은 (path, err_type) 조합이 최근 5분 내 알림됐으면 스킵
+    key = f"{path}:{err_type}"
+    now = time.time()
+    last = _last_error_notify.get(key, 0)
+    if now - last >= _ERROR_THROTTLE_SEC:
+        _last_error_notify[key] = now
+        try:
+            from src.utils.telegram_notifier import notify_bug_report
+            await notify_bug_report(
+                title=f"{method} {path}",
+                detail=f"{err_type}: {err_msg}",
+                source="api",
+            )
+        except Exception as notify_err:
+            logger.error(f"버그 알림 전송 실패: {notify_err}")
+
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "서버 내부 오류"},
+    )
 
 
 # ── 요청/응답 모델 ──────────────────────────────────────────────────────────
