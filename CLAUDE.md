@@ -20,20 +20,21 @@
 
 ## 서비스 운영 (systemd)
 
-3개 서비스를 `systemd --user`로 관리한다. tmux는 로그 관찰용으로만 사용.
+2개 서비스를 `systemd --user`로 관리한다. tmux는 로그 관찰용으로만 사용.
 
 | 서비스 | 설명 | 포트 |
 |--------|------|------|
 | `blog-api` | FastAPI 서버 (uvicorn) | 8001 |
 | `blog-worker` | 명령 큐 워커 (command_worker.py) | — |
-| `blog-telegram` | 텔레그램 봇 (telegram_bot.py) | — |
+
+> **`blog-telegram.service` (disabled, 2026-04-11)**: 텔레그램봇이 단방향 관리자 알림 전용으로 전환되면서 폴링 루프 불필요. unit 파일은 유지하되 `disabled + inactive` 상태. **절대 재시작하지 말 것**. 알림은 `api_server.py` / `command_worker.py`가 `src/utils/telegram_notifier.py`를 직접 호출하고, 일일 리포트는 `scripts/daily_admin_report.py`(cron)로 송신한다.
 
 ```bash
 # 상태 확인
-systemctl --user status blog-api blog-worker blog-telegram
+systemctl --user status blog-api blog-worker
 
 # 재시작
-systemctl --user restart blog-api blog-worker blog-telegram
+systemctl --user restart blog-api blog-worker
 
 # 로그 확인
 journalctl --user -u blog-worker -n 20 --no-pager
@@ -80,20 +81,21 @@ python -c "import py_compile; py_compile.compile('파일.py', doraise=True)"
 ### STEP 0 — 서비스 상태 확인 + 자동 재시작 (매 세션 필수)
 
 ```bash
-systemctl --user status blog-api blog-worker blog-telegram | grep -E "●|Active:"
+systemctl --user status blog-api blog-worker | grep -E "●|Active:"
 ```
 
-- 3개 모두 `active (running)` → 정상, 다음 단계로
+- 2개 모두 `active (running)` → 정상, 다음 단계로
 - **inactive/failed 있으면 즉시 재시작** (확인 없이 바로 실행):
   ```bash
-  systemctl --user restart blog-api blog-worker blog-telegram
+  systemctl --user restart blog-api blog-worker
   sleep 2
-  systemctl --user status blog-api blog-worker blog-telegram | grep -E "●|Active:"
+  systemctl --user status blog-api blog-worker | grep -E "●|Active:"
   ```
 - 재시작 후에도 failed이면 로그 확인:
   ```bash
   journalctl --user -u blog-worker -n 20 --no-pager
   ```
+- **`blog-telegram.service`는 의도적으로 disabled** — 재시작 금지. 위 명령에 포함하지 말 것.
 - 워커 중복 프로세스 체크:
   ```bash
   ps aux | grep command_worker | grep -v grep | wc -l  # 반드시 1
@@ -130,8 +132,8 @@ systemctl --user status blog-api blog-worker blog-telegram | grep -E "●|Active
 | `.claude/skills/selector-debug.md` | "셀렉터 확인", "댓글 안 달림", "DOM 분석" |
 | `.claude/skills/cookie-refresh.md` | "쿠키 갱신", "로그인 만료" |
 | `.claude/skills/service-test.md` | "서비스 시작", "워커 띄워", "E2E 테스트" |
-| `.claude/skills/telegram-bot-deploy.md` | "봇 배포", "봇 교체" |
-| `.claude/skills/telegram-bot-test.md` | "텔레그램 테스트", "봇 E2E" |
+| ~~`.claude/skills/telegram-bot-deploy.md`~~ | (구 양방향 봇 기준 — 2026-04-11 단방향 전환 후 outdated) |
+| ~~`.claude/skills/telegram-bot-test.md`~~ | (구 양방향 봇 기준 — outdated) |
 
 ---
 
