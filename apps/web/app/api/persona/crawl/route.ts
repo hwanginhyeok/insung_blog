@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { extractBlogId, crawlBlog } from "@/lib/crawl/naver-blog";
+import { TIER_LIMITS, type Tier } from "@/lib/tier";
 
 export const maxDuration = 60; // 20편 크롤링 ~15-25초
 
@@ -64,20 +65,23 @@ export async function POST(req: NextRequest) {
 
   const admin = createAdminClient();
 
-  // 2.5. 페르소나 생성 횟수 제한 (티어별)
+  // 2.5. 페르소나 생성 횟수 제한 (티어별, Phase 2 — display_name 그룹 기준)
+  // Phase 2 이후 1개 페르소나 = writing/comment/reply 3행. writing 행만 카운트.
   const { data: userRow } = await admin
     .from("users")
     .select("tier")
     .eq("id", user.id)
     .single();
-  const tier = (userRow?.tier || "free") as string;
-  const PERSONA_LIMITS: Record<string, number> = { free: 1, basic: 3, pro: 10 };
-  const maxPersonas = PERSONA_LIMITS[tier] ?? 1;
+  const tier = (userRow?.tier || "free") as Tier;
+  const maxPersonas = TIER_LIMITS[tier].maxCustomPersonas;
 
   const { count: personaCount } = await admin
     .from("user_personas")
     .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .eq("is_system", false)
+    .eq("purpose", "writing")
+    .eq("locked", false);
 
   // 기존 페르소나 재크롤링이 아닌 신규 생성일 때만 제한
   const reqPersonaIdCheck = (body as { personaId?: string }).personaId;
@@ -152,22 +156,19 @@ export async function POST(req: NextRequest) {
         .eq("persona_id", personaId)
         .eq("source", "ai");
     } else {
-      // 신규 페르소나 생성
-      // 기존 페르소나가 없으면 기본으로 설정
-      const { data: anyPersona } = await admin
-        .from("user_personas")
-        .select("id")
-        .eq("user_id", user.id)
-        .limit(1)
-        .maybeSingle();
-
+      // 신규 페르소나 생성 (Phase 2: writing 행만 먼저 생성)
+      // analyze 완료 후 comment/reply 행이 자동 복제됨
+      // is_default는 deprecated (Phase 2 이후 활성화는 bot_settings가 결정)
       const { data: created, error: insertError } = await admin
         .from("user_personas")
         .insert({
           user_id: user.id,
           source_blog_url: blogUrl.trim(),
           crawl_status: "crawling",
-          is_default: !anyPersona, // 첫 페르소나면 기본으로
+          purpose: "writing",
+          is_system: false,
+          locked: false,
+          is_default: false,
         })
         .select("id")
         .single();

@@ -24,6 +24,7 @@ export type Tier = "free" | "basic" | "pro";
 
 // ⚠ 동기화 필수: 댓글/블로거/대댓글 한도는 src/storage/supabase_client.py의 _TIER_LIMITS와
 //   반드시 일치해야 함. 수정 시 양쪽 모두 업데이트할 것. (2026-04-05 동기화 완료)
+//   페르소나 한도(maxCustomPersonas, purposeSplit)는 Next.js API에서만 게이팅 — Python 동기화 불필요.
 export const TIER_LIMITS: Record<
   Tier,
   {
@@ -34,11 +35,14 @@ export const TIER_LIMITS: Record<
     bloggersPerDay: number;   // 블로거/일
     repliesPerDay: number;    // 대댓글/일
     neighborBot: boolean;     // 이웃봇 사용 가능
+    maxCustomPersonas: number; // 본인 페르소나 생성/편집 한도 (시스템/예시 페르소나는 무관)
+    purposeSplit: boolean;     // 용도별(writing/comment/reply) 독립 활성 페르소나 지정 가능
+    canEditPersona: boolean;   // 본인 페르소나 편집 가능 여부 (Free는 false)
   }
 > = {
-  free:  { label: "무료",   max: 5,    price: 0,     commentsPerDay: 10,  bloggersPerDay: 3,  repliesPerDay: 5,   neighborBot: false },
-  basic: { label: "베이직", max: 30,   price: 7900,  commentsPerDay: 50,  bloggersPerDay: 15, repliesPerDay: 30,  neighborBot: true },
-  pro:   { label: "프로",   max: 9999, price: 14900, commentsPerDay: 400, bloggersPerDay: 200, repliesPerDay: 200, neighborBot: true },
+  free:  { label: "무료",   max: 5,    price: 0,     commentsPerDay: 10,  bloggersPerDay: 3,  repliesPerDay: 5,   neighborBot: false, maxCustomPersonas: 0,    purposeSplit: false, canEditPersona: false },
+  basic: { label: "베이직", max: 30,   price: 7900,  commentsPerDay: 50,  bloggersPerDay: 15, repliesPerDay: 30,  neighborBot: true,  maxCustomPersonas: 1,    purposeSplit: false, canEditPersona: true  },
+  pro:   { label: "프로",   max: 9999, price: 14900, commentsPerDay: 400, bloggersPerDay: 200, repliesPerDay: 200, neighborBot: true,  maxCustomPersonas: 9999, purposeSplit: true,  canEditPersona: true  },
 };
 
 export interface UsageResult {
@@ -137,4 +141,58 @@ export async function rollbackUsage(userId: string): Promise<void> {
   if (error) {
     console.error("rollbackUsage RPC 오류:", error);
   }
+}
+
+// ── 페르소나 한도 체크 ──
+
+export interface PersonaQuotaResult {
+  allowed: boolean;
+  tier: Tier;
+  used: number;
+  limit: number;
+  canEdit: boolean;
+  purposeSplit: boolean;
+}
+
+/**
+ * 사용자의 본인 페르소나 한도 확인.
+ *
+ * - free:  0개 (시스템 페르소나만 사용 가능)
+ * - basic: 1개 (편집 가능)
+ * - pro:   무제한 (편집 가능 + 용도별 분리)
+ *
+ * 사용자 페르소나는 Phase 2 이후 항상 writing/comment/reply 3개 단위로 묶임.
+ * 따라서 "1개 페르소나"는 DB 상 3행이지만, 동일한 display_name으로 그룹핑하여 카운트.
+ */
+export async function checkPersonaQuota(userId: string): Promise<PersonaQuotaResult> {
+  const admin = createAdminClient();
+
+  const { data: user } = await admin
+    .from("users")
+    .select("tier")
+    .eq("id", userId)
+    .single();
+
+  const tier = ((user?.tier || "free") as Tier);
+  const limits = TIER_LIMITS[tier];
+
+  // 사용자 페르소나 카운트 — display_name 기준 distinct (writing/comment/reply 3행이 1개 페르소나)
+  const { data: personas } = await admin
+    .from("user_personas")
+    .select("display_name")
+    .eq("user_id", userId)
+    .eq("is_system", false)
+    .eq("locked", false);
+
+  const distinctNames = new Set((personas || []).map((p) => p.display_name || ""));
+  const used = distinctNames.size;
+
+  return {
+    allowed: used < limits.maxCustomPersonas,
+    tier,
+    used,
+    limit: limits.maxCustomPersonas,
+    canEdit: limits.canEditPersona,
+    purposeSplit: limits.purposeSplit,
+  };
 }

@@ -153,59 +153,119 @@ def build_persona_prompt(items: list[dict]) -> str | None:
     return build_comment_prompt(items)
 
 
-def _load_persona_items(user_id: str) -> list[dict] | None:
-    """Supabase에서 사용자의 기본 페르소나 항목 로드."""
+# Phase 2 (2026-04-11): 'all' 페르소나 제거 + 활성 슬롯 기반 빌드
+# ┌────────────────────────────────────────────────────────────────┐
+# │ load_persona_prompt(user_id, purpose) 흐름                      │
+# │                                                                  │
+# │  1. bot_settings.active_{purpose}_persona_id 조회               │
+# │     ├─ 있음 → 그 페르소나 items로 빌드                          │
+# │     └─ 없음 → 시스템 기본 페르소나(is_system=true) fallback    │
+# │                                                                  │
+# │  2. 페르소나 → persona_items SELECT (is_active=true)            │
+# │  3. _build_prompt(items, purpose) → 용도별 프롬프트 문자열      │
+# │                                                                  │
+# │  Phase 1 호환성: 'all' 페르소나는 마이그레이션에서 제거됨       │
+# │  → writing/comment/reply 분기 폴백 로직 없음                    │
+# └────────────────────────────────────────────────────────────────┘
+
+def _load_active_persona_id(user_id: str, purpose: str) -> str | None:
+    """bot_settings.active_{purpose}_persona_id 조회."""
     try:
         from src.storage.supabase_client import get_supabase
         sb = get_supabase()
 
-        # 기본 페르소나 조회 (is_default=True, crawl_status='done')
-        persona_result = (
-            sb.table("user_personas")
-            .select("id")
+        slot_column = f"active_{purpose}_persona_id"
+        result = (
+            sb.table("bot_settings")
+            .select(slot_column)
             .eq("user_id", user_id)
-            .eq("is_default", True)
-            .eq("crawl_status", "done")
             .limit(1)
             .execute()
         )
-        if not persona_result.data:
-            logger.debug(f"사용자 {user_id[:8]} 기본 페르소나 없음 (기본 톤 사용)")
+        if not result.data:
             return None
+        return result.data[0].get(slot_column)
+    except Exception as e:
+        logger.warning(f"활성 페르소나 슬롯 조회 실패: {e}")
+        return None
 
-        persona_id = persona_result.data[0]["id"]
 
-        # 페르소나 항목 조회
-        items_result = (
+def _load_system_fallback_persona_id(purpose: str) -> str | None:
+    """시스템 기본 페르소나 ID 조회 (활성 슬롯이 NULL일 때 fallback)."""
+    try:
+        from src.storage.supabase_client import get_supabase
+        sb = get_supabase()
+
+        # 시스템 페르소나 중 purpose 일치 + 첫 번째 (writing은 카테고리 무관 첫 번째 = 맛집)
+        result = (
+            sb.table("user_personas")
+            .select("id")
+            .eq("is_system", True)
+            .eq("purpose", purpose)
+            .order("created_at", desc=False)
+            .limit(1)
+            .execute()
+        )
+        if not result.data:
+            return None
+        return result.data[0]["id"]
+    except Exception as e:
+        logger.warning(f"시스템 페르소나 fallback 조회 실패: {e}")
+        return None
+
+
+def _load_persona_items_by_id(persona_id: str) -> list[dict] | None:
+    """페르소나 ID로 활성 항목 SELECT."""
+    try:
+        from src.storage.supabase_client import get_supabase
+        sb = get_supabase()
+
+        result = (
             sb.table("persona_items")
             .select("category, key, value, priority, is_active")
             .eq("persona_id", persona_id)
             .eq("is_active", True)
             .execute()
         )
-        if not items_result.data:
-            logger.debug(f"페르소나 {persona_id[:8]} 항목 없음")
-            return None
-
-        return items_result.data
-
+        return result.data if result.data else None
     except Exception as e:
-        logger.warning(f"페르소나 로드 실패 (기본 톤 사용): {e}")
+        logger.warning(f"페르소나 항목 조회 실패: {e}")
         return None
 
 
 def load_persona_prompt(user_id: str, purpose: str = "comment") -> str | None:
     """
-    Supabase에서 사용자의 기본 페르소나 항목을 로드 → 용도별 프롬프트 빌드.
+    사용자의 활성 페르소나(용도별)를 로드 → 용도별 프롬프트 빌드.
+
+    Phase 2 흐름:
+      1. bot_settings.active_{purpose}_persona_id 조회
+      2. NULL이면 시스템 기본 페르소나(is_system=true, purpose 일치)로 fallback
+      3. 페르소나 items 로드 → 프롬프트 빌드
 
     Args:
         user_id: 사용자 ID
         purpose: "writing", "comment", "reply"
 
     Returns:
-        페르소나 프롬프트 문자열, 없거나 실패 시 None
+        페르소나 프롬프트 문자열, 없거나 실패 시 None (호출자가 기본 톤 사용)
     """
-    items = _load_persona_items(user_id)
+    if purpose not in ("writing", "comment", "reply"):
+        logger.warning(f"알 수 없는 purpose: {purpose}")
+        return None
+
+    # 1. 활성 슬롯 조회
+    persona_id = _load_active_persona_id(user_id, purpose)
+
+    # 2. 비어있으면 시스템 기본 페르소나로 fallback
+    if not persona_id:
+        persona_id = _load_system_fallback_persona_id(purpose)
+        if not persona_id:
+            logger.debug(f"사용자 {user_id[:8]} {purpose} 활성 페르소나 없음 + 시스템 기본도 없음")
+            return None
+        logger.debug(f"사용자 {user_id[:8]} {purpose} 활성 슬롯 비어있음 → 시스템 기본 fallback")
+
+    # 3. 항목 로드 + 프롬프트 빌드
+    items = _load_persona_items_by_id(persona_id)
     if not items:
         return None
 

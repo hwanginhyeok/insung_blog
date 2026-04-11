@@ -30,8 +30,9 @@ export async function GET() {
 
   const { data: personas } = await supabase
     .from("user_personas")
-    .select("id, display_name, source_blog_url, crawl_status, crawl_post_count, crawl_error, crawled_at, is_default, created_at")
+    .select("id, display_name, source_blog_url, crawl_status, crawl_post_count, crawl_error, crawled_at, is_default, purpose, is_system, locked, category, created_at")
     .eq("user_id", user.id)
+    .eq("is_system", false)
     .order("created_at", { ascending: true });
 
   return NextResponse.json({ personas: personas || [] });
