@@ -4,6 +4,7 @@
 
 | # | 태스크 | 완료일 | 비고 |
 |---|--------|--------|------|
+| TELEGRAM-SIMPLIFY | 텔레그램봇 단방향 관리자 알림 전용 전환 | 04-11 | telegram_bot*.py 삭제(-1001줄), notifier 리팩터(관리자 redirect + user prefix), daily_admin_report.py(10명+ 조건), FastAPI 5xx 핸들러(5분 throttle), Next.js 가입/결제/포트원 알림 훅. cron 등록 사용자 직접 |
 | VISITOR-TRACK-UI | 방문자수 웹 대시보드 — Chart.js 추이 그래프 | 04-09 | GET /api/visitor/stats + /analytics/visitor 페이지. Recharts 라인 차트 |
 | MIGRATION-UNIQUE | pending_comments UNIQUE partial index 적용 | 04-03 | supabase db push 적용 + 중복 삽입 차단 검증 완료 |
 | MIGRATION-AUTO-MODE | bot_settings에 daily_discover/auto_execute 컬럼 추가 | 04-03 | supabase db push로 적용 + 컬럼 존재 검증 완료 |

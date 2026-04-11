@@ -6,7 +6,7 @@
 
 - Current: 5개
 - Prepared: 16개 (P1: 5, P2: 11)
-- Finished: 30개
+- Finished: 31개
 
 ---
 
