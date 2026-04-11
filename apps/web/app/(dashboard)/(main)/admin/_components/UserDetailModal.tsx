@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { UserUsageTab } from "./UserUsageTab";
+import { UserPaymentsTab } from "./UserPaymentsTab";
 
 interface Props {
   userId: string;
@@ -59,7 +61,7 @@ interface BotStats {
   recentRuns: BotRunRow[];
 }
 
-type Tab = "comments" | "persona" | "neighbors" | "bot";
+type Tab = "usage" | "payments" | "comments" | "persona" | "neighbors" | "bot";
 
 const STATUS_LABELS: Record<string, string> = {
   posted: "게시완료",
@@ -79,7 +81,7 @@ function formatDate(d: string) {
 }
 
 export function UserDetailModal({ userId, userName, onClose }: Props) {
-  const [tab, setTab] = useState<Tab>("comments");
+  const [tab, setTab] = useState<Tab>("usage");
   const [comments, setComments] = useState<CommentRow[]>([]);
   const [personas, setPersonas] = useState<PersonaRow[]>([]);
   const [neighbors, setNeighbors] = useState<NeighborRow[]>([]);
@@ -144,9 +146,11 @@ export function UserDetailModal({ userId, userName, onClose }: Props) {
         </div>
 
         {/* 탭 */}
-        <div className="mb-4 flex gap-1.5">
+        <div className="mb-4 flex flex-wrap gap-1.5">
           {(
             [
+              { key: "usage" as Tab, label: "사용 통계" },
+              { key: "payments" as Tab, label: "결제 이력" },
               { key: "comments" as Tab, label: `댓글 (${comments.length})` },
               { key: "persona" as Tab, label: `페르소나 (${personas.length})` },
               { key: "neighbors" as Tab, label: `이웃 (${neighbors.length})` },
@@ -164,9 +168,17 @@ export function UserDetailModal({ userId, userName, onClose }: Props) {
           ))}
         </div>
 
-        {loading ? (
-          <p className="text-sm text-muted-foreground">불러오는 중...</p>
-        ) : (
+        {/* 사용 통계 탭 (자체 로딩) */}
+        {tab === "usage" && <UserUsageTab userId={userId} />}
+
+        {/* 결제 이력 탭 (자체 로딩) */}
+        {tab === "payments" && <UserPaymentsTab userId={userId} />}
+
+        {/* 나머지 탭 */}
+        {tab !== "usage" && tab !== "payments" && (
+          loading ? (
+            <p className="text-sm text-muted-foreground">불러오는 중...</p>
+          ) : (
           <>
             {/* 댓글 탭 */}
             {tab === "comments" && (
@@ -351,6 +363,7 @@ export function UserDetailModal({ userId, userName, onClose }: Props) {
               </div>
             )}
           </>
+          )
         )}
       </div>
     </div>

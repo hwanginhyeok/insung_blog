@@ -5,6 +5,8 @@ import { useUser } from "@/lib/hooks/use-user";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SystemStatsCard } from "./_components/SystemStatsCard";
+import { SystemActivityCard } from "./_components/SystemActivityCard";
+import { RevenueCard } from "./_components/RevenueCard";
 import { UserDetailModal } from "./_components/UserDetailModal";
 
 type Tier = "free" | "basic" | "pro";
@@ -168,6 +170,12 @@ export default function AdminPage() {
 
       {/* 시스템 전체 통계 */}
       <SystemStatsCard stats={systemStats} />
+
+      {/* 활동 + 매출 차트 */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <SystemActivityCard />
+        <RevenueCard />
+      </div>
 
       {/* 사용자 테이블 */}
       <Card>
