@@ -4,6 +4,7 @@
 
 | # | 태스크 | 완료일 | 비고 |
 |---|--------|--------|------|
+| PERSONA-EXAMPLE | 예시 페르소나 시스템 (카테고리별 기본 제공) | 04-11 | DB+API+시딩+UI 1차 구현 후 PERSONA-TIER-SPLIT에 흡수. lazy loading은 TIER-SPLIT Phase 2에서 처리됨 |
 | ADMIN-USAGE-DETAIL | 관리페이지 사용자 이용 내역 상세 (Phase 1) | 04-11 | UserDetailModal "사용 통계"/"결제 이력" 탭 + /admin 상단 시스템 활동/매출 카드. heatmap(7x24 KST) + 24h bar + 30일 line + 월비교 + 12개월 매출. 신규 API 4개(usage/payments/stats.activity/stats.revenue). 마이그레이션 0개 |
 | TELEGRAM-SIMPLIFY | 텔레그램봇 단방향 관리자 알림 전용 전환 | 04-11 | telegram_bot*.py 삭제(-1001줄), notifier 리팩터(관리자 redirect + user prefix), daily_admin_report.py(10명+ 조건), FastAPI 5xx 핸들러(5분 throttle), Next.js 가입/결제/포트원 알림 훅. cron 등록 사용자 직접 |
 | VISITOR-TRACK-UI | 방문자수 웹 대시보드 — Chart.js 추이 그래프 | 04-09 | GET /api/visitor/stats + /analytics/visitor 페이지. Recharts 라인 차트 |

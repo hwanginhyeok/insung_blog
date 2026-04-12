@@ -7,6 +7,7 @@ import { useBotStatus } from "./_hooks/useBotStatus";
 import { useCommentHistory } from "./_hooks/useCommentHistory";
 import { useBotSettings } from "./_hooks/useBotSettings";
 import { BotControlPanel } from "./_components/BotControlPanel";
+import { NeighborCandidatesPanel } from "./_components/NeighborCandidatesPanel";
 import { CommentStatsCard } from "./_components/CommentStatsCard";
 import { CommentApprovalPanel } from "./_components/CommentApprovalPanel";
 import { CommentHistoryTable } from "./_components/CommentHistoryTable";
@@ -196,6 +197,9 @@ export default function BotPage() {
         onCancelRunWarning={() => setShowRunWarning(false)}
         onSaveSettingsPatch={handleSaveSettingsPatch}
       />
+
+      {/* 이웃 발견 — AI 필터 검토 대기 */}
+      <NeighborCandidatesPanel />
 
       {/* 상태 카드 3개 */}
       <CommentStatsCard

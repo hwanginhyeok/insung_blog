@@ -992,6 +992,78 @@ async def handle_discover_neighbors(
                 await browser.close()
 
 
+async def handle_discover_for_review(
+    user_id: str | None = None, payload: dict | None = None
+) -> dict:
+    """
+    V2 이웃 발견 — AI 필터 + 사용자 컨펌 워크플로우.
+
+    bot_settings.discovered_keywords를 검색 키워드로 사용 (없으면 자동 추출).
+    검색 → Haiku 7-flag 판정 → ok + 사용자 분야 적합한 후보만 neighbor_candidates pending 적재.
+    영구차단 4종(ad/ai/commercial/low_quality)은 글로벌 캐시에만 저장.
+    """
+    if not user_id:
+        raise ValueError("discover_for_review는 user_id가 필수입니다")
+
+    from playwright.async_api import async_playwright
+
+    from src.auth.naver_login import ensure_login_cookie_only
+    from src.neighbor.neighbor_discoverer_v2 import discover_for_review
+    from src.storage.supabase_client import get_user_bot_config
+    from src.utils.browser import create_browser
+
+    config = get_user_bot_config(user_id)
+    my_blog_id = (config or {}).get("naver_blog_id", "")
+    my_blog_ids = set((config or {}).get("naver_blog_ids", []))
+    if my_blog_id:
+        my_blog_ids.add(my_blog_id)
+
+    keywords_override = (payload or {}).get("keywords")  # 사용자가 직접 키워드 지정 시
+    if isinstance(keywords_override, str):
+        keywords_override = [k.strip() for k in keywords_override.split(",") if k.strip()]
+
+    uid_label = user_id[:8]
+    logger.info(f"▶ V2 이웃 발견 시작 (user={uid_label})")
+
+    async with _browser_semaphore:
+        async with async_playwright() as pw:
+            browser, context, page = await create_browser(pw, headless=True)
+            try:
+                logged_in = await ensure_login_cookie_only(context, page, user_id)
+                if not logged_in:
+                    await _handle_cookie_expiry(user_id)
+                    raise RuntimeError("네이버 로그인 실패 — 쿠키 재업로드 필요")
+                result = await discover_for_review(
+                    page=page,
+                    user_id=user_id,
+                    my_blog_id=my_blog_id,
+                    my_blog_ids=my_blog_ids,
+                    keywords_override=keywords_override,
+                )
+                if await _check_cookie_expiry_on_page(page, context, user_id):
+                    await _handle_cookie_expiry(user_id)
+                return result
+            finally:
+                await browser.close()
+
+
+async def handle_analyze_blog_profile(
+    user_id: str | None = None, payload: dict | None = None
+) -> dict:
+    """
+    사용자 본인 블로그 분야 자동 추출 (Phase 1 of NEIGHBOR-AI-DISCOVER).
+    Playwright 불필요 — RSS + Haiku만.
+    """
+    if not user_id:
+        raise ValueError("analyze_blog_profile은 user_id가 필수입니다")
+
+    from src.neighbor.blog_profile_extractor import update_user_blog_profile
+
+    force = bool((payload or {}).get("force", False))
+    logger.info(f"▶ 블로그 분야 분석 시작 (user={user_id[:8]}, force={force})")
+    return update_user_blog_profile(user_id=user_id, force=force)
+
+
 async def handle_visit_neighbors(
     user_id: str | None = None, payload: dict | None = None
 ) -> dict:
@@ -1601,6 +1673,8 @@ _HANDLERS = {
     "extract_blog_id": handle_extract_blog_id,
     "neighbor_request": handle_neighbor_request,
     "discover_neighbors": handle_discover_neighbors,
+    "discover_for_review": handle_discover_for_review,
+    "analyze_blog_profile": handle_analyze_blog_profile,
     "visit_neighbors": handle_visit_neighbors,
     "discover_and_visit": handle_discover_and_visit,
     "recommend_neighbors": handle_recommend_neighbors,

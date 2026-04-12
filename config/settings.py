@@ -174,8 +174,8 @@ AUTO_BLOGGER_PATTERNS = [
 # 스팸 지표
 # ── 이웃 발견/방문 설정 ──────────────────────────
 NAVER_BLOG_SEARCH_URL = "https://search.naver.com/search.naver?ssc=tab.blog&query={keyword}"
-MAX_DISCOVER_PER_KEYWORD = 5        # 키워드당 최대 발견 블로거 수 (일일 신청 한도에 맞춤)
-MAX_DISCOVER_TOTAL = 15             # 1회 실행 시 최대 발견 수 (신청 한도 10 + 여유분)
+MAX_DISCOVER_PER_KEYWORD = 20       # 키워드당 최대 발견 블로거 수
+MAX_DISCOVER_TOTAL = 100            # 1회 실행 시 최대 발견 수
 MAX_NEIGHBOR_VISITS_PER_RUN = 10    # 1회 방문 시 최대 이웃 수 (발견 수에 맞춤)
 NEIGHBOR_VISIT_INTERVAL_DAYS = 7    # 재방문 최소 간격 (일)
 NEIGHBOR_SKIP_BLOG_IDS = frozenset(["PostList", "PostView", "BlogHome", "NBlogOfficialBlog"])

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { SystemStatsCard } from "./_components/SystemStatsCard";
 import { SystemActivityCard } from "./_components/SystemActivityCard";
 import { RevenueCard } from "./_components/RevenueCard";
+import { NeighborCatalogCard } from "./_components/NeighborCatalogCard";
 import { UserDetailModal } from "./_components/UserDetailModal";
 
 type Tier = "free" | "basic" | "pro";
@@ -176,6 +177,9 @@ export default function AdminPage() {
         <SystemActivityCard />
         <RevenueCard />
       </div>
+
+      {/* 이웃 카탈로그 (NEIGHBOR-AI-DISCOVER) */}
+      <NeighborCatalogCard />
 
       {/* 사용자 테이블 */}
       <Card>
