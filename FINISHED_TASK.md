@@ -4,6 +4,7 @@
 
 | # | 태스크 | 완료일 | 비고 |
 |---|--------|--------|------|
+| NEIGHBOR-AI-DISCOVER | 이웃찾기 AI 필터링 + 카탈로그 자산화 | 04-12 | Haiku 7-flag 분류(ok/ad/ai/commercial/review_farm/inactive/low_quality). 마이그레이션 1개(neighbor_blog_profile+neighbor_candidates+bot_settings 확장). 영구차단 4종. RSS+Haiku 분야 자동 추출(letter_hih 실검증). discoverer_v2 통합 흐름. 봇페이지 검토대기 UI(NeighborCandidatesPanel). /admin 카탈로그(NeighborCatalogCard 7-flag 필터/검색/수동수정). 자동모드 토글(30건+90%). 워커 핸들러 2개. cron 연결. 한도 100명/회. 네이버 앱 등록+API 테스트 완료. Phase 0~6 전체 push 완료(ddd7931) |
 | PERSONA-EXAMPLE | 예시 페르소나 시스템 (카테고리별 기본 제공) | 04-11 | DB+API+시딩+UI 1차 구현 후 PERSONA-TIER-SPLIT에 흡수. lazy loading은 TIER-SPLIT Phase 2에서 처리됨 |
 | ADMIN-USAGE-DETAIL | 관리페이지 사용자 이용 내역 상세 (Phase 1) | 04-11 | UserDetailModal "사용 통계"/"결제 이력" 탭 + /admin 상단 시스템 활동/매출 카드. heatmap(7x24 KST) + 24h bar + 30일 line + 월비교 + 12개월 매출. 신규 API 4개(usage/payments/stats.activity/stats.revenue). 마이그레이션 0개 |
 | TELEGRAM-SIMPLIFY | 텔레그램봇 단방향 관리자 알림 전용 전환 | 04-11 | telegram_bot*.py 삭제(-1001줄), notifier 리팩터(관리자 redirect + user prefix), daily_admin_report.py(10명+ 조건), FastAPI 5xx 핸들러(5분 throttle), Next.js 가입/결제/포트원 알림 훅. cron 등록 사용자 직접 |

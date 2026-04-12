@@ -5,8 +5,8 @@
 ## 요약
 
 - Current: 4개
-- Prepared: 21개 (P1: 7, P2: 14)
-- Finished: 33개
+- Prepared: 23개 (P1: 9, P2: 14)
+- Finished: 34개
 
 ---
 
